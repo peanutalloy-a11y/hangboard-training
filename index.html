@@ -837,7 +837,7 @@ function App() {
     return(
       <div style={S.page}><TopoBackground/>
         <div key={animKey} style={{position:"relative",zIndex:1,animation:pageAnim}}>
-          <Stagger delay={0}><button onClick={()=>navigateTo("home")} style={{background:"none",border:"none",color:"#AAA",fontSize:14,cursor:"pointer",marginBottom:12,padding:0,fontWeight:500}}>← Back</button></Stagger>
+          <Stagger delay={0}><button onClick={()=>navigateTo("home")} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button></Stagger>
           <Stagger delay={60}><div style={{marginBottom:24}}>
             <span style={{fontFamily:F.m,fontSize:11,color:"#D4663A",fontWeight:700,letterSpacing:3}}>{session.day}</span>
             <h2 style={{fontFamily:F.h,fontSize:24,fontWeight:800,color:"#2A2520",margin:"4px 0 0",lineHeight:1.2}}>{session.subtitle}</h2>
@@ -971,7 +971,7 @@ function App() {
 }
 
 const S = {
-  page:{position:"relative",maxWidth:520,margin:"0 auto",padding:"20px 18px 60px",minHeight:"100vh",background:"#F5F2ED",fontFamily:F.b,overflow:"hidden"},
+  page:{position:"relative",maxWidth:520,margin:"0 auto",padding:"calc(env(safe-area-inset-top, 20px) + 16px) 18px calc(env(safe-area-inset-bottom, 20px) + 40px)",minHeight:"100vh",background:"#F5F2ED",fontFamily:F.b,overflow:"hidden"},
   inp:{width:"100%",padding:"8px 32px 8px 10px",borderRadius:8,fontSize:15,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",textAlign:"left",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s"},
   unit:{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontFamily:F.m,fontSize:10,color:"#CCC",letterSpacing:1,pointerEvents:"none"},
 };
