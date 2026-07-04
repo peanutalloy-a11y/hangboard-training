@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Send Log"/>
-<title>Send Log — Finger Strength Tracker</title>
+<title>Send Log — Training Tracker</title>
 <style>
   html,body{margin:0;padding:0;background:#F5F2ED;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
   * { box-sizing: border-box; -webkit-user-select:none; user-select:none; }
@@ -516,7 +516,7 @@ const HoldButton = ({ onComplete, saving }) => {
   );
 };
 
-function App() {
+function FingerApp() {
   const [view, setView] = useState("home");
   const [prevView, setPrevView] = useState(null);
   const [transitioning, setTransitioning] = useState(false);
@@ -971,13 +971,802 @@ function App() {
 }
 
 const S = {
-  page:{position:"relative",maxWidth:520,margin:"0 auto",padding:"calc(env(safe-area-inset-top, 20px) + 16px) 18px calc(env(safe-area-inset-bottom, 20px) + 40px)",minHeight:"100vh",background:"#F5F2ED",fontFamily:F.b,overflow:"hidden"},
+  page:{position:"relative",maxWidth:520,margin:"0 auto",padding:"16px 18px calc(env(safe-area-inset-bottom, 20px) + 40px)",minHeight:"calc(100vh - 54px)",background:"#F5F2ED",fontFamily:F.b,overflow:"hidden"},
   inp:{width:"100%",padding:"8px 32px 8px 10px",borderRadius:8,fontSize:15,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",textAlign:"left",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s"},
   unit:{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontFamily:F.m,fontSize:10,color:"#CCC",letterSpacing:1,pointerEvents:"none"},
 };
 
+// ═══════════════════════════════════════════════════
+// ─── CLIMB LOG (bouldering tracker) ─────────────────
+// ═══════════════════════════════════════════════════
+
+const CLIMB_STORAGE_KEY = "climbing-gym-log";
+
+const HOLD_COLORS = [
+  {name:"Blue", hex:"#4A7AB0", text:"#FFF"},
+  {name:"Yellow", hex:"#E8C34A", text:"#2A2520"},
+  {name:"Orange", hex:"#D4763A", text:"#FFF"},
+  {name:"Green", hex:"#5A9A5A", text:"#FFF"},
+  {name:"Purple", hex:"#8A6AB0", text:"#FFF"},
+  {name:"Black", hex:"#2A2520", text:"#FFF"},
+  {name:"Red", hex:"#C4453A", text:"#FFF"},
+  {name:"Pink", hex:"#D888A8", text:"#FFF"},
+];
+
+const STATUS_META = {
+  flash: { label:"FLASH", color:"#C49A2A" },
+  sent: { label:"SENT", color:"#3A8A7A" },
+  project: { label:"PROJECT", color:"#9B9690" },
+};
+
+// Compress an uploaded image via canvas before storing — keeps localStorage small.
+// A raw phone photo can be 3-8MB; this brings it down to roughly 100-300KB.
+function compressImage(file, maxDim=1280, quality=0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > maxDim) { h = h*(maxDim/w); w = maxDim; } }
+        else { if (h > maxDim) { w = w*(maxDim/h); h = maxDim; } }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function emptyReset() {
+  return { id: Date.now(), startDate: new Date().toISOString(), problems: [] };
+}
+
+function emptySectorLog() {
+  return { currentProblems: [], archivedResets: [], startDate: new Date().toISOString() };
+}
+
+function mergeLogs(a, b) {
+  return {
+    currentProblems: [...a.currentProblems, ...b.currentProblems],
+    archivedResets: [...a.archivedResets, ...b.archivedResets],
+    startDate: a.startDate < b.startDate ? a.startDate : b.startDate,
+  };
+}
+
+function ClimbApp() {
+  const [view, setView] = useState("home");
+  const [data, setData] = useState({ gymMap: null, sectors: [], sectorLogs: {} });
+  const [loading, setLoading] = useState(true);
+  const [expandedSector, setExpandedSector] = useState(null);
+  const [expandedProblem, setExpandedProblem] = useState(null);
+  const [editingProblem, setEditingProblem] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [resetConfirmSector, setResetConfirmSector] = useState(null);
+  const [prefillSector, setPrefillSector] = useState("");
+  const [historySector, setHistorySector] = useState(null);
+  const [expandedArchive, setExpandedArchive] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Sector pin editing state (map management screen)
+  const [pinEditMode, setPinEditMode] = useState(false);
+  const [newPinDraft, setNewPinDraft] = useState(null);
+  const [draftName, setDraftName] = useState("");
+  const [activePinId, setActivePinId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+  const imageRef = useRef(null);
+  const homeImageRef = useRef(null);
+  const dragPosRef = useRef({ x: 0, y: 0 });
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  const persist = (next) => {
+    setData(next); dataRef.current = next;
+    try { localStorage.setItem(CLIMB_STORAGE_KEY, JSON.stringify(next)); } catch(e) {}
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CLIMB_STORAGE_KEY);
+      if (raw) {
+        let parsed = JSON.parse(raw);
+
+        // Migrate old global-reset shape (currentReset/archivedResets) to per-sector shape
+        if (parsed.currentReset || parsed.archivedResets) {
+          const sectorLogs = {};
+          const ensure = (name, startDate) => {
+            if (!sectorLogs[name]) sectorLogs[name] = { currentProblems: [], archivedResets: [], startDate: startDate || new Date().toISOString() };
+          };
+          (parsed.currentReset?.problems || []).forEach(p => {
+            ensure(p.sector, parsed.currentReset.startDate);
+            sectorLogs[p.sector].currentProblems.push(p);
+          });
+          (parsed.archivedResets || []).forEach(reset => {
+            const bySector = {};
+            (reset.problems || []).forEach(p => { (bySector[p.sector] = bySector[p.sector] || []).push(p); });
+            Object.entries(bySector).forEach(([name, problems]) => {
+              ensure(name, reset.startDate);
+              sectorLogs[name].archivedResets.push({ id: Date.now()+Math.random(), problems, startDate: reset.startDate, endDate: reset.endDate });
+            });
+          });
+          parsed = { gymMap: parsed.gymMap || null, sectors: parsed.sectors || [], sectorLogs };
+        }
+
+        const withDefaults = { gymMap: null, sectors: [], sectorLogs: {}, ...parsed };
+        setData(withDefaults); dataRef.current = withDefaults;
+        try { localStorage.setItem(CLIMB_STORAGE_KEY, JSON.stringify(withDefaults)); } catch(e) {}
+      }
+    } catch(e) {}
+    setLoading(false);
+  }, []);
+
+  // Drag-to-reposition a pin on the map management screen
+  useEffect(() => {
+    if (!draggingId) return;
+    const move = (e) => {
+      const imgEl = imageRef.current;
+      if (!imgEl) return;
+      const rect = imgEl.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      let x = ((clientX - rect.left) / rect.width) * 100;
+      let y = ((clientY - rect.top) / rect.height) * 100;
+      x = Math.max(0, Math.min(100, x));
+      y = Math.max(0, Math.min(100, y));
+      dragPosRef.current = { x, y };
+      setDragPos({ x, y });
+    };
+    const up = () => {
+      const finalPos = dragPosRef.current;
+      const cur = dataRef.current;
+      const updatedSectors = cur.sectors.map(s => s.id === draggingId ? { ...s, x: finalPos.x, y: finalPos.y } : s);
+      persist({ ...cur, sectors: updatedSectors });
+      setDraggingId(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [draggingId]);
+
+  const handleMapUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      persist({ ...dataRef.current, gymMap: compressed });
+    } catch(err) {}
+    setUploading(false);
+    e.target.value = "";
+  };
+
+  const getRelativeCoords = (e) => {
+    const imgEl = imageRef.current;
+    const rect = imgEl.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    return { x, y };
+  };
+
+  const handleImageClick = (e) => {
+    if (!pinEditMode) return;
+    setActivePinId(null);
+    setNewPinDraft(getRelativeCoords(e));
+    setDraftName("");
+  };
+
+  const addPin = () => {
+    if (!draftName.trim() || !newPinDraft) return;
+    const name = draftName.trim();
+    const newSector = { id: Date.now(), name, x: newPinDraft.x, y: newPinDraft.y };
+    const cur = dataRef.current;
+    const sectorLogs = { ...cur.sectorLogs };
+    if (!sectorLogs[name]) sectorLogs[name] = emptySectorLog();
+    persist({ ...cur, sectors: [...cur.sectors, newSector], sectorLogs });
+    setNewPinDraft(null); setDraftName("");
+  };
+
+  const startDrag = (pin, e) => {
+    e.stopPropagation();
+    dragPosRef.current = { x: pin.x, y: pin.y };
+    setDragPos({ x: pin.x, y: pin.y });
+    setDraggingId(pin.id);
+  };
+
+  const saveEditedPinName = () => {
+    if (!editName.trim()) return;
+    const cur = dataRef.current;
+    const pin = cur.sectors.find(s => s.id === activePinId);
+    if (!pin) return;
+    const oldName = pin.name;
+    const newName = editName.trim();
+    const sectors = cur.sectors.map(s => s.id === activePinId ? { ...s, name: newName } : s);
+    let sectorLogs = { ...cur.sectorLogs };
+    if (oldName !== newName) {
+      const oldLog = sectorLogs[oldName];
+      if (oldLog) {
+        delete sectorLogs[oldName];
+        const renamed = {
+          ...oldLog,
+          currentProblems: oldLog.currentProblems.map(p => ({ ...p, sector: newName })),
+          archivedResets: oldLog.archivedResets.map(r => ({ ...r, problems: r.problems.map(p => ({ ...p, sector: newName })) })),
+        };
+        sectorLogs[newName] = sectorLogs[newName] ? mergeLogs(sectorLogs[newName], renamed) : renamed;
+      }
+    }
+    persist({ ...cur, sectors, sectorLogs });
+    setActivePinId(null);
+  };
+
+  const deletePin = (id) => {
+    const cur = dataRef.current;
+    persist({ ...cur, sectors: cur.sectors.filter(s => s.id !== id) });
+    setActivePinId(null);
+  };
+
+  const selectPin = (pin) => {
+    setPrefillSector(pin.name);
+    setEditingProblem(null);
+    setView("add");
+  };
+
+  const saveProblem = (problem) => {
+    const cur = dataRef.current;
+    const destSector = problem.sector;
+    const isEdit = !!problem.id;
+    const origSector = isEdit ? (editingProblem?.sector || destSector) : null;
+
+    let sectorLogs = { ...cur.sectorLogs };
+
+    if (isEdit && origSector !== destSector) {
+      const origLog = sectorLogs[origSector];
+      if (origLog) {
+        sectorLogs[origSector] = { ...origLog, currentProblems: origLog.currentProblems.filter(p => p.id !== problem.id) };
+      }
+    }
+
+    const destLog = sectorLogs[destSector] || emptySectorLog();
+    let currentProblems;
+    if (isEdit) {
+      const exists = destLog.currentProblems.some(p => p.id === problem.id);
+      currentProblems = exists
+        ? destLog.currentProblems.map(p => p.id === problem.id ? problem : p)
+        : [problem, ...destLog.currentProblems];
+    } else {
+      currentProblems = [{ ...problem, id: Date.now(), date: new Date().toISOString() }, ...destLog.currentProblems];
+    }
+    sectorLogs[destSector] = { ...destLog, currentProblems };
+
+    persist({ ...cur, sectorLogs });
+    setView("home"); setEditingProblem(null); setPrefillSector("");
+  };
+
+  const deleteProblem = (sectorName, id) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    const updated = { ...log, currentProblems: log.currentProblems.filter(p => p.id !== id) };
+    persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
+    setExpandedProblem(null);
+  };
+
+  const resetSector = (sectorName) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName] || emptySectorLog();
+    const archived = { id: Date.now(), problems: log.currentProblems, startDate: log.startDate, endDate: new Date().toISOString() };
+    const updated = { currentProblems: [], archivedResets: [archived, ...log.archivedResets], startDate: new Date().toISOString() };
+    persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
+    setResetConfirmSector(null);
+  };
+
+  const deleteSectorArchive = (sectorName, archiveId) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    const updated = { ...log, archivedResets: log.archivedResets.filter(a => a.id !== archiveId) };
+    persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
+  };
+
+  const allSectorNames = [...new Set([...data.sectors.map(s=>s.name), ...Object.keys(data.sectorLogs)])].sort();
+  const sectorOptions = allSectorNames;
+  const allCurrentProblems = Object.entries(data.sectorLogs).flatMap(([name,log]) => log.currentProblems.map(p => ({...p, sector:name})));
+  const flashCount = allCurrentProblems.filter(p=>p.status==="flash").length;
+  const sentCount = allCurrentProblems.filter(p=>p.status==="sent").length;
+  const projectCount = allCurrentProblems.filter(p=>p.status==="project").length;
+  const total = allCurrentProblems.length;
+  const flashRate = total>0 ? Math.round((flashCount/total)*100) : 0;
+
+  const formatDate=(iso)=>new Date(iso).toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"});
+
+  const PinMarker = ({ pin, onTap, draggable }) => {
+    const pos = draggingId===pin.id ? dragPos : { x: pin.x, y: pin.y };
+    return (
+      <div
+        onPointerDown={draggable ? (e)=>startDrag(pin,e) : undefined}
+        onClick={(e)=>{e.stopPropagation(); onTap(pin);}}
+        style={{
+          position:"absolute", left:`${pos.x}%`, top:`${pos.y}%`, transform:"translate(-50%,-50%)",
+          display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+          touchAction: draggable ? "none" : "auto", cursor: draggable ? "grab" : "pointer",
+        }}>
+        <div style={{width:32,height:32,borderRadius:"50%",background:"#3A8A7A",border:"2.5px solid #FFF",boxShadow:"0 2px 8px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{color:"#FFF",fontWeight:800,fontSize:11,fontFamily:F.m}}>{pin.name.slice(0,2).toUpperCase()}</span>
+        </div>
+        <span style={{background:"rgba(42,37,32,0.85)",color:"#FFF",fontSize:9,fontFamily:F.m,fontWeight:700,padding:"2px 6px",borderRadius:4,whiteSpace:"nowrap"}}>{pin.name}</span>
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div style={CS.page}><TopoBackground/>
+      <div style={{textAlign:"center",paddingTop:100,position:"relative",zIndex:1}}>
+        <CarabinerSpinner/>
+        <p style={{fontFamily:F.m,fontSize:11,color:"#AAA",letterSpacing:3}}>LOADING...</p>
+      </div>
+    </div>
+  );
+
+  // ═══════════ HOME ═══════════
+  if (view === "home") {
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <Stagger delay={0}>
+            <div style={{padding:"12px 0 16px",display:"flex",alignItems:"center",gap:14}}>
+              <svg width="40" height="40" viewBox="0 0 40 40">
+                <path d="M4 32 L14 14 L20 24 L26 10 L36 32 Z" fill="none" stroke="#3A8A7A" strokeWidth="2.5" strokeLinejoin="round"/>
+                <circle cx="14" cy="14" r="3" fill="#3A8A7A" opacity="0.3"/>
+              </svg>
+              <div>
+                <h1 style={{fontFamily:F.h,fontSize:28,fontWeight:800,color:"#2A2520",margin:0,lineHeight:1}}>CLIMB<span style={{color:"#3A8A7A"}}>.</span>LOG</h1>
+                <p style={{fontFamily:F.m,fontSize:9,color:"#BBB",letterSpacing:4,marginTop:3}}>BOULDERING TRACKER</p>
+              </div>
+            </div>
+          </Stagger>
+
+          {/* Big interactive map, embedded right on home */}
+          <Stagger delay={60}>
+            {data.gymMap ? (
+              <div style={{marginBottom:8}}>
+                <div style={{position:"relative",width:"100%",borderRadius:12,overflow:"hidden",border:"1px solid #E8E4DE"}}>
+                  <img ref={homeImageRef} src={data.gymMap} draggable={false} style={{width:"100%",display:"block"}}/>
+                  {data.sectors.map(pin => (
+                    <PinMarker key={pin.id} pin={pin} draggable={false} onTap={selectPin}/>
+                  ))}
+                </div>
+                <button onClick={()=>{setView("map");setPinEditMode(false);}} style={{marginTop:8,background:"none",border:"none",color:"#3A8A7A",fontSize:12,fontFamily:F.m,fontWeight:700,cursor:"pointer",letterSpacing:1,padding:0}}>MANAGE MAP & SECTORS →</button>
+              </div>
+            ) : (
+              <button onClick={()=>setView("map")} style={{
+                width:"100%",display:"flex",alignItems:"center",gap:12,padding:"12px",
+                background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:12,cursor:"pointer",
+                marginBottom:16,textAlign:"left",boxShadow:"0 1px 3px rgba(0,0,0,0.03)",
+              }}>
+                <div style={{width:56,height:56,borderRadius:8,background:"#F5F2ED",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1.5px dashed #DDD8D0"}}>
+                  <span style={{fontSize:20,color:"#CCC"}}>+</span>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:F.h,fontSize:14,fontWeight:700,color:"#2A2520"}}>Add Gym Sector Map</div>
+                  <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:2}}>Snap a photo of the layout</div>
+                </div>
+                <span style={{color:"#CCC",fontSize:16}}>›</span>
+              </button>
+            )}
+          </Stagger>
+
+          {/* Overview stats */}
+          {total > 0 && (
+            <Stagger delay={100}>
+              <div style={{background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:12,padding:16,marginBottom:16,marginTop:8}}>
+                <div style={{display:"flex",justifyContent:"space-around"}}>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#C49A2A"}}>{flashCount}</div>
+                    <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#3A8A7A"}}>{sentCount}</div>
+                    <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>SENT</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#9B9690"}}>{projectCount}</div>
+                    <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>PROJECT</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520"}}>{flashRate}%</div>
+                    <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH RATE</div>
+                  </div>
+                </div>
+              </div>
+            </Stagger>
+          )}
+
+          <Stagger delay={140}>
+            <button onClick={()=>{setEditingProblem(null);setPrefillSector("");setView("add");}} style={{
+              width:"100%",padding:"14px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+              cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginBottom:20,
+            }}>+ LOG PROBLEM</button>
+          </Stagger>
+
+          <Divider text="SECTORS"/>
+
+          {allSectorNames.length === 0 && (
+            <div style={{textAlign:"center",padding:"30px 20px"}}>
+              <p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:2}}>NO SECTORS YET</p>
+              <p style={{fontSize:13,color:"#BBB",marginTop:6}}>Tag sectors on your map or log a problem to create one</p>
+            </div>
+          )}
+
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {allSectorNames.map((name, idx) => {
+              const log = data.sectorLogs[name] || emptySectorLog();
+              const f = log.currentProblems.filter(p=>p.status==="flash").length;
+              const s = log.currentProblems.filter(p=>p.status==="sent").length;
+              const pr = log.currentProblems.filter(p=>p.status==="project").length;
+              const isExpanded = expandedSector === name;
+              return (
+                <Stagger key={name} delay={180+idx*40}>
+                  <div style={{background:"#FFF",borderRadius:10,border:"1px solid #E8E4DE",overflow:"hidden"}}>
+                    <button onClick={()=>{setExpandedSector(isExpanded?null:name);setResetConfirmSector(null);}} style={{
+                      display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",
+                      background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
+                    }}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#2A2520"}}>{name}</div>
+                        <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:2}}>{f} flash · {s} sent · {pr} project</div>
+                      </div>
+                      <span style={{color:"#CCC",fontSize:13,transition:"transform 0.2s",transform:isExpanded?"rotate(90deg)":"none"}}>▸</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div style={{padding:"0 14px 14px",borderTop:"1px solid #F0EDE8"}}>
+                        {log.currentProblems.length === 0 && (
+                          <p style={{fontSize:12,color:"#BBB",margin:"10px 0"}}>No active problems in this sector yet.</p>
+                        )}
+                        {log.currentProblems.map(p => {
+                          const colorMeta = HOLD_COLORS.find(c=>c.name===p.color) || HOLD_COLORS[0];
+                          const statusMeta = STATUS_META[p.status];
+                          return (
+                            <div key={p.id} style={{marginTop:8,borderTop:"1px solid #F5F2ED",paddingTop:8}}>
+                              <button onClick={()=>setExpandedProblem(expandedProblem===p.id?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",padding:0}}>
+                                <span style={{width:14,height:14,borderRadius:"50%",background:colorMeta.hex,border:"1.5px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
+                                <div style={{flex:1}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:"#2A2520"}}>{p.grade || colorMeta.name}</div>
+                                  <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{formatDate(p.date)}</div>
+                                </div>
+                                <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:5,background:`${statusMeta.color}18`,color:statusMeta.color,letterSpacing:1}}>
+                                  {statusMeta.label}{p.status!=="flash"&&p.attempts?` ×${p.attempts}`:""}
+                                </span>
+                              </button>
+                              {expandedProblem===p.id && (
+                                <div style={{marginTop:8,paddingLeft:24}}>
+                                  {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
+                                  <div style={{display:"flex",gap:8}}>
+                                    <button onClick={()=>{setEditingProblem(p);setPrefillSector(p.sector);setView("add");}} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>EDIT</button>
+                                    <button onClick={()=>deleteProblem(name, p.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        <div style={{display:"flex",gap:8,marginTop:14}}>
+                          <button onClick={()=>{setEditingProblem(null);setPrefillSector(name);setView("add");}} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:1}}>+ LOG HERE</button>
+                          <button onClick={()=>{setHistorySector(name);setView("sectorHistory");}} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#2A2520",letterSpacing:1}}>HISTORY ({log.archivedResets.length})</button>
+                        </div>
+
+                        {resetConfirmSector !== name ? (
+                          <button onClick={()=>setResetConfirmSector(name)} style={{
+                            width:"100%",marginTop:8,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,
+                            cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#C45A5A",letterSpacing:1,
+                          }}>RESET THIS SECTOR</button>
+                        ) : (
+                          <div style={{marginTop:8,background:"rgba(196,90,90,0.06)",border:"1.5px solid rgba(196,90,90,0.2)",borderRadius:8,padding:12}}>
+                            <p style={{fontSize:12,color:"#2A2520",margin:"0 0 8px"}}>Archives {log.currentProblems.length} active problem{log.currentProblems.length!==1?"s":""} in {name} and starts fresh. Sure?</p>
+                            <div style={{display:"flex",gap:8}}>
+                              <button onClick={()=>resetSector(name)} style={{flex:1,padding:"7px 0",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#C45A5A",border:"none",color:"#FFF",letterSpacing:1}}>YES, RESET</button>
+                              <button onClick={()=>setResetConfirmSector(null)} style={{flex:1,padding:"7px 0",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#666",letterSpacing:1}}>CANCEL</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Stagger>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ ADD / EDIT PROBLEM ═══════════
+  if (view === "add") {
+    return <ProblemForm
+      initial={editingProblem}
+      initialSector={prefillSector}
+      sectors={sectorOptions}
+      onSave={saveProblem}
+      onCancel={()=>{setView("home");setEditingProblem(null);setPrefillSector("");}}
+    />;
+  }
+
+  // ═══════════ SECTOR HISTORY ═══════════
+  if (view === "sectorHistory") {
+    const log = data.sectorLogs[historySector] || emptySectorLog();
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <button onClick={()=>{setView("home");setHistorySector(null);setExpandedArchive(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+          <h2 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",margin:"0 0 4px"}}>{historySector}</h2>
+          <p style={{fontFamily:F.m,fontSize:10,color:"#BBB",letterSpacing:2,marginBottom:16}}>PAST RESETS</p>
+
+          {log.archivedResets.length===0 && (
+            <p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:1,textAlign:"center",marginTop:40}}>NO ARCHIVED RESETS YET</p>
+          )}
+
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {log.archivedResets.map(reset => {
+              const f = reset.problems.filter(p=>p.status==="flash").length;
+              const s = reset.problems.filter(p=>p.status==="sent").length;
+              const pr = reset.problems.filter(p=>p.status==="project").length;
+              return (
+                <div key={reset.id} style={{background:"#FFF",borderRadius:10,border:"1px solid #E8E4DE",overflow:"hidden"}}>
+                  <button onClick={()=>setExpandedArchive(expandedArchive===reset.id?null:reset.id)} style={{width:"100%",padding:"12px 14px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                    <div style={{fontSize:14,fontWeight:600,color:"#2A2520"}}>{formatDate(reset.startDate)} — {formatDate(reset.endDate)}</div>
+                    <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:3}}>{reset.problems.length} problems · {f} flash · {s} sent · {pr} project</div>
+                  </button>
+                  {expandedArchive===reset.id && (
+                    <div style={{padding:"0 14px 14px",borderTop:"1px solid #F0EDE8"}}>
+                      {reset.problems.map(p=>{
+                        const colorMeta = HOLD_COLORS.find(c=>c.name===p.color)||HOLD_COLORS[0];
+                        const statusMeta = STATUS_META[p.status];
+                        return (
+                          <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F2ED"}}>
+                            <span style={{width:12,height:12,borderRadius:"50%",background:colorMeta.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
+                            <span style={{fontSize:13,color:"#2A2520",flex:1}}>{p.grade || colorMeta.name}</span>
+                            <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,color:statusMeta.color}}>{statusMeta.label}{p.status!=="flash"&&p.attempts?` ×${p.attempts}`:""}</span>
+                          </div>
+                        );
+                      })}
+                      <button onClick={()=>deleteSectorArchive(historySector, reset.id)} style={{marginTop:10,padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE ARCHIVE</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ MAP MANAGEMENT ═══════════
+  if (view === "map") {
+    const activePin = data.sectors.find(s => s.id === activePinId);
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <button onClick={()=>{setView("home");setPinEditMode(false);setNewPinDraft(null);setActivePinId(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+            {data.gymMap && (
+              <button onClick={()=>{setPinEditMode(!pinEditMode);setNewPinDraft(null);setActivePinId(null);}} style={{
+                padding:"8px 16px",borderRadius:20,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",letterSpacing:1,
+                background:pinEditMode?"#3A8A7A":"#FFF",border:`1.5px solid ${pinEditMode?"#3A8A7A":"#E8E4DE"}`,color:pinEditMode?"#FFF":"#2A2520",
+              }}>{pinEditMode ? "DONE" : "EDIT SECTORS"}</button>
+            )}
+          </div>
+          <h2 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",margin:"0 0 8px"}}>Gym Sector Map</h2>
+
+          {data.gymMap && (
+            <p style={{fontFamily:F.b,fontSize:12,color:"#999",margin:"0 0 12px"}}>
+              {pinEditMode ? "Tap the map to drop a pin. Tap a pin to rename or delete it. Drag pins to reposition." : "Tap a sector pin to log a problem there."}
+            </p>
+          )}
+
+          {data.gymMap ? (
+            <div style={{position:"relative",width:"100%",borderRadius:12,overflow:"hidden",border:"1px solid #E8E4DE"}}>
+              <img ref={imageRef} src={data.gymMap} draggable={false} onClick={handleImageClick}
+                style={{width:"100%",display:"block",cursor:pinEditMode?"crosshair":"default",touchAction:pinEditMode?"none":"auto"}}/>
+
+              {data.sectors.map(pin => (
+                <PinMarker key={pin.id} pin={pin} draggable={pinEditMode}
+                  onTap={(p)=>{ pinEditMode ? (setActivePinId(p.id), setEditName(p.name)) : selectPin(p); }}/>
+              ))}
+
+              {newPinDraft && (
+                <div style={{position:"absolute",left:`${newPinDraft.x}%`,top:`${newPinDraft.y}%`,transform:"translate(-50%,-50%)",width:32,height:32,borderRadius:"50%",border:"2.5px dashed #D4663A",background:"rgba(212,102,58,0.15)"}}/>
+              )}
+            </div>
+          ) : (
+            <div style={{padding:"60px 20px",textAlign:"center",background:"#FFF",borderRadius:12,border:"1.5px dashed #DDD8D0"}}>
+              <p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:1}}>NO MAP UPLOADED YET</p>
+            </div>
+          )}
+
+          {newPinDraft && (
+            <div style={{marginTop:12,background:"#FFF",borderRadius:10,padding:16,border:"1.5px solid #D4663A"}}>
+              <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>New Sector Pin</div>
+              <input value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder="Sector name, e.g. Sector D" autoFocus
+                style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={addPin} disabled={!draftName.trim()} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:draftName.trim()?"pointer":"default",background:draftName.trim()?"#2A2520":"#E8E4DE",border:"none",color:draftName.trim()?"#F5F2ED":"#BBB",letterSpacing:1}}>ADD PIN</button>
+                <button onClick={()=>{setNewPinDraft(null);setDraftName("");}} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#666",letterSpacing:1}}>CANCEL</button>
+              </div>
+            </div>
+          )}
+
+          {activePin && (
+            <div style={{marginTop:12,background:"#FFF",borderRadius:10,padding:16,border:"1.5px solid #3A8A7A"}}>
+              <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Edit Sector Pin</div>
+              <input value={editName} onChange={e=>setEditName(e.target.value)}
+                style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={saveEditedPinName} disabled={!editName.trim()} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:editName.trim()?"pointer":"default",background:editName.trim()?"#2A2520":"#E8E4DE",border:"none",color:editName.trim()?"#F5F2ED":"#BBB",letterSpacing:1}}>SAVE NAME</button>
+                <button onClick={()=>deletePin(activePinId)} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8C4C4",color:"#C45A5A",letterSpacing:1}}>DELETE PIN</button>
+                <button onClick={()=>setActivePinId(null)} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#666",letterSpacing:1}}>CLOSE</button>
+              </div>
+            </div>
+          )}
+
+          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleMapUpload} style={{display:"none"}}/>
+          <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} style={{
+            width:"100%",padding:"14px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+            cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginTop:16,
+          }}>{uploading ? "PROCESSING..." : data.gymMap ? "REPLACE PHOTO" : "TAKE / UPLOAD PHOTO"}</button>
+          <p style={{fontFamily:F.b,fontSize:11,color:"#BBB",marginTop:10,textAlign:"center"}}>Photos are compressed and stored on this device only.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── Add/Edit Problem Form ───────────────────────────
+function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
+  const [sector, setSector] = useState(initial?.sector || initialSector || "");
+  const [color, setColor] = useState(initial?.color || HOLD_COLORS[0].name);
+  const [grade, setGrade] = useState(initial?.grade || "");
+  const [status, setStatus] = useState(initial?.status || "flash");
+  const [attempts, setAttempts] = useState(initial?.attempts || (initial?.status==="sent"?2:1));
+  const [notes, setNotes] = useState(initial?.notes || "");
+
+  const handleSave = () => {
+    if (!sector.trim()) return;
+    onSave({
+      id: initial?.id,
+      sector: sector.trim(),
+      color, grade: grade.trim(),
+      status,
+      attempts: status==="flash" ? 1 : Number(attempts)||1,
+      notes: notes.trim(),
+      date: initial?.date || new Date().toISOString(),
+    });
+  };
+
+  return (
+    <div style={CS.page}><TopoBackground/>
+      <div style={{position:"relative",zIndex:1}}>
+        <button onClick={onCancel} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+        <h2 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",margin:"0 0 20px"}}>{initial ? "Edit Problem" : "Log Problem"}</h2>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Sector</div>
+          <input list="sector-options" value={sector} onChange={e=>setSector(e.target.value)} placeholder="e.g. Sector A"
+            style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          <datalist id="sector-options">{sectors.map(s=><option key={s} value={s}/>)}</datalist>
+        </div>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:10}}>Hold Colour</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {HOLD_COLORS.map(c=>(
+              <button key={c.name} onClick={()=>setColor(c.name)} style={{
+                width:38,height:38,borderRadius:"50%",background:c.hex,cursor:"pointer",
+                border: color===c.name ? "3px solid #2A2520" : "1.5px solid rgba(0,0,0,0.1)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+              }}>{color===c.name && <span style={{color:c.text,fontSize:14}}>✓</span>}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Grade <span style={{color:"#CCC",fontWeight:400}}>(optional)</span></div>
+          <input value={grade} onChange={e=>setGrade(e.target.value)} placeholder="e.g. V3"
+            style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+        </div>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:10}}>Result</div>
+          <div style={{display:"flex",gap:8,marginBottom:status!=="flash"?12:0}}>
+            {["flash","sent","project"].map(s=>(
+              <button key={s} onClick={()=>setStatus(s)} style={{
+                flex:1,padding:"10px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",letterSpacing:1,
+                background:status===s?STATUS_META[s].color:"#F5F2ED",
+                border:`1.5px solid ${status===s?STATUS_META[s].color:"#E8E4DE"}`,
+                color:status===s?"#FFF":"#999",
+              }}>{STATUS_META[s].label}</button>
+            ))}
+          </div>
+          {status!=="flash" && (
+            <div>
+              <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginBottom:6}}>{status==="sent"?"Attempts to send":"Attempts so far"}</div>
+              <input type="number" min="1" value={attempts} onChange={e=>setAttempts(e.target.value)}
+                style={{width:100,padding:"8px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          )}
+        </div>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Notes / Beta</div>
+          <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Crux moves, sequence, how it felt..."
+            style={{width:"100%",padding:12,borderRadius:8,fontSize:13,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+        </div>
+
+        <button onClick={handleSave} disabled={!sector.trim()} style={{
+          width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+          cursor:sector.trim()?"pointer":"default",background:sector.trim()?"#2A2520":"#E8E4DE",border:"none",
+          color:sector.trim()?"#F5F2ED":"#BBB",letterSpacing:3,
+        }}>{initial ? "SAVE CHANGES" : "LOG PROBLEM"}</button>
+      </div>
+    </div>
+  );
+}
+
+const CS = {
+  page:{position:"relative",maxWidth:520,margin:"0 auto",padding:"16px 18px calc(env(safe-area-inset-bottom, 20px) + 40px)",minHeight:"calc(100vh - 54px)",background:"#F5F2ED",fontFamily:F.b,overflow:"hidden"},
+};
+
+// ═══════════════════════════════════════════════════
+// ─── ROOT APP (tab switcher) ─────────────────────────
+// ═══════════════════════════════════════════════════
+function RootApp() {
+  const [page, setPage] = useState("fingers");
+  return (
+    <div>
+      <div style={{
+        position:"sticky",top:0,zIndex:50,background:"#F5F2ED",
+        borderBottom:"1px solid #E8E4DE",paddingTop:"env(safe-area-inset-top, 12px)",
+      }}>
+        <div style={{maxWidth:520,margin:"0 auto",display:"flex",gap:8,padding:"10px 18px"}}>
+          <button onClick={()=>setPage("fingers")} style={{
+            flex:1,padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:800,fontFamily:F.m,
+            cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+            background:page==="fingers"?"#2A2520":"#FFF",
+            border:`1.5px solid ${page==="fingers"?"#2A2520":"#E8E4DE"}`,
+            color:page==="fingers"?"#F5F2ED":"#999",
+          }}>FINGERS</button>
+          <button onClick={()=>setPage("climbs")} style={{
+            flex:1,padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:800,fontFamily:F.m,
+            cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+            background:page==="climbs"?"#2A2520":"#FFF",
+            border:`1.5px solid ${page==="climbs"?"#2A2520":"#E8E4DE"}`,
+            color:page==="climbs"?"#F5F2ED":"#999",
+          }}>CLIMBS</button>
+        </div>
+      </div>
+      {page==="fingers" ? <FingerApp/> : <ClimbApp/>}
+    </div>
+  );
+}
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+root.render(<RootApp />);
+
 </script>
 
 <!-- Manually transform with the CLASSIC JSX runtime (avoids needing an ES module import) -->
