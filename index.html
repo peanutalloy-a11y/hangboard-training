@@ -1523,14 +1523,34 @@ function ClimbApp() {
               const f = reset.problems.filter(p=>p.status==="flash").length;
               const s = reset.problems.filter(p=>p.status==="sent").length;
               const pr = reset.problems.filter(p=>p.status==="project").length;
+              const resetTotal = reset.problems.length;
+              const resetFlashRate = resetTotal>0 ? Math.round((f/resetTotal)*100) : 0;
               return (
                 <div key={reset.id} style={{background:"#FFF",borderRadius:10,border:"1px solid #E8E4DE",overflow:"hidden"}}>
                   <button onClick={()=>setExpandedArchive(expandedArchive===reset.id?null:reset.id)} style={{width:"100%",padding:"12px 14px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
                     <div style={{fontSize:14,fontWeight:600,color:"#2A2520"}}>{formatDate(reset.startDate)} — {formatDate(reset.endDate)}</div>
-                    <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:3}}>{reset.problems.length} problems · {f} flash · {s} sent · {pr} project</div>
+                    <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:3}}>{resetTotal} problems · {f} flash · {s} sent · {pr} project</div>
                   </button>
                   {expandedArchive===reset.id && (
                     <div style={{padding:"0 14px 14px",borderTop:"1px solid #F0EDE8"}}>
+                      <div style={{display:"flex",justifyContent:"space-around",padding:"14px 0",marginBottom:6,borderBottom:"1px solid #F5F2ED"}}>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontFamily:F.h,fontSize:18,fontWeight:800,color:"#C49A2A"}}>{f}</div>
+                          <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH</div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontFamily:F.h,fontSize:18,fontWeight:800,color:"#3A8A7A"}}>{s}</div>
+                          <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>SENT</div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontFamily:F.h,fontSize:18,fontWeight:800,color:"#9B9690"}}>{pr}</div>
+                          <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>PROJECT</div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{fontFamily:F.h,fontSize:18,fontWeight:800,color:"#2A2520"}}>{resetFlashRate}%</div>
+                          <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH RATE</div>
+                        </div>
+                      </div>
                       {reset.problems.map(p=>{
                         const colorMeta = HOLD_COLORS.find(c=>c.name===p.color)||HOLD_COLORS[0];
                         const statusMeta = STATUS_META[p.status];
