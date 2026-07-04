@@ -534,8 +534,7 @@ function FingerApp() {
   const [animKey, setAnimKey] = useState(0);
   const [copiedId, setCopiedId] = useState(null);
   const [loadStatus, setLoadStatus] = useState(null);
-  const [showPaste, setShowPaste] = useState(false);
-  const [pasteText, setPasteText] = useState("");
+  const csvInputRef = useRef(null);
 
   const currentLogRef = useRef(currentLog); const selectedSessionRef = useRef(selectedSession);
   const notesRef = useRef(notes); const rpeRef = useRef(rpe);
@@ -625,34 +624,41 @@ function FingerApp() {
     navigator.clipboard.writeText(text).then(()=>{setCopiedId(entry.id);setTimeout(()=>setCopiedId(null),2000);}).catch(()=>{const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);setCopiedId(entry.id);setTimeout(()=>setCopiedId(null),2000);});
   };
 
-  const saveData = () => {
-    const json = JSON.stringify(logs);
-    navigator.clipboard.writeText(json).then(()=>{
-      setLoadStatus("copied"); setTimeout(()=>setLoadStatus(null),3000);
-    }).catch(()=>{
-      const ta = document.createElement("textarea");
-      ta.value = json; document.body.appendChild(ta);
-      ta.select(); document.execCommand("copy");
-      document.body.removeChild(ta);
-      setLoadStatus("copied"); setTimeout(()=>setLoadStatus(null),3000);
-    });
+  const exportFingerCSV = () => {
+    try {
+      const csv = buildFingerCSV(logsRef.current);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `send-log-backup-${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      setLoadStatus("exported");
+    } catch(e) {
+      setLoadStatus("error");
+    }
+    setTimeout(() => setLoadStatus(null), 3000);
   };
 
-  const loadData = () => {
-    try {
-      const imported = JSON.parse(pasteText);
-      if(Array.isArray(imported)) {
-        const existingIds = new Set(logs.map(l=>l.id));
-        const newEntries = imported.filter(l=>!existingIds.has(l.id));
-        const merged = [...newEntries, ...logs].sort((a,b)=>new Date(b.date)-new Date(a.date));
-        setLogs(merged); logsRef.current=merged;
-        try{localStorage.setItem(STORAGE_KEY,JSON.stringify(merged));}catch(ex){}
-        setLoadStatus("loaded"); setTimeout(()=>setLoadStatus(null),2000);
-        setShowPaste(false); setPasteText("");
-      } else {
-        setLoadStatus("error"); setTimeout(()=>setLoadStatus(null),2000);
+  const importFingerCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const merged = parseFingerCSV(ev.target.result, logsRef.current);
+        setLogs(merged); logsRef.current = merged;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch(ex) {}
+        setLoadStatus("loaded");
+      } catch(err) {
+        setLoadStatus("error");
       }
-    } catch(ex) { setLoadStatus("error"); setTimeout(()=>setLoadStatus(null),2000); }
+      setTimeout(() => setLoadStatus(null), 3000);
+    };
+    reader.onerror = () => { setLoadStatus("error"); setTimeout(() => setLoadStatus(null), 3000); };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const formatDate=(iso)=>new Date(iso).toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"});
@@ -693,8 +699,8 @@ function FingerApp() {
       <div style={S.page}><TopoBackground/>
         <div key={animKey} style={{position:"relative",zIndex:1,animation:pageAnim}}>
           <Stagger delay={0}>
-            <div style={{padding:"28px 0 16px",display:"flex",alignItems:"center",gap:14}}>
-              <svg width="40" height="40" viewBox="0 0 40 40"><polygon points="20,4 36,36 4,36" fill="none" stroke="#D4663A" strokeWidth="2.5"/><polygon points="20,14 28,31 12,31" fill="#D4663A" opacity="0.15"/></svg>
+            <div style={{padding:"16px 0 16px",display:"flex",alignItems:"center",gap:14}}>
+              <svg width="40" height="40" viewBox="0 0 40 40"><polygon points="20,8 32.5,33 7.5,33" fill="none" stroke="#D4663A" strokeWidth="2.5"/><polygon points="20,15.8 26.2,29.1 13.8,29.1" fill="#D4663A" opacity="0.15"/></svg>
               <div>
                 <h1 style={{fontFamily:F.h,fontSize:30,fontWeight:800,color:"#2A2520",margin:0,lineHeight:1}}>SEND<span style={{color:"#D4663A"}}>.</span>LOG</h1>
                 <p style={{fontFamily:F.m,fontSize:9,color:"#BBB",letterSpacing:4,marginTop:3}}>FINGER STRENGTH TRACKER</p>
@@ -795,37 +801,26 @@ function FingerApp() {
               <span style={{fontFamily:F.m,fontSize:10,color:"#AAA",letterSpacing:3}}>DATA</span>
               <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
             </div>
-            <p style={{fontFamily:F.b,fontSize:11,color:"#3A8A7A",marginBottom:10}}>✓ Your data is saved automatically on this device. Backup/Restore below is just for extra safety or moving to another device.</p>
+            <p style={{fontFamily:F.b,fontSize:11,color:"#3A8A7A",marginBottom:10}}>✓ Your data is saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device.</p>
             <div style={{display:"flex",gap:8}}>
               {logs.length>0&&(
-                <button onClick={saveData} style={{
+                <button onClick={exportFingerCSV} style={{
                   flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
                   cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
-                  background:loadStatus==="copied"?"#2A2520":"#FFF",
-                  border:`1.5px solid ${loadStatus==="copied"?"#2A2520":"#E8E4DE"}`,
-                  color:loadStatus==="copied"?"#F5F2ED":"#2A2520",
-                }}>{loadStatus==="copied"?"COPIED ✓":"BACKUP DATA"}</button>
+                  background:loadStatus==="exported"?"#2A2520":"#FFF",
+                  border:`1.5px solid ${loadStatus==="exported"?"#2A2520":"#E8E4DE"}`,
+                  color:loadStatus==="exported"?"#F5F2ED":"#2A2520",
+                }}>{loadStatus==="exported"?"DOWNLOADED ✓":"EXPORT CSV"}</button>
               )}
-              <button onClick={()=>{if(showPaste){setShowPaste(false);setPasteText("");}else setShowPaste(true);}} style={{
+              <button onClick={()=>csvInputRef.current?.click()} style={{
                 flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
                 cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
-                background:loadStatus==="loaded"?"#3A8A7A":loadStatus==="error"?"#C45A5A":showPaste?"#F5F2ED":"#FFF",
+                background:loadStatus==="loaded"?"#3A8A7A":loadStatus==="error"?"#C45A5A":"#FFF",
                 border:`1.5px solid ${loadStatus==="loaded"?"#3A8A7A":loadStatus==="error"?"#C45A5A":"#E8E4DE"}`,
                 color:loadStatus==="loaded"||loadStatus==="error"?"#FFF":"#2A2520",
-              }}>{loadStatus==="loaded"?"LOADED ✓":loadStatus==="error"?"INVALID DATA":showPaste?"CANCEL":"RESTORE DATA"}</button>
+              }}>{loadStatus==="loaded"?"RESTORED ✓":loadStatus==="error"?"INVALID FILE":"RESTORE CSV"}</button>
             </div>
-            {showPaste&&(
-              <div style={{marginTop:10,animation:"fadeUp 0.25s ease"}}>
-                <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Paste your backed-up data here..."
-                  style={{width:"100%",padding:12,borderRadius:8,fontSize:12,fontFamily:F.m,background:"#FFF",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",resize:"vertical",boxSizing:"border-box",minHeight:80}}/>
-                <button onClick={loadData} disabled={!pasteText.trim()} style={{
-                  width:"100%",padding:"10px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
-                  cursor:pasteText.trim()?"pointer":"default",letterSpacing:2,marginTop:6,
-                  background:pasteText.trim()?"#2A2520":"#E8E4DE",border:"none",
-                  color:pasteText.trim()?"#F5F2ED":"#BBB",
-                }}>RESTORE</button>
-              </div>
-            )}
+            <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={importFingerCSV} style={{display:"none"}}/>
           </Stagger>
         </div>
       </div>
@@ -1040,6 +1035,205 @@ function mergeLogs(a, b) {
   };
 }
 
+// ─── CSV backup/restore helpers ──────────────────────
+// ─── Finger Tracker CSV backup/restore helpers ───────
+const FINGER_CSV_HEADER = ["SessionId","Date","SessionType","ExerciseId","SetIndex","RepIndex","BW","BWPercent","AddedWeight","Duration","Notes","RPE"];
+
+function buildFingerCSV(logs) {
+  const rows = [FINGER_CSV_HEADER];
+  logs.forEach(entry => {
+    Object.entries(entry.exercises || {}).forEach(([exId, exData]) => {
+      (exData.sets || []).forEach((set, si) => {
+        if (set.reps && Array.isArray(set.reps)) {
+          set.reps.forEach((rep, ri) => {
+            rows.push([entry.id, entry.date, entry.session, exId, si, ri, rep.bw ? "true" : "false", rep.bwPercent||"", rep.addedWeight||"", rep.duration||"", entry.notes||"", entry.rpe]);
+          });
+        }
+      });
+    });
+  });
+  return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+
+function parseFingerCSV(text, existingLogs) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error("Empty or invalid CSV");
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const iId=idx("SessionId"), iDate=idx("Date"), iType=idx("SessionType"), iEx=idx("ExerciseId"),
+        iSet=idx("SetIndex"), iRep=idx("RepIndex"), iBW=idx("BW"), iBWP=idx("BWPercent"),
+        iAdded=idx("AddedWeight"), iDur=idx("Duration"), iNotes=idx("Notes"), iRPE=idx("RPE");
+  if (iId===-1 || iType===-1) throw new Error("Missing required columns");
+
+  const sessionsMap = {};
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.every(c => c === "")) continue;
+    const sessionId = Number(row[iId]) || (Date.now() + Math.random());
+    if (!sessionsMap[sessionId]) {
+      sessionsMap[sessionId] = { id: sessionId, date: row[iDate], session: row[iType], notes: row[iNotes]||"", rpe: Number(row[iRPE])||undefined, exercises: {} };
+    }
+    const exId = row[iEx];
+    if (!sessionsMap[sessionId].exercises[exId]) sessionsMap[sessionId].exercises[exId] = {};
+    const setIdx = Number(row[iSet]) || 0;
+    if (!sessionsMap[sessionId].exercises[exId][setIdx]) sessionsMap[sessionId].exercises[exId][setIdx] = {};
+    const repIdx = Number(row[iRep]) || 0;
+    sessionsMap[sessionId].exercises[exId][setIdx][repIdx] = {
+      bw: row[iBW] === "true",
+      bwPercent: row[iBWP] || "",
+      addedWeight: row[iAdded] || "",
+      duration: row[iDur] || "",
+    };
+  }
+
+  const importedLogs = Object.values(sessionsMap).map(entry => {
+    const exercises = {};
+    Object.entries(entry.exercises).forEach(([exId, setsObj]) => {
+      const setIndices = Object.keys(setsObj).map(Number).sort((a,b)=>a-b);
+      const sets = setIndices.map(si => {
+        const repsObj = setsObj[si];
+        const repIndices = Object.keys(repsObj).map(Number).sort((a,b)=>a-b);
+        return { reps: repIndices.map(ri => repsObj[ri]) };
+      });
+      exercises[exId] = { sets };
+    });
+    return { id: entry.id, date: entry.date, session: entry.session, notes: entry.notes, rpe: entry.rpe, exercises };
+  });
+
+  const existingIds = new Set(existingLogs.map(l => l.id));
+  const newEntries = importedLogs.filter(l => !existingIds.has(l.id));
+  return [...newEntries, ...existingLogs].sort((a,b) => new Date(b.date) - new Date(a.date));
+}
+
+// ─── Climb Log CSV backup/restore helpers ────────────
+const CSV_HEADER = ["Type","Id","Sector","Color","Grade","Status","Attempts","Notes","Date","Cycle","ArchiveId","ArchiveStart","ArchiveEnd","X","Y","ImageData"];
+
+function csvEscape(val) {
+  if (val === null || val === undefined) return "";
+  const s = String(val);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildClimbCSV(data) {
+  const rows = [CSV_HEADER];
+
+  if (data.gymMap) {
+    rows.push(["gym_map","","","","","","","","","","","","","","",data.gymMap]);
+  }
+
+  data.sectors.forEach(pin => {
+    rows.push(["sector_pin", pin.id, pin.name, "","","","","","","","","","", pin.x, pin.y, ""]);
+  });
+
+  Object.entries(data.sectorLogs).forEach(([sectorName, log]) => {
+    log.currentProblems.forEach(p => {
+      rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "current", "", "", "", "", "", ""]);
+    });
+    log.archivedResets.forEach(reset => {
+      reset.problems.forEach(p => {
+        rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "archived", reset.id, reset.startDate, reset.endDate, "", "", ""]);
+      });
+    });
+  });
+
+  return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+
+// Robust CSV parser handling quoted fields with embedded commas/newlines
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ""; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); field = "";
+        if (row.length > 1 || row[0] !== "") rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseClimbCSV(text, existingData) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error("Empty or invalid CSV");
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const iType=idx("Type"), iId=idx("Id"), iSector=idx("Sector"), iColor=idx("Color"), iGrade=idx("Grade"),
+        iStatus=idx("Status"), iAttempts=idx("Attempts"), iNotes=idx("Notes"), iDate=idx("Date"),
+        iCycle=idx("Cycle"), iArchiveId=idx("ArchiveId"), iArchiveStart=idx("ArchiveStart"), iArchiveEnd=idx("ArchiveEnd"),
+        iX=idx("X"), iY=idx("Y"), iImage=idx("ImageData");
+  if (iType===-1 || iSector===-1) throw new Error("Missing required columns");
+
+  let gymMap = existingData.gymMap;
+  const sectorsById = {};
+  existingData.sectors.forEach(s => sectorsById[s.id] = s);
+  const sectorLogs = JSON.parse(JSON.stringify(existingData.sectorLogs));
+  const archiveGroups = {};
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.every(c => c === "")) continue;
+    const type = row[iType];
+
+    if (type === "gym_map") {
+      if (row[iImage]) gymMap = row[iImage];
+    } else if (type === "sector_pin") {
+      const id = Number(row[iId]) || (Date.now() + Math.random());
+      sectorsById[id] = { id, name: row[iSector], x: parseFloat(row[iX]), y: parseFloat(row[iY]) };
+    } else if (type === "problem") {
+      const sectorName = row[iSector];
+      const problem = {
+        id: Number(row[iId]) || (Date.now() + Math.random()),
+        sector: sectorName,
+        color: row[iColor],
+        grade: row[iGrade],
+        status: row[iStatus],
+        attempts: row[iAttempts] ? Number(row[iAttempts]) : undefined,
+        notes: row[iNotes],
+        date: row[iDate],
+      };
+      if (!sectorLogs[sectorName]) sectorLogs[sectorName] = emptySectorLog();
+
+      if (row[iCycle] === "archived") {
+        const archiveKey = sectorName + "::" + (row[iArchiveId] || row[iArchiveStart] + row[iArchiveEnd]);
+        if (!archiveGroups[archiveKey]) {
+          archiveGroups[archiveKey] = { id: Number(row[iArchiveId]) || (Date.now()+Math.random()), sector: sectorName, startDate: row[iArchiveStart], endDate: row[iArchiveEnd], problems: [] };
+        }
+        if (!archiveGroups[archiveKey].problems.some(p => p.id === problem.id)) {
+          archiveGroups[archiveKey].problems.push(problem);
+        }
+      } else {
+        const exists = sectorLogs[sectorName].currentProblems.some(p => p.id === problem.id);
+        if (!exists) sectorLogs[sectorName].currentProblems.push(problem);
+      }
+    }
+  }
+
+  Object.values(archiveGroups).forEach(group => {
+    const log = sectorLogs[group.sector] || (sectorLogs[group.sector] = emptySectorLog());
+    const alreadyExists = log.archivedResets.some(a => a.id === group.id);
+    if (!alreadyExists) {
+      log.archivedResets.push({ id: group.id, problems: group.problems, startDate: group.startDate, endDate: group.endDate });
+    }
+  });
+
+  return { gymMap, sectors: Object.values(sectorsById), sectorLogs };
+}
+
 function ClimbApp() {
   const [view, setView] = useState("home");
   const [data, setData] = useState({ gymMap: null, sectors: [], sectorLogs: {} });
@@ -1053,6 +1247,8 @@ function ClimbApp() {
   const [historySector, setHistorySector] = useState(null);
   const [expandedArchive, setExpandedArchive] = useState(null);
   const fileInputRef = useRef(null);
+  const csvInputRef = useRef(null);
+  const [backupStatus, setBackupStatus] = useState(null);
 
   // Sector pin editing state (map management screen)
   const [pinEditMode, setPinEditMode] = useState(false);
@@ -1279,6 +1475,42 @@ function ClimbApp() {
     persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
   };
 
+  const exportClimbCSV = () => {
+    try {
+      const csv = buildClimbCSV(dataRef.current);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `climb-log-backup-${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      setBackupStatus("exported");
+    } catch(e) {
+      setBackupStatus("error");
+    }
+    setTimeout(() => setBackupStatus(null), 3000);
+  };
+
+  const importClimbCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const merged = parseClimbCSV(ev.target.result, dataRef.current);
+        persist(merged);
+        setBackupStatus("restored");
+      } catch(err) {
+        setBackupStatus("error");
+      }
+      setTimeout(() => setBackupStatus(null), 3000);
+    };
+    reader.onerror = () => { setBackupStatus("error"); setTimeout(() => setBackupStatus(null), 3000); };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const allSectorNames = [...new Set([...data.sectors.map(s=>s.name), ...Object.keys(data.sectorLogs)])].sort();
   const sectorOptions = allSectorNames;
   const allCurrentProblems = Object.entries(data.sectorLogs).flatMap(([name,log]) => log.currentProblems.map(p => ({...p, sector:name})));
@@ -1324,7 +1556,7 @@ function ClimbApp() {
       <div style={CS.page}><TopoBackground/>
         <div style={{position:"relative",zIndex:1}}>
           <Stagger delay={0}>
-            <div style={{padding:"12px 0 16px",display:"flex",alignItems:"center",gap:14}}>
+            <div style={{padding:"16px 0 16px",display:"flex",alignItems:"center",gap:14}}>
               <svg width="40" height="40" viewBox="0 0 40 40">
                 <path d="M4 32 L14 14 L20 24 L26 10 L36 32 Z" fill="none" stroke="#3A8A7A" strokeWidth="2.5" strokeLinejoin="round"/>
                 <circle cx="14" cy="14" r="3" fill="#3A8A7A" opacity="0.3"/>
@@ -1488,6 +1720,30 @@ function ClimbApp() {
               );
             })}
           </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:12,margin:"28px 0 16px"}}>
+            <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+            <span style={{fontFamily:F.m,fontSize:10,color:"#AAA",letterSpacing:3}}>DATA</span>
+            <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+          </div>
+          <p style={{fontFamily:F.b,fontSize:11,color:"#3A8A7A",marginBottom:10}}>✓ Your data is saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device.</p>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={exportClimbCSV} style={{
+              flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+              cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+              background:backupStatus==="exported"?"#2A2520":"#FFF",
+              border:`1.5px solid ${backupStatus==="exported"?"#2A2520":"#E8E4DE"}`,
+              color:backupStatus==="exported"?"#F5F2ED":"#2A2520",
+            }}>{backupStatus==="exported"?"DOWNLOADED ✓":"EXPORT CSV"}</button>
+            <button onClick={()=>csvInputRef.current?.click()} style={{
+              flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+              cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+              background:backupStatus==="restored"?"#3A8A7A":backupStatus==="error"?"#C45A5A":"#FFF",
+              border:`1.5px solid ${backupStatus==="restored"?"#3A8A7A":backupStatus==="error"?"#C45A5A":"#E8E4DE"}`,
+              color:backupStatus==="restored"||backupStatus==="error"?"#FFF":"#2A2520",
+            }}>{backupStatus==="restored"?"RESTORED ✓":backupStatus==="error"?"INVALID FILE":"RESTORE CSV"}</button>
+          </div>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={importClimbCSV} style={{display:"none"}}/>
         </div>
       </div>
     );
