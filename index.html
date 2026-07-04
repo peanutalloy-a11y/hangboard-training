@@ -1622,7 +1622,7 @@ function ClimbApp() {
             </div>
           )}
 
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleMapUpload} style={{display:"none"}}/>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleMapUpload} style={{display:"none"}}/>
           <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} style={{
             width:"100%",padding:"14px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
             cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginTop:16,
