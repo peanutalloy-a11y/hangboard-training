@@ -350,20 +350,35 @@ var e,a,n="function"==typeof Symbol?Symbol:{},t=n.iterator||"@@iterator",r=n.toS
 <script type="text/plain" id="app-source">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const SESSIONS = {
-  tuesday: {
-    label: "Session A", day: "TUESDAY", subtitle: "Hangboard Repeaters",
-    exercises: [
-      { id: "hang_rep", name: "Hangboard Repeaters", target: "3–5 sets, 7s on/3s off ×6", type: "hangboard", group: "fingers" },
-    ],
-  },
-  thursday: {
-    label: "Session B", day: "THURSDAY", subtitle: "Hangboard Max Hangs",
-    exercises: [
-      { id: "hang_max", name: "Hangboard Max Hangs", target: "3–5 × 10s", type: "hangboard", group: "fingers" },
-    ],
-  },
+const SESSIONS_CONFIG_KEY = "send-log-sessions-config";
+const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+const DAY_LABELS = { monday:"MON", tuesday:"TUE", wednesday:"WED", thursday:"THU", friday:"FRI", saturday:"SAT", sunday:"SUN" };
+const DAY_ORDER = Object.fromEntries(DAYS_OF_WEEK.map((d,i)=>[d,i]));
+const PROTOCOLS = {
+  repeaters: { label: "Repeaters", defaultName: "Hangboard Repeaters" },
+  maxhangs: { label: "Max Hangs", defaultName: "Hangboard Max Hangs" },
 };
+const DEFAULT_SESSIONS_CONFIG = [
+  { id: "tuesday", day: "tuesday", name: "Hangboard Repeaters", exerciseId: "hang_rep", protocol: "Repeaters" },
+  { id: "thursday", day: "thursday", name: "Hangboard Max Hangs", exerciseId: "hang_max", protocol: "Max Hangs" },
+];
+// Older saved configs may have the internal preset keys ("repeaters"/"maxhangs") stored
+// instead of a display string — normalize those on load so the exercise card shows properly.
+const LEGACY_PROTOCOL_LABELS = { repeaters: "Repeaters", maxhangs: "Max Hangs" };
+function normalizeSessionsConfig(configs) {
+  return configs.map(s => ({ ...s, protocol: LEGACY_PROTOCOL_LABELS[s.protocol] || s.protocol || s.name }));
+}
+function buildSessionsMap(configs) {
+  const map = {};
+  configs.forEach(s => {
+    map[s.id] = {
+      day: (s.day || "monday").toUpperCase(),
+      subtitle: s.name,
+      exercises: [{ id: s.exerciseId, name: s.protocol || s.name, type: "hangboard", group: "fingers" }],
+    };
+  });
+  return map;
+}
 const GROUP_LABELS = { fingers: "FINGERS" };
 const GROUP_COLORS = { fingers: "#C49A2A" };
 const STORAGE_KEY = "climbing-tracker-log";
@@ -528,6 +543,7 @@ function FingerApp() {
   const [saving, setSaving] = useState(false);
   const [rpe, setRpe] = useState(7);
   const [historyFilter, setHistoryFilter] = useState("all");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedEntry, setExpandedEntry] = useState(null);
   const [hoveredCard, setHoveredCard] = useState(null);
   const [newSetIds, setNewSetIds] = useState(new Set());
@@ -535,6 +551,20 @@ function FingerApp() {
   const [copiedId, setCopiedId] = useState(null);
   const [loadStatus, setLoadStatus] = useState(null);
   const csvInputRef = useRef(null);
+
+  const [sessionsConfig, setSessionsConfig] = useState(DEFAULT_SESSIONS_CONFIG);
+  const [editingSession, setEditingSession] = useState(null); // null = adding new, object = editing existing
+  const [sessionDay, setSessionDay] = useState("monday");
+  const [sessionName, setSessionName] = useState("");
+  const [sessionProtocol, setSessionProtocol] = useState("repeaters");
+  const [deleteSessionConfirm, setDeleteSessionConfirm] = useState(false);
+
+  const SESSIONS = buildSessionsMap(sessionsConfig);
+  const sortedSessionEntries = Object.entries(SESSIONS).sort((a,b) => {
+    const dayA = sessionsConfig.find(s=>s.id===a[0])?.day || "monday";
+    const dayB = sessionsConfig.find(s=>s.id===b[0])?.day || "monday";
+    return (DAY_ORDER[dayA]??0) - (DAY_ORDER[dayB]??0);
+  });
 
   const currentLogRef = useRef(currentLog); const selectedSessionRef = useRef(selectedSession);
   const notesRef = useRef(notes); const rpeRef = useRef(rpe);
@@ -544,8 +574,53 @@ function FingerApp() {
 
   useEffect(()=>{
     try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){const p=JSON.parse(raw);setLogs(p);logsRef.current=p;}}catch(e){}
+    try{const raw=localStorage.getItem(SESSIONS_CONFIG_KEY);if(raw){const p=JSON.parse(raw);if(Array.isArray(p)&&p.length){const normalized=normalizeSessionsConfig(p);setSessionsConfig(normalized);try{localStorage.setItem(SESSIONS_CONFIG_KEY,JSON.stringify(normalized));}catch(e2){}}}else{localStorage.setItem(SESSIONS_CONFIG_KEY,JSON.stringify(DEFAULT_SESSIONS_CONFIG));}}catch(e){}
     setLoading(false);
   },[]);
+
+  const persistSessionsConfig = (next) => {
+    setSessionsConfig(next);
+    try{localStorage.setItem(SESSIONS_CONFIG_KEY,JSON.stringify(next));}catch(e){}
+  };
+
+  const openAddSession = () => {
+    setEditingSession(null);
+    setSessionDay("monday");
+    setSessionProtocol("Repeaters");
+    setSessionName("Hangboard Repeaters");
+    setDeleteSessionConfirm(false);
+    navigateTo("sessionForm");
+  };
+
+  const openEditSession = (id) => {
+    const cfg = sessionsConfig.find(s=>s.id===id);
+    if(!cfg) return;
+    setEditingSession(cfg);
+    setSessionDay(cfg.day);
+    setSessionProtocol(cfg.protocol||"");
+    setSessionName(cfg.name);
+    setDeleteSessionConfirm(false);
+    navigateTo("sessionForm");
+  };
+
+  const saveSessionConfig = () => {
+    if(!sessionName.trim()) return;
+    if(editingSession){
+      const next = sessionsConfig.map(s => s.id===editingSession.id ? {...s, day:sessionDay, name:sessionName.trim(), protocol:sessionProtocol} : s);
+      persistSessionsConfig(next);
+    } else {
+      const newId = "session_"+Date.now();
+      const newSession = { id:newId, day:sessionDay, name:sessionName.trim(), exerciseId:"ex_"+Date.now(), protocol:sessionProtocol };
+      persistSessionsConfig([...sessionsConfig, newSession]);
+    }
+    navigateTo("home");
+  };
+
+  const deleteSessionConfig = () => {
+    if(!editingSession) return;
+    persistSessionsConfig(sessionsConfig.filter(s=>s.id!==editingSession.id));
+    navigateTo("home");
+  };
 
   const navigateTo = useCallback((target,prep)=>{setPrevView(view);setTransitioning(true);if(prep)prep();setTimeout(()=>{setView(target);setTransitioning(false);setAnimKey(k=>k+1);},300);},[view]);
 
@@ -607,7 +682,8 @@ function FingerApp() {
   const deleteEntry=(id)=>{const nl=logs.filter(l=>l.id!==id);setLogs(nl);logsRef.current=nl;setExpandedEntry(null);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(nl));}catch(e){}};
 
   const copySession=(entry)=>{
-    const session=SESSIONS[entry.session];const date=new Date(entry.date).toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    const session=SESSIONS[entry.session]||{day:entry.session,subtitle:entry.session,exercises:Object.keys(entry.exercises||{}).map(id=>({id,name:id,group:"fingers"}))};
+    const date=new Date(entry.date).toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
     let text=`${session.day} — ${session.subtitle}\nDate: ${date}\nRPE: ${entry.rpe}/10\n${"─".repeat(30)}\n`;
     let cg=null;session.exercises.forEach(ex=>{const data=entry.exercises[ex.id];if(!data)return;if(ex.group!==cg){cg=ex.group;text+=`\n${GROUP_LABELS[ex.group]}\n`;}
     const sets=data.sets.map((s,si)=>{
@@ -680,7 +756,7 @@ function FingerApp() {
     if(s.duration!==undefined)return`${s.duration}s`;return s.reps;
   };
 
-  const slideDir=(prevView==="home"&&(view==="log"||view==="saved"))||(prevView==="log"&&view==="saved")?"Right":"Left";
+  const slideDir=(prevView==="home"&&(view==="log"||view==="saved"||view==="sessionForm"))||(prevView==="log"&&view==="saved")?"Right":"Left";
   const pageAnim=transitioning?`slideOut${slideDir==="Right"?"Left":"Right"} 0.3s ease both`:`slideIn${slideDir} 0.4s ease both`;
 
   if(loading) return (
@@ -697,7 +773,7 @@ function FingerApp() {
     const filtered=logs.filter(l=>historyFilter==="all"||l.session===historyFilter).slice(0,20);
     return(
       <div style={S.page}><TopoBackground/>
-        <div key={animKey} style={{position:"relative",zIndex:1,animation:pageAnim}}>
+        <div key={animKey} style={{position:"relative",zIndex:1}}>
           <Stagger delay={0}>
             <div style={{padding:"16px 0 16px",display:"flex",alignItems:"center",gap:14}}>
               <svg width="40" height="40" viewBox="0 0 40 40"><polygon points="20,8 32.5,33 7.5,33" fill="none" stroke="#D4663A" strokeWidth="2.5"/><polygon points="20,15.8 26.2,29.1 13.8,29.1" fill="#D4663A" opacity="0.15"/></svg>
@@ -709,93 +785,118 @@ function FingerApp() {
           </Stagger>
 
           {logs.length>0&&(<>
-            <Stagger delay={80}>
+            <Stagger delay={60}>
               <SummitFlag count={logs.length}/>
               <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24,padding:"14px 0",margin:"0 0 8px",borderTop:"1px solid #E0DCD6",borderBottom:"1px solid #E0DCD6"}}>
-                {[[logs.length,"SESSIONS"],[streak,"WK STREAK"],[`${getSessionCount("tuesday")}/${getSessionCount("thursday")}`,"TUE/THU"]].map(([v,k],i)=>(
+                {[[logs.length,"SESSIONS"],[streak,"WK STREAK"]].map(([v,k],i)=>(
                   <div key={k} style={{display:"flex",alignItems:"center",gap:24}}>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
                       <span style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520"}}>{v}</span>
                       <span style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:2,marginTop:1}}>{k}</span>
-                    </div>{i<2&&<div style={{width:1,height:28,background:"#E8E4DE"}}/>}
+                    </div>{i<1&&<div style={{width:1,height:28,background:"#E8E4DE"}}/>}
                   </div>
                 ))}
               </div>
             </Stagger>
           </>)}
 
-          <Stagger delay={160}><Divider text="LOG SESSION"/></Stagger>
-          {Object.entries(SESSIONS).map(([key,s],i)=>{const hov=hoveredCard===key;return(
-            <Stagger key={key} delay={220+i*100}>
-              <button style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 22px",background:"#FFF",border:"1.5px solid",borderColor:hov?"#D4663A":"#E8E4DE",borderRadius:12,cursor:"pointer",textAlign:"left",color:"#2A2520",transition:"all 0.25s",width:"100%",boxShadow:hov?"0 6px 24px rgba(212,102,58,0.08)":"0 1px 3px rgba(0,0,0,0.03)",transform:hov?"translateY(-1px)":"none",marginBottom:10}}
-                onClick={()=>startSession(key)} onMouseEnter={()=>setHoveredCard(key)} onMouseLeave={()=>setHoveredCard(null)}>
-                <div>
-                  <div style={{fontFamily:F.m,fontSize:11,fontWeight:700,color:"#D4663A",letterSpacing:3,marginBottom:4}}>{s.day}</div>
-                  <div style={{fontFamily:F.h,fontSize:17,fontWeight:700,color:"#2A2520"}}>{s.subtitle}</div>
-                  <div style={{fontFamily:F.m,fontSize:11,color:"#CCC",marginTop:4,letterSpacing:1}}>{getSessionCount(key)} session{getSessionCount(key)!==1?"s":""} logged</div>
+          <Stagger delay={100}><Divider text="LOG SESSION"/></Stagger>
+          {sortedSessionEntries.map(([key,s],i)=>{const hov=hoveredCard===key;return(
+            <Stagger key={key} delay={140+i*40}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <div onClick={()=>startSession(key)} onMouseEnter={()=>setHoveredCard(key)} onMouseLeave={()=>setHoveredCard(null)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 22px",background:"#FFF",border:"1.5px solid",borderColor:hov?"#D4663A":"#E8E4DE",borderRadius:12,cursor:"pointer",textAlign:"left",color:"#2A2520",transition:"all 0.25s",flex:1,boxShadow:hov?"0 6px 24px rgba(212,102,58,0.08)":"0 1px 3px rgba(0,0,0,0.03)",transform:hov?"translateY(-1px)":"none"}}>
+                  <div>
+                    <div style={{fontFamily:F.m,fontSize:11,fontWeight:700,color:"#D4663A",letterSpacing:3,marginBottom:4}}>{s.day}</div>
+                    <div style={{fontFamily:F.h,fontSize:17,fontWeight:700,color:"#2A2520"}}>{s.subtitle}</div>
+                    <div style={{fontFamily:F.m,fontSize:11,color:"#CCC",marginTop:4,letterSpacing:1}}>{getSessionCount(key)} session{getSessionCount(key)!==1?"s":""} logged</div>
+                  </div>
+                  <svg width="28" height="28" viewBox="0 0 24 24"><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="#D4663A" opacity="0.12"/><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="none" stroke="#D4663A" strokeWidth="1.5" opacity="0.35"/></svg>
                 </div>
-                <svg width="28" height="28" viewBox="0 0 24 24"><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="#D4663A" opacity="0.12"/><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="none" stroke="#D4663A" strokeWidth="1.5" opacity="0.35"/></svg>
-              </button>
+                <button onClick={()=>openEditSession(key)} style={{width:40,height:40,flexShrink:0,borderRadius:10,background:"#FFF",border:"1.5px solid #E8E4DE",cursor:"pointer",fontSize:15,color:"#AAA",display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+              </div>
             </Stagger>
           );})}
 
+          <Stagger delay={140+sortedSessionEntries.length*40}>
+            <button onClick={openAddSession} style={{
+              width:"100%",padding:"14px 0",borderRadius:12,fontSize:12,fontWeight:700,fontFamily:F.m,
+              cursor:"pointer",background:"transparent",border:"1.5px dashed #DDD8D0",color:"#999",letterSpacing:2,marginBottom:10,
+            }}>+ ADD SESSION</button>
+          </Stagger>
+
           {logs.length>0&&(<>
-            <Stagger delay={440}><Divider text="HISTORY"/></Stagger>
-            <Stagger delay={500}>
-              <div style={{display:"flex",gap:6,marginBottom:14}}>
-                {["all","tuesday","thursday"].map(f=>(
-                  <button key={f} onClick={()=>setHistoryFilter(f)} style={{padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:F.m,cursor:"pointer",letterSpacing:1,transition:"all 0.15s",background:historyFilter===f?"#2A2520":"#FFF",border:`1.5px solid ${historyFilter===f?"#2A2520":"#E8E4DE"}`,color:historyFilter===f?"#F5F2ED":"#AAA"}}>{f==="all"?"All":f==="tuesday"?"Tue":"Thu"}</button>
-                ))}
-              </div>
+            <Stagger delay={220}>
+              <button onClick={()=>setHistoryOpen(!historyOpen)} style={{
+                display:"flex",alignItems:"center",gap:12,width:"100%",background:"transparent",
+                border:"none",cursor:"pointer",padding:"8px 0",margin:"28px 0 0",
+              }}>
+                <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+                <span style={{fontFamily:F.m,fontSize:10,color:"#AAA",letterSpacing:3,display:"flex",alignItems:"center",gap:6}}>
+                  HISTORY ({logs.length})
+                  <span style={{fontSize:9,transition:"transform 0.2s",display:"inline-block",transform:historyOpen?"rotate(180deg)":"none"}}>▾</span>
+                </span>
+                <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+              </button>
             </Stagger>
-            <div style={{position:"relative",paddingLeft:22}}>
-              <div style={{position:"absolute",left:6,top:7,bottom:7,width:2,background:"linear-gradient(to bottom, #C49A2A, #D4663A)",borderRadius:1,opacity:0.25}}/>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {filtered.map((entry,idx)=>{
-                  const col=entry.session==="tuesday"?"#C49A2A":"#D4663A";
-                  return(
-                    <Stagger key={entry.id} delay={560+idx*60}>
-                      <div style={{position:"relative"}}>
-                        <div style={{position:"absolute",left:-19,top:14}}><RouteBolt color={col}/></div>
-                        <div style={{background:"#FFF",borderRadius:10,overflow:"hidden",border:"1px solid #E8E4DE"}}>
-                          <button style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"11px 14px",cursor:"pointer",background:"transparent",border:"none",color:"#2A2520",fontFamily:F.b}}
-                            onClick={()=>setExpandedEntry(expandedEntry===entry.id?null:entry.id)}>
-                            <div style={{display:"flex",alignItems:"center",gap:8}}>
-                              <span style={{fontSize:13,fontWeight:600}}>{formatDate(entry.date)}</span>
-                              <span style={{fontSize:12,color:"#BBB"}}>{SESSIONS[entry.session].subtitle}</span>
-                            </div>
-                            <div style={{display:"flex",alignItems:"center",gap:8}}>
-                              <span style={{fontFamily:F.m,fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:"#F5F2ED",color:"#AAA",letterSpacing:1}}>RPE {entry.rpe}</span>
-                              <span style={{color:"#CCC",fontSize:11,transition:"transform 0.2s",transform:expandedEntry===entry.id?"rotate(90deg)":"none"}}>▸</span>
-                            </div>
-                          </button>
-                          {expandedEntry===entry.id&&(
-                            <div style={{padding:"2px 14px 14px",borderTop:"1px solid #F0EDE8",animation:"fadeUp 0.25s ease"}}>
-                              {SESSIONS[entry.session].exercises.map(ex=>{const data=entry.exercises[ex.id];if(!data)return null;return(
-                                <div key={ex.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
-                                  <span style={{color:"#999",fontSize:13}}>{ex.name}</span>
-                                  <span style={{color:"#2A2520",fontSize:13,fontWeight:600,fontFamily:F.m}}>{data.sets.map(fmtSet).join(" · ")}</span>
+
+            {historyOpen && (
+              <div style={{animation:"fadeUp 0.3s ease",marginTop:16}}>
+                <div style={{display:"flex",gap:6,marginBottom:14}}>
+                  {["all", ...sortedSessionEntries.map(([key])=>key)].map(f=>(
+                    <button key={f} onClick={()=>setHistoryFilter(f)} style={{padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:600,fontFamily:F.m,cursor:"pointer",letterSpacing:1,transition:"all 0.15s",background:historyFilter===f?"#2A2520":"#FFF",border:`1.5px solid ${historyFilter===f?"#2A2520":"#E8E4DE"}`,color:historyFilter===f?"#F5F2ED":"#AAA"}}>{f==="all"?"All":(sessionsConfig.find(s=>s.id===f)?.name.slice(0,8)||f)}</button>
+                  ))}
+                </div>
+                <div style={{position:"relative",paddingLeft:22}}>
+                  <div style={{position:"absolute",left:6,top:7,bottom:7,width:2,background:"linear-gradient(to bottom, #C49A2A, #D4663A)",borderRadius:1,opacity:0.25}}/>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {filtered.map((entry,idx)=>{
+                      const col=entry.session==="tuesday"?"#C49A2A":"#D4663A";
+                      const entrySession = SESSIONS[entry.session]||{subtitle:entry.session,exercises:Object.keys(entry.exercises||{}).map(id=>({id,name:id}))};
+                      return(
+                        <Stagger key={entry.id} delay={idx*40}>
+                          <div style={{position:"relative"}}>
+                            <div style={{position:"absolute",left:-19,top:14}}><RouteBolt color={col}/></div>
+                            <div style={{background:"#FFF",borderRadius:10,overflow:"hidden",border:"1px solid #E8E4DE"}}>
+                              <button style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"11px 14px",cursor:"pointer",background:"transparent",border:"none",color:"#2A2520",fontFamily:F.b}}
+                                onClick={()=>setExpandedEntry(expandedEntry===entry.id?null:entry.id)}>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <span style={{fontSize:13,fontWeight:600}}>{formatDate(entry.date)}</span>
+                                  <span style={{fontSize:12,color:"#BBB"}}>{entrySession.subtitle}</span>
                                 </div>
-                              );})}
-                              {entry.notes&&<p style={{fontSize:12,color:"#AAA",fontStyle:"italic",margin:"10px 0 0"}}>"{entry.notes}"</p>}
-                              <div style={{display:"flex",gap:8,marginTop:12}}>
-                                <button onClick={()=>copySession(entry)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:copiedId===entry.id?"#2A2520":"transparent",border:`1.5px solid ${copiedId===entry.id?"#2A2520":"#D4DDD4"}`,color:copiedId===entry.id?"#F5F2ED":"#3A8A7A",cursor:"pointer",letterSpacing:1,transition:"all 0.25s"}}>{copiedId===entry.id?"COPIED ✓":"EXPORT"}</button>
-                                <button onClick={()=>deleteEntry(entry.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
-                              </div>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <span style={{fontFamily:F.m,fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:"#F5F2ED",color:"#AAA",letterSpacing:1}}>RPE {entry.rpe}</span>
+                                  <span style={{color:"#CCC",fontSize:11,transition:"transform 0.2s",transform:expandedEntry===entry.id?"rotate(90deg)":"none"}}>▸</span>
+                                </div>
+                              </button>
+                              {expandedEntry===entry.id&&(
+                                <div style={{padding:"2px 14px 14px",borderTop:"1px solid #F0EDE8",animation:"fadeUp 0.25s ease"}}>
+                                  {entrySession.exercises.map(ex=>{const data=entry.exercises[ex.id];if(!data)return null;return(
+                                    <div key={ex.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
+                                      <span style={{color:"#999",fontSize:13}}>{ex.name}</span>
+                                      <span style={{color:"#2A2520",fontSize:13,fontWeight:600,fontFamily:F.m}}>{data.sets.map(fmtSet).join(" · ")}</span>
+                                    </div>
+                                  );})}
+                                  {entry.notes&&<p style={{fontSize:12,color:"#AAA",fontStyle:"italic",margin:"10px 0 0"}}>"{entry.notes}"</p>}
+                                  <div style={{display:"flex",gap:8,marginTop:12}}>
+                                    <button onClick={()=>copySession(entry)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:copiedId===entry.id?"#2A2520":"transparent",border:`1.5px solid ${copiedId===entry.id?"#2A2520":"#D4DDD4"}`,color:copiedId===entry.id?"#F5F2ED":"#3A8A7A",cursor:"pointer",letterSpacing:1,transition:"all 0.25s"}}>{copiedId===entry.id?"COPIED ✓":"EXPORT"}</button>
+                                    <button onClick={()=>deleteEntry(entry.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    </Stagger>
-                  );
-                })}
+                          </div>
+                        </Stagger>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </>)}
 
-          {logs.length===0&&<Stagger delay={440}><div style={{textAlign:"center",padding:"44px 20px"}}><p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:2,marginTop:12}}>NO SESSIONS YET</p><p style={{fontSize:13,color:"#BBB",marginTop:6}}>Tap a session above to start</p></div></Stagger>}
+          {logs.length===0&&<Stagger delay={220}><div style={{textAlign:"center",padding:"44px 20px"}}><p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:2,marginTop:12}}>NO SESSIONS YET</p><p style={{fontSize:13,color:"#BBB",marginTop:6}}>Tap a session above to start</p></div></Stagger>}
 
-          <Stagger delay={logs.length > 0 ? 620 : 500}>
+          <Stagger delay={260}>
             <div style={{display:"flex",alignItems:"center",gap:12,margin:"28px 0 16px"}}>
               <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
               <span style={{fontFamily:F.m,fontSize:10,color:"#AAA",letterSpacing:3}}>DATA</span>
@@ -827,6 +928,65 @@ function FingerApp() {
     );
   }
 
+  if(view==="sessionForm"){
+    return(
+      <div style={S.page}><TopoBackground/>
+        <div key={animKey} style={{position:"relative",zIndex:1,animation:pageAnim}}>
+          <button onClick={()=>navigateTo("home")} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+          <h2 style={{fontFamily:F.h,fontSize:24,fontWeight:800,color:"#2A2520",margin:"0 0 20px"}}>{editingSession?"Edit Session":"Add Session"}</h2>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:10}}>Day of Week</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {DAYS_OF_WEEK.map(d=>(
+                <button key={d} onClick={()=>setSessionDay(d)} style={{
+                  padding:"8px 14px",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",letterSpacing:1,
+                  background:sessionDay===d?"#2A2520":"#F5F2ED",border:`1.5px solid ${sessionDay===d?"#2A2520":"#E8E4DE"}`,
+                  color:sessionDay===d?"#F5F2ED":"#999",
+                }}>{DAY_LABELS[d]}</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Hangboard Protocol</div>
+            <input value={sessionProtocol} onChange={e=>setSessionProtocol(e.target.value)} placeholder="e.g. Repeaters, Max Hangs, Ladders"
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Session Name</div>
+            <input value={sessionName} onChange={e=>setSessionName(e.target.value)} placeholder="e.g. Hangboard Repeaters"
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          <button onClick={saveSessionConfig} disabled={!sessionName.trim()} style={{
+            width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+            cursor:sessionName.trim()?"pointer":"default",background:sessionName.trim()?"#2A2520":"#E8E4DE",border:"none",
+            color:sessionName.trim()?"#F5F2ED":"#BBB",letterSpacing:3,marginBottom:12,
+          }}>{editingSession?"SAVE CHANGES":"ADD SESSION"}</button>
+
+          {editingSession && (
+            !deleteSessionConfirm ? (
+              <button onClick={()=>setDeleteSessionConfirm(true)} style={{
+                width:"100%",padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+                cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#C45A5A",letterSpacing:1,
+              }}>DELETE SESSION</button>
+            ) : (
+              <div style={{background:"rgba(196,90,90,0.06)",border:"1.5px solid rgba(196,90,90,0.2)",borderRadius:10,padding:14}}>
+                <p style={{fontSize:12,color:"#2A2520",margin:"0 0 10px"}}>This removes "{editingSession.name}" from your session list. Previously logged sessions stay in your history. Sure?</p>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={deleteSessionConfig} style={{flex:1,padding:"8px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#C45A5A",border:"none",color:"#FFF",letterSpacing:1}}>YES, DELETE</button>
+                  <button onClick={()=>setDeleteSessionConfirm(false)} style={{flex:1,padding:"8px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#666",letterSpacing:1}}>CANCEL</button>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if(view==="log"){
     const session=SESSIONS[selectedSession]; let curGroup=null;
     return(
@@ -844,14 +1004,9 @@ function FingerApp() {
             const showGroup=ex.group!==curGroup;curGroup=ex.group;
             return(
               <Stagger key={ex.id} delay={120+eIdx*70}><div>
-                {showGroup&&<TapeMark color={GROUP_COLORS[ex.group]} label={GROUP_LABELS[ex.group]}/>}
                 <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:10,boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                    <div>
-                      <div style={{fontFamily:F.h,fontSize:15,fontWeight:700,color:"#2A2520"}}>{ex.name}</div>
-                      <div style={{fontFamily:F.m,fontSize:11,color:"#CCC",marginTop:2,letterSpacing:0.5}}>{ex.target}</div>
-                    </div>
-                    {last&&<div style={{fontFamily:F.m,fontSize:10,color:"#D4663A",background:"rgba(212,102,58,0.06)",padding:"3px 8px",borderRadius:5,fontWeight:600,whiteSpace:"nowrap"}}>PREV: {last.sets.map(fmtShort).join(", ")}</div>}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontFamily:F.h,fontSize:15,fontWeight:700,color:"#2A2520"}}>{ex.name}</div>
                   </div>
                   {ex.type==="hangboard"?(
                     <>
