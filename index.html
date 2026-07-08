@@ -1395,6 +1395,7 @@ function ClimbApp() {
   const [loading, setLoading] = useState(true);
   const [expandedSector, setExpandedSector] = useState(null);
   const [expandedProblem, setExpandedProblem] = useState(null);
+  const [expandedColorKey, setExpandedColorKey] = useState(null);
   const [editingProblem, setEditingProblem] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [resetConfirmSector, setResetConfirmSector] = useState(null);
@@ -1674,6 +1675,7 @@ function ClimbApp() {
   const projectCount = allCurrentProblems.filter(p=>p.status==="project").length;
   const total = allCurrentProblems.length;
   const flashRate = total>0 ? Math.round((flashCount/total)*100) : 0;
+  const sentRate = total>0 ? Math.round(((flashCount+sentCount)/total)*100) : 0;
 
   const formatDate=(iso)=>new Date(iso).toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"});
 
@@ -1757,7 +1759,7 @@ function ClimbApp() {
           {total > 0 && (
             <Stagger delay={100}>
               <div style={{background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:12,padding:16,marginBottom:16,marginTop:8}}>
-                <div style={{display:"flex",justifyContent:"space-around"}}>
+                <div style={{display:"flex",justifyContent:"space-around",paddingBottom:14,marginBottom:14,borderBottom:"1px solid #F0EDE8"}}>
                   <div style={{textAlign:"center"}}>
                     <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#C49A2A"}}>{flashCount}</div>
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH</div>
@@ -1770,9 +1772,15 @@ function ClimbApp() {
                     <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#9B9690"}}>{projectCount}</div>
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>PROJECT</div>
                   </div>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-around"}}>
                   <div style={{textAlign:"center"}}>
                     <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520"}}>{flashRate}%</div>
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>FLASH RATE</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520"}}>{sentRate}%</div>
+                    <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>SENT RATE</div>
                   </div>
                 </div>
               </div>
@@ -1821,33 +1829,95 @@ function ClimbApp() {
                         {log.currentProblems.length === 0 && (
                           <p style={{fontSize:12,color:"#BBB",margin:"10px 0"}}>No active problems in this sector yet.</p>
                         )}
-                        {log.currentProblems.map(p => {
-                          const colorMeta = HOLD_COLORS.find(c=>c.name===p.color) || HOLD_COLORS[0];
-                          const statusMeta = STATUS_META[p.status];
-                          return (
-                            <div key={p.id} style={{marginTop:8,borderTop:"1px solid #F5F2ED",paddingTop:8}}>
-                              <button onClick={()=>setExpandedProblem(expandedProblem===p.id?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",padding:0}}>
-                                <span style={{width:14,height:14,borderRadius:"50%",background:colorMeta.hex,border:"1.5px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
-                                <div style={{flex:1}}>
-                                  <div style={{fontSize:13,fontWeight:600,color:"#2A2520"}}>{p.grade || colorMeta.name}</div>
-                                  <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{formatDate(p.date)}</div>
-                                </div>
-                                <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:5,background:`${statusMeta.color}18`,color:statusMeta.color,letterSpacing:1}}>
-                                  {statusMeta.label}{p.status!=="flash"&&p.attempts?` ×${p.attempts}`:""}
-                                </span>
-                              </button>
-                              {expandedProblem===p.id && (
-                                <div style={{marginTop:8,paddingLeft:24}}>
-                                  {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
-                                  <div style={{display:"flex",gap:8}}>
-                                    <button onClick={()=>{setEditingProblem(p);setPrefillSector(p.sector);setView("add");}} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>EDIT</button>
-                                    <button onClick={()=>deleteProblem(name, p.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
+                        {(() => {
+                          const colorGroups = {};
+                          log.currentProblems.forEach(p => { (colorGroups[p.color] = colorGroups[p.color] || []).push(p); });
+                          const colorNames = Object.keys(colorGroups).sort((a,b) => {
+                            const ia = HOLD_COLORS.findIndex(c=>c.name===a), ib = HOLD_COLORS.findIndex(c=>c.name===b);
+                            return (ia<0?999:ia) - (ib<0?999:ib);
+                          });
+                          return colorNames.map(colorName => {
+                            const problems = colorGroups[colorName];
+                            const colorMeta = HOLD_COLORS.find(c=>c.name===colorName) || HOLD_COLORS[0];
+                            const cf = problems.filter(p=>p.status==="flash").length;
+                            const cs = problems.filter(p=>p.status==="sent").length;
+                            const cp = problems.filter(p=>p.status==="project").length;
+                            const cTotal = problems.length;
+                            const cFlashRate = cTotal>0 ? Math.round((cf/cTotal)*100) : 0;
+                            const cSentRate = cTotal>0 ? Math.round(((cf+cs)/cTotal)*100) : 0;
+                            const colorKey = name+"::"+colorName;
+                            const isColorExpanded = expandedColorKey===colorKey;
+                            return (
+                              <div key={colorName} style={{marginTop:8,borderTop:"1px solid #F5F2ED",paddingTop:8}}>
+                                <button onClick={()=>setExpandedColorKey(isColorExpanded?null:colorKey)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",padding:0}}>
+                                  <span style={{width:14,height:14,borderRadius:"50%",background:colorMeta.hex,border:"1.5px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
+                                  <div style={{flex:1}}>
+                                    <div style={{fontSize:13,fontWeight:700,color:"#2A2520"}}>{colorName}</div>
+                                    <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{cTotal} problem{cTotal!==1?"s":""}</div>
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                  <span style={{color:"#CCC",fontSize:12,transition:"transform 0.2s",transform:isColorExpanded?"rotate(90deg)":"none"}}>▸</span>
+                                </button>
+
+                                {isColorExpanded && (
+                                  <div style={{marginTop:10,paddingLeft:24}}>
+                                    <div style={{padding:"10px 0",marginBottom:8,background:"#F5F2ED",borderRadius:8}}>
+                                      <div style={{display:"flex",justifyContent:"space-around",paddingBottom:8,marginBottom:8,borderBottom:"1px solid #E8E4DE"}}>
+                                        <div style={{textAlign:"center"}}>
+                                          <div style={{fontFamily:F.h,fontSize:16,fontWeight:800,color:"#C49A2A"}}>{cf}</div>
+                                          <div style={{fontFamily:F.m,fontSize:7,color:"#BBB",letterSpacing:1,marginTop:1}}>FLASH</div>
+                                        </div>
+                                        <div style={{textAlign:"center"}}>
+                                          <div style={{fontFamily:F.h,fontSize:16,fontWeight:800,color:"#3A8A7A"}}>{cs}</div>
+                                          <div style={{fontFamily:F.m,fontSize:7,color:"#BBB",letterSpacing:1,marginTop:1}}>SENT</div>
+                                        </div>
+                                        <div style={{textAlign:"center"}}>
+                                          <div style={{fontFamily:F.h,fontSize:16,fontWeight:800,color:"#9B9690"}}>{cp}</div>
+                                          <div style={{fontFamily:F.m,fontSize:7,color:"#BBB",letterSpacing:1,marginTop:1}}>PROJECT</div>
+                                        </div>
+                                      </div>
+                                      <div style={{display:"flex",justifyContent:"space-around"}}>
+                                        <div style={{textAlign:"center"}}>
+                                          <div style={{fontFamily:F.h,fontSize:16,fontWeight:800,color:"#2A2520"}}>{cFlashRate}%</div>
+                                          <div style={{fontFamily:F.m,fontSize:7,color:"#BBB",letterSpacing:1,marginTop:1}}>FLASH RATE</div>
+                                        </div>
+                                        <div style={{textAlign:"center"}}>
+                                          <div style={{fontFamily:F.h,fontSize:16,fontWeight:800,color:"#2A2520"}}>{cSentRate}%</div>
+                                          <div style={{fontFamily:F.m,fontSize:7,color:"#BBB",letterSpacing:1,marginTop:1}}>SENT RATE</div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {problems.map(p => {
+                                      const statusMeta = STATUS_META[p.status];
+                                      return (
+                                        <div key={p.id} style={{marginTop:8,borderTop:"1px solid #F5F2ED",paddingTop:8}}>
+                                          <button onClick={()=>setExpandedProblem(expandedProblem===p.id?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",padding:0}}>
+                                            <div style={{flex:1}}>
+                                              <div style={{fontSize:13,fontWeight:600,color:"#2A2520"}}>{p.grade || colorMeta.name}</div>
+                                              <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{formatDate(p.date)}</div>
+                                            </div>
+                                            <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:5,background:`${statusMeta.color}18`,color:statusMeta.color,letterSpacing:1}}>
+                                              {statusMeta.label}{p.status!=="flash"&&p.attempts?` ×${p.attempts}`:""}
+                                            </span>
+                                          </button>
+                                          {expandedProblem===p.id && (
+                                            <div style={{marginTop:8,paddingLeft:0}}>
+                                              {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
+                                              <div style={{display:"flex",gap:8}}>
+                                                <button onClick={()=>{setEditingProblem(p);setPrefillSector(p.sector);setView("add");}} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>EDIT</button>
+                                                <button onClick={()=>deleteProblem(name, p.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
 
                         <div style={{display:"flex",gap:8,marginTop:14}}>
                           <button onClick={()=>{setEditingProblem(null);setPrefillSector(name);setView("add");}} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:1}}>+ LOG HERE</button>
