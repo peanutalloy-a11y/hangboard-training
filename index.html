@@ -1870,6 +1870,11 @@ function ClimbApp() {
                                     <div style={{fontSize:13,fontWeight:700,color:"#2A2520"}}>{colorName}</div>
                                     <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{cTotal} problem{cTotal!==1?"s":""}</div>
                                   </div>
+                                  {cp > 0 && (
+                                    <span style={{display:"flex",alignItems:"center",gap:4,fontFamily:F.m,fontSize:10,fontWeight:700,color:"#9B9690",flexShrink:0}}>
+                                      <span style={{width:6,height:6,borderRadius:"50%",background:"#9B9690"}}/>{cp} project{cp!==1?"s":""}
+                                    </span>
+                                  )}
                                   <span style={{color:"#CCC",fontSize:12,transition:"transform 0.2s",transform:isColorExpanded?"rotate(90deg)":"none"}}>▸</span>
                                 </button>
 
