@@ -359,14 +359,23 @@ const PROTOCOLS = {
   maxhangs: { label: "Max Hangs", defaultName: "Hangboard Max Hangs" },
 };
 const DEFAULT_SESSIONS_CONFIG = [
-  { id: "tuesday", day: "tuesday", name: "Hangboard Repeaters", exerciseId: "hang_rep", protocol: "Repeaters" },
-  { id: "thursday", day: "thursday", name: "Hangboard Max Hangs", exerciseId: "hang_max", protocol: "Max Hangs" },
+  { id: "tuesday", day: "tuesday", name: "Hangboard Repeaters", exerciseId: "hang_rep", protocol: "Repeaters", sets: 3, reps: 6, hangSec: 7, repRestSec: 3, setRestSec: 180 },
+  { id: "thursday", day: "thursday", name: "Hangboard Max Hangs", exerciseId: "hang_max", protocol: "Max Hangs", sets: 3, reps: 1, hangSec: 10, repRestSec: 0, setRestSec: 180 },
 ];
 // Older saved configs may have the internal preset keys ("repeaters"/"maxhangs") stored
 // instead of a display string — normalize those on load so the exercise card shows properly.
+// Also backfill protocol timing defaults for sessions saved before the timer feature existed.
 const LEGACY_PROTOCOL_LABELS = { repeaters: "Repeaters", maxhangs: "Max Hangs" };
 function normalizeSessionsConfig(configs) {
-  return configs.map(s => ({ ...s, protocol: LEGACY_PROTOCOL_LABELS[s.protocol] || s.protocol || s.name }));
+  return configs.map(s => ({
+    ...s,
+    protocol: LEGACY_PROTOCOL_LABELS[s.protocol] || s.protocol || s.name,
+    sets: s.sets ?? 3,
+    reps: s.reps ?? 6,
+    hangSec: s.hangSec ?? 7,
+    repRestSec: s.repRestSec ?? 3,
+    setRestSec: s.setRestSec ?? 180,
+  }));
 }
 function buildSessionsMap(configs) {
   const map = {};
@@ -531,6 +540,52 @@ const HoldButton = ({ onComplete, saving }) => {
   );
 };
 
+// Kept as a stable, top-level component (not defined inline inside the timer view) so its
+// identity never changes across re-renders — the countdown ticks every 250ms, and if this were
+// redefined inline on every render, React would remount the inputs and kick the keyboard shut
+// the instant someone tapped in to type a value.
+const TimerEntryCard = ({ pendingSet, pendingSetIndex, updateTimerRep }) => {
+  if (!pendingSet) return null;
+  return (
+    <div style={{background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:14,padding:16,marginBottom:20}}>
+      <div style={{fontFamily:F.m,fontSize:10,fontWeight:700,color:"#999",letterSpacing:1,marginBottom:12}}>
+        LOG SET {pendingSetIndex+1} · {pendingSet.reps.length} REPS
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {pendingSet.reps.map((r,ri)=>(
+          <div key={ri} style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontFamily:F.m,fontSize:11,fontWeight:700,color:"#DDD",minWidth:14,textAlign:"center"}}>{ri+1}</span>
+            <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1.5px solid #E8E4DE",flexShrink:0}}>
+              <button onClick={()=>updateTimerRep(pendingSetIndex,ri,"bw",true)} style={{padding:"7px 9px",fontSize:9,fontWeight:700,fontFamily:F.m,cursor:"pointer",border:"none",letterSpacing:0.5,background:r.bw?"#2A2520":"#F5F2ED",color:r.bw?"#F5F2ED":"#AAA"}}>BW</button>
+              <button onClick={()=>updateTimerRep(pendingSetIndex,ri,"bw",false)} style={{padding:"7px 8px",fontSize:9,fontWeight:700,fontFamily:F.m,cursor:"pointer",border:"none",borderLeft:"1px solid #E8E4DE",letterSpacing:0.5,background:!r.bw?"#2A2520":"#F5F2ED",color:!r.bw?"#F5F2ED":"#AAA"}}>+KG</button>
+            </div>
+            {r.bw ? (
+              <div style={{position:"relative",flex:1}}>
+                <input type="number" value={r.bwPercent} onChange={e=>updateTimerRep(pendingSetIndex,ri,"bwPercent",e.target.value)}
+                  style={{width:"100%",padding:"7px 24px 7px 8px",borderRadius:6,fontSize:13,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+                <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontFamily:F.m,fontSize:9,color:"#CCC"}}>%</span>
+              </div>
+            ) : (
+              <div style={{position:"relative",flex:1}}>
+                <input type="number" value={r.addedWeight} onChange={e=>updateTimerRep(pendingSetIndex,ri,"addedWeight",e.target.value)}
+                  style={{width:"100%",padding:"7px 24px 7px 8px",borderRadius:6,fontSize:13,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+                <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontFamily:F.m,fontSize:9,color:"#CCC"}}>kg</span>
+              </div>
+            )}
+            <span style={{fontSize:12,color:"#DDD",fontWeight:600}}>×</span>
+            <div style={{position:"relative",flex:1}}>
+              <input type="number" value={r.duration} onChange={e=>updateTimerRep(pendingSetIndex,ri,"duration",e.target.value)}
+                style={{width:"100%",padding:"7px 26px 7px 8px",borderRadius:6,fontSize:13,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontFamily:F.m,fontSize:9,color:"#CCC"}}>sec</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{fontFamily:F.b,fontSize:10,color:"#BBB",marginTop:10,marginBottom:0}}>How that set actually went — adjust any reps where you let go early or used different load.</p>
+    </div>
+  );
+};
+
 function FingerApp() {
   const [view, setView] = useState("home");
   const [prevView, setPrevView] = useState(null);
@@ -557,7 +612,23 @@ function FingerApp() {
   const [sessionDay, setSessionDay] = useState("monday");
   const [sessionName, setSessionName] = useState("");
   const [sessionProtocol, setSessionProtocol] = useState("repeaters");
+  const [sessionSets, setSessionSets] = useState(3);
+  const [sessionReps, setSessionReps] = useState(6);
+  const [sessionHangSec, setSessionHangSec] = useState(7);
+  const [sessionRepRestSec, setSessionRepRestSec] = useState(3);
+  const [sessionSetRestSec, setSessionSetRestSec] = useState(180);
   const [deleteSessionConfirm, setDeleteSessionConfirm] = useState(false);
+
+  // Guided timer state
+  const [timerSessionKey, setTimerSessionKey] = useState(null);
+  const [timerSeq, setTimerSeq] = useState([]);
+  const [timerIndex, setTimerIndex] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerRemaining, setTimerRemaining] = useState(0);
+  const [timerStarted, setTimerStarted] = useState(false);
+  const [timerLog, setTimerLog] = useState([]); // actual recorded data: [{reps:[{bw,bwPercent,addedWeight,duration}]}]
+  const timerEndRef = useRef(null);
+  const timerIntervalRef = useRef(null);
 
   const SESSIONS = buildSessionsMap(sessionsConfig);
   const sortedSessionEntries = Object.entries(SESSIONS).sort((a,b) => {
@@ -588,6 +659,7 @@ function FingerApp() {
     setSessionDay("monday");
     setSessionProtocol("Repeaters");
     setSessionName("Hangboard Repeaters");
+    setSessionSets(3); setSessionReps(6); setSessionHangSec(7); setSessionRepRestSec(3); setSessionSetRestSec(180);
     setDeleteSessionConfirm(false);
     navigateTo("sessionForm");
   };
@@ -599,18 +671,30 @@ function FingerApp() {
     setSessionDay(cfg.day);
     setSessionProtocol(cfg.protocol||"");
     setSessionName(cfg.name);
+    setSessionSets(cfg.sets ?? 3);
+    setSessionReps(cfg.reps ?? 6);
+    setSessionHangSec(cfg.hangSec ?? 7);
+    setSessionRepRestSec(cfg.repRestSec ?? 3);
+    setSessionSetRestSec(cfg.setRestSec ?? 180);
     setDeleteSessionConfirm(false);
     navigateTo("sessionForm");
   };
 
   const saveSessionConfig = () => {
     if(!sessionName.trim()) return;
+    const protocolFields = {
+      sets: Math.max(1, Number(sessionSets)||1),
+      reps: Math.max(1, Number(sessionReps)||1),
+      hangSec: Math.max(1, Number(sessionHangSec)||1),
+      repRestSec: Math.max(0, Number(sessionRepRestSec)||0),
+      setRestSec: Math.max(0, Number(sessionSetRestSec)||0),
+    };
     if(editingSession){
-      const next = sessionsConfig.map(s => s.id===editingSession.id ? {...s, day:sessionDay, name:sessionName.trim(), protocol:sessionProtocol} : s);
+      const next = sessionsConfig.map(s => s.id===editingSession.id ? {...s, day:sessionDay, name:sessionName.trim(), protocol:sessionProtocol, ...protocolFields} : s);
       persistSessionsConfig(next);
     } else {
       const newId = "session_"+Date.now();
-      const newSession = { id:newId, day:sessionDay, name:sessionName.trim(), exerciseId:"ex_"+Date.now(), protocol:sessionProtocol };
+      const newSession = { id:newId, day:sessionDay, name:sessionName.trim(), exerciseId:"ex_"+Date.now(), protocol:sessionProtocol, ...protocolFields };
       persistSessionsConfig([...sessionsConfig, newSession]);
     }
     navigateTo("home");
@@ -627,10 +711,21 @@ function FingerApp() {
   const startSession = (key) => {
     navigateTo("log",()=>{
       setSelectedSession(key);
+      const cfg = sessionsConfig.find(s=>s.id===key);
       const init={};
       SESSIONS[key].exercises.forEach(ex=>{
         if(ex.type==="weighted")init[ex.id]={sets:[{weight:"",reps:"",_id:Date.now()}]};
-        else if(ex.type==="hangboard")init[ex.id]={sets:[{_id:Date.now(),reps:[{bw:true,bwPercent:"",addedWeight:"",duration:"",_rid:Date.now()}]}]};
+        else if(ex.type==="hangboard"){
+          const numSets = cfg?.sets ?? 1;
+          const numReps = cfg?.reps ?? 1;
+          const defaultDuration = cfg?.hangSec ? String(cfg.hangSec) : "";
+          init[ex.id]={sets: Array.from({length: numSets}, (_, si) => ({
+            _id: Date.now()+si,
+            reps: Array.from({length: numReps}, (_, ri) => ({
+              bw:true, bwPercent:"100", addedWeight:"", duration:defaultDuration, _rid: Date.now()+si*100+ri,
+            })),
+          }))};
+        }
         else if(ex.type==="timed")init[ex.id]={sets:[{duration:"",_id:Date.now()}]};
         else init[ex.id]={sets:[{reps:"",_id:Date.now()}]};
       });
@@ -638,7 +733,104 @@ function FingerApp() {
     });
   };
 
+  // ─── Guided Timer ───────────────────────────────────
+  const buildTimerSequence = (cfg) => {
+    const seq = [];
+    const sets = cfg?.sets ?? 1, reps = cfg?.reps ?? 1, hangSec = cfg?.hangSec ?? 7, repRestSec = cfg?.repRestSec ?? 0, setRestSec = cfg?.setRestSec ?? 0;
+    for (let s = 0; s < sets; s++) {
+      for (let r = 0; r < reps; r++) {
+        seq.push({ type:"hang", set:s+1, rep:r+1, totalSets:sets, totalReps:reps, duration:hangSec });
+        if (r < reps-1 && repRestSec > 0) seq.push({ type:"represt", set:s+1, rep:r+1, totalSets:sets, totalReps:reps, duration:repRestSec });
+      }
+      if (s < sets-1 && setRestSec > 0) seq.push({ type:"setrest", set:s+1, rep:reps, totalSets:sets, totalReps:reps, duration:setRestSec });
+    }
+    return seq;
+  };
+
+  const playBeep = (freq, durMs) => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.frequency.value = freq; osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.16, ctx.currentTime);
+      osc.start(); osc.stop(ctx.currentTime + durMs/1000);
+      setTimeout(()=>{try{ctx.close();}catch(e){}}, durMs+80);
+    } catch(e) {}
+  };
+  const cueForPhase = (type) => {
+    if (type === "hang") playBeep(880, 180);
+    else if (type === "represt" || type === "setrest") playBeep(440, 160);
+    else if (type === "done") { playBeep(660,120); setTimeout(()=>playBeep(880,120),160); setTimeout(()=>playBeep(1100,220),320); }
+  };
+
+  const openTimer = (key) => {
+    const cfg = sessionsConfig.find(s=>s.id===key);
+    const seq = buildTimerSequence(cfg);
+    setTimerSessionKey(key); setTimerSeq(seq); setTimerIndex(0);
+    setTimerRemaining(seq[0]?.duration || 0); setTimerRunning(false); setTimerStarted(false);
+    const sets = cfg?.sets ?? 1, reps = cfg?.reps ?? 1, hangSec = cfg?.hangSec ?? 7;
+    setTimerLog(Array.from({length:sets}, () => ({
+      reps: Array.from({length:reps}, () => ({ bw:true, bwPercent:"100", addedWeight:"", duration:String(hangSec) })),
+    })));
+    navigateTo("timer");
+  };
+
+  const updateTimerRep = (setIndex, repIndex, field, val) => {
+    setTimerLog(prev => {
+      const next = prev.map(s => ({...s, reps:[...s.reps]}));
+      if (!next[setIndex]) return prev;
+      next[setIndex].reps[repIndex] = {...next[setIndex].reps[repIndex], [field]: val};
+      return next;
+    });
+  };
+
+  const logFromTimer = () => {
+    const cfg = sessionsConfig.find(s=>s.id===timerSessionKey);
+    const exId = SESSIONS[timerSessionKey]?.exercises[0]?.id;
+    if (!exId) return;
+    const built = { sets: timerLog.map((s,si) => ({ _id: Date.now()+si, reps: s.reps.map((r,ri) => ({...r, _rid: Date.now()+si*100+ri})) })) };
+    setSelectedSession(timerSessionKey);
+    setCurrentLog({ [exId]: built });
+    setNotes(""); setRpe(7); setNewSetIds(new Set());
+    navigateTo("log");
+  };
+
+  const timerStart = () => {
+    if (!timerStarted) { cueForPhase(timerSeq[0]?.type); setTimerStarted(true); }
+    timerEndRef.current = Date.now() + timerRemaining*1000;
+    setTimerRunning(true);
+  };
+  const timerPause = () => {
+    if (timerEndRef.current) setTimerRemaining(Math.max(0, Math.ceil((timerEndRef.current-Date.now())/1000)));
+    setTimerRunning(false);
+  };
+  const timerAdvance = () => {
+    const nextIndex = timerIndex+1;
+    if (nextIndex >= timerSeq.length) {
+      setTimerIndex(nextIndex); setTimerRunning(false); cueForPhase("done");
+      return;
+    }
+    cueForPhase(timerSeq[nextIndex].type);
+    setTimerIndex(nextIndex);
+    setTimerRemaining(timerSeq[nextIndex].duration);
+    timerEndRef.current = Date.now() + timerSeq[nextIndex].duration*1000;
+  };
+  const timerSkip = () => { timerAdvance(); };
+  const timerExit = () => { setTimerRunning(false); navigateTo("home"); };
+
+  useEffect(() => {
+    if (!timerRunning) return;
+    timerIntervalRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((timerEndRef.current-Date.now())/1000));
+      setTimerRemaining(remaining);
+      if (remaining <= 0) timerAdvance();
+    }, 250);
+    return () => clearInterval(timerIntervalRef.current);
+  }, [timerRunning, timerIndex, timerSeq]);
+
   const updateSet=(exId,si,field,val)=>{setCurrentLog(p=>{const u={...p};const s=[...u[exId].sets];s[si]={...s[si],[field]:val};u[exId]={...u[exId],sets:s};return u;});};
+
   const addSet=(exId)=>{const nid=Date.now();setNewSetIds(p=>new Set([...p,nid]));setCurrentLog(p=>{const u={...p};const l=u[exId].sets[u[exId].sets.length-1];u[exId]={...u[exId],sets:[...u[exId].sets,{...l,_id:nid}]};return u;});setTimeout(()=>setNewSetIds(p=>{const n=new Set(p);n.delete(nid);return n;}),500);};
   const removeSet=(exId,si)=>{setCurrentLog(p=>{const u={...p};if(u[exId].sets.length<=1)return p;u[exId]={...u[exId],sets:u[exId].sets.filter((_,i)=>i!==si)};return u;});};
 
@@ -756,7 +948,7 @@ function FingerApp() {
     if(s.duration!==undefined)return`${s.duration}s`;return s.reps;
   };
 
-  const slideDir=(prevView==="home"&&(view==="log"||view==="saved"||view==="sessionForm"))||(prevView==="log"&&view==="saved")?"Right":"Left";
+  const slideDir=(prevView==="home"&&(view==="log"||view==="saved"||view==="sessionForm"||view==="timer"))||(prevView==="log"&&view==="saved")||(prevView==="timer"&&view==="log")?"Right":"Left";
   const pageAnim=transitioning?`slideOut${slideDir==="Right"?"Left":"Right"} 0.3s ease both`:`slideIn${slideDir} 0.4s ease both`;
 
   if(loading) return (
@@ -812,6 +1004,7 @@ function FingerApp() {
                   </div>
                   <svg width="28" height="28" viewBox="0 0 24 24"><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="#D4663A" opacity="0.12"/><path d="M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z" fill="none" stroke="#D4663A" strokeWidth="1.5" opacity="0.35"/></svg>
                 </div>
+                <button onClick={(e)=>{e.stopPropagation();openTimer(key);}} style={{width:40,height:40,flexShrink:0,borderRadius:10,background:"#2A2520",border:"1.5px solid #2A2520",cursor:"pointer",fontSize:14,color:"#F5F2ED",display:"flex",alignItems:"center",justifyContent:"center"}}>▶</button>
                 <button onClick={()=>openEditSession(key)} style={{width:40,height:40,flexShrink:0,borderRadius:10,background:"#FFF",border:"1.5px solid #E8E4DE",cursor:"pointer",fontSize:15,color:"#AAA",display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
               </div>
             </Stagger>
@@ -960,6 +1153,38 @@ function FingerApp() {
               style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
           </div>
 
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:4}}>Timer Protocol</div>
+            <p style={{fontFamily:F.b,fontSize:11,color:"#BBB",margin:"0 0 12px"}}>This builds your log's structure automatically and drives the guided timer.</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>SETS</div>
+                <input type="number" min="1" value={sessionSets} onChange={e=>setSessionSets(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>REPS PER SET</div>
+                <input type="number" min="1" value={sessionReps} onChange={e=>setSessionReps(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>HANG (SEC)</div>
+                <input type="number" min="1" value={sessionHangSec} onChange={e=>setSessionHangSec(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>REST BETWEEN REPS (SEC)</div>
+                <input type="number" min="0" value={sessionRepRestSec} onChange={e=>setSessionRepRestSec(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div style={{gridColumn:"1 / -1"}}>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>REST BETWEEN SETS (SEC)</div>
+                <input type="number" min="0" value={sessionSetRestSec} onChange={e=>setSessionSetRestSec(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+          </div>
+
           <button onClick={saveSessionConfig} disabled={!sessionName.trim()} style={{
             width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
             cursor:sessionName.trim()?"pointer":"default",background:sessionName.trim()?"#2A2520":"#E8E4DE",border:"none",
@@ -981,6 +1206,74 @@ function FingerApp() {
                 </div>
               </div>
             )
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if(view==="timer"){
+    const cfg = sessionsConfig.find(s=>s.id===timerSessionKey);
+    const isDone = timerIndex >= timerSeq.length;
+    const step = !isDone ? timerSeq[timerIndex] : null;
+    const PHASE_META = {
+      hang: { label:"HANG", color:"#D4663A", bg:"rgba(212,102,58,0.08)" },
+      represt: { label:"REST", color:"#3A8A7A", bg:"rgba(58,138,122,0.08)" },
+      setrest: { label:"REST BETWEEN SETS", color:"#C49A2A", bg:"rgba(196,154,42,0.08)" },
+    };
+    const meta = step ? PHASE_META[step.type] : null;
+    const totalSteps = timerSeq.length;
+
+    // Only show the entry card during the longer rest BETWEEN sets (or once the whole workout finishes) —
+    // a few seconds between individual reps isn't enough time to actually log anything.
+    let pendingSetIndex = null;
+    if (isDone && cfg) pendingSetIndex = cfg.sets-1;
+    else if (step?.type === "setrest") pendingSetIndex = step.set-1;
+    const pendingSet = pendingSetIndex !== null ? timerLog[pendingSetIndex] : null;
+
+    return(
+      <div style={S.page}><TopoBackground/>
+        <div key={animKey} style={{position:"relative",zIndex:1,animation:pageAnim}}>
+          <button onClick={timerExit} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Exit</button>
+          <h2 style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520",margin:"0 0 24px"}}>{cfg?.name || "Timer"}</h2>
+
+          {!isDone ? (
+            <>
+              <div style={{background:meta.bg,border:`2px solid ${meta.color}`,borderRadius:20,padding:"36px 20px",textAlign:"center",marginBottom:20}}>
+                <div style={{fontFamily:F.m,fontSize:13,fontWeight:800,letterSpacing:3,color:meta.color,marginBottom:14}}>{meta.label}</div>
+                <div style={{fontFamily:F.h,fontSize:64,fontWeight:800,color:"#2A2520",lineHeight:1}}>{timerRemaining}</div>
+                <div style={{fontFamily:F.m,fontSize:11,color:"#999",marginTop:14,letterSpacing:1}}>
+                  SET {step.set} OF {step.totalSets}{step.type!=="setrest" ? ` · REP ${step.rep} OF ${step.totalReps}` : ""}
+                </div>
+              </div>
+
+              {step.type === "setrest" && <TimerEntryCard pendingSet={pendingSet} pendingSetIndex={pendingSetIndex} updateTimerRep={updateTimerRep}/>}
+
+              <div style={{display:"flex",gap:6,marginBottom:20}}>
+                {timerSeq.map((s,i)=>(
+                  <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<timerIndex?"#2A2520":i===timerIndex?PHASE_META[s.type].color:"#E8E4DE"}}/>
+                ))}
+              </div>
+
+              <div style={{display:"flex",gap:10}}>
+                {!timerRunning ? (
+                  <button onClick={timerStart} style={{flex:1,padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2}}>{!timerStarted?"START":"RESUME"}</button>
+                ) : (
+                  <button onClick={timerPause} style={{flex:1,padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#2A2520",letterSpacing:2}}>PAUSE</button>
+                )}
+                <button onClick={timerSkip} style={{padding:"16px 20px",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#999",letterSpacing:1}}>SKIP ›</button>
+              </div>
+              <p style={{fontFamily:F.b,fontSize:11,color:"#BBB",textAlign:"center",marginTop:14}}>Step {timerIndex+1} of {totalSteps}</p>
+            </>
+          ) : (
+            <div style={{textAlign:"center",paddingTop:20}}>
+              <div style={{fontSize:48,marginBottom:10}}>🎉</div>
+              <h3 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",marginBottom:6}}>Workout Complete</h3>
+              <p style={{fontFamily:F.b,fontSize:13,color:"#999",marginBottom:20}}>Nice work. Log your last rep, then save.</p>
+              <div style={{textAlign:"left"}}><TimerEntryCard pendingSet={pendingSet} pendingSetIndex={pendingSetIndex} updateTimerRep={updateTimerRep}/></div>
+              <button onClick={logFromTimer} style={{width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginBottom:10}}>LOG THIS SESSION</button>
+              <button onClick={()=>navigateTo("home")} style={{width:"100%",padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#999",letterSpacing:1}}>BACK TO HOME</button>
+            </div>
           )}
         </div>
       </div>
@@ -1790,12 +2083,14 @@ function ClimbApp() {
             </Stagger>
           )}
 
-          <Stagger delay={140}>
-            <button onClick={()=>{setEditingProblem(null);setPrefillSector("");setView("add");}} style={{
-              width:"100%",padding:"14px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
-              cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginBottom:20,
-            }}>+ LOG PROBLEM</button>
-          </Stagger>
+          {allSectorNames.length === 0 && (
+            <Stagger delay={140}>
+              <button onClick={()=>{setEditingProblem(null);setPrefillSector("");setView("add");}} style={{
+                width:"100%",padding:"14px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+                cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2,marginBottom:20,
+              }}>+ LOG PROBLEM</button>
+            </Stagger>
+          )}
 
           <Divider text="SECTORS"/>
 
@@ -1819,7 +2114,7 @@ function ClimbApp() {
               return (
                 <Stagger key={name} delay={180+idx*40}>
                   <div style={{background:"#FFF",borderRadius:10,border:"1px solid #E8E4DE",overflow:"hidden"}}>
-                    <button onClick={()=>{setExpandedSector(isExpanded?null:name);setResetConfirmSector(null);}} style={{
+                    <button onClick={()=>{setExpandedSector(isExpanded?null:name);setResetConfirmSector(null);setExpandedColorKey(null);setExpandedProblem(null);}} style={{
                       display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",
                       background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
                     }}>
@@ -1840,7 +2135,7 @@ function ClimbApp() {
                     </button>
 
                     {isExpanded && (
-                      <div style={{padding:"0 14px 14px",borderTop:"1px solid #F0EDE8"}}>
+                      <div style={{padding:"0 14px 14px",borderTop:"1px solid #F0EDE8",animation:"fadeUp 0.25s ease"}}>
                         {log.currentProblems.length === 0 && (
                           <p style={{fontSize:12,color:"#BBB",margin:"10px 0"}}>No active problems in this sector yet.</p>
                         )}
@@ -1879,7 +2174,7 @@ function ClimbApp() {
                                 </button>
 
                                 {isColorExpanded && (
-                                  <div style={{marginTop:10,paddingLeft:24}}>
+                                  <div style={{marginTop:10,paddingLeft:24,animation:"fadeUp 0.25s ease"}}>
                                     <div style={{padding:"10px 0",marginBottom:8,background:"#F5F2ED",borderRadius:8}}>
                                       <div style={{display:"flex",justifyContent:"space-around",paddingBottom:8,marginBottom:8,borderBottom:"1px solid #E8E4DE"}}>
                                         <div style={{textAlign:"center"}}>
@@ -1922,7 +2217,7 @@ function ClimbApp() {
                                             </span>
                                           </button>
                                           {expandedProblem===p.id && (
-                                            <div style={{marginTop:8,paddingLeft:0}}>
+                                            <div style={{marginTop:8,paddingLeft:0,animation:"fadeUp 0.25s ease"}}>
                                               {p.photo && <img src={p.photo} style={{width:"100%",maxHeight:280,objectFit:"contain",background:"#F5F2ED",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8,display:"block"}}/>}
                                               {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
                                               <div style={{display:"flex",gap:8}}>
