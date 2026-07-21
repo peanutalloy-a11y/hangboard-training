@@ -1908,6 +1908,26 @@ function ClimbApp() {
     setExpandedProblem(null);
   };
 
+  const quickAddAttempt = (sectorName, id) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    const updated = { ...log, currentProblems: log.currentProblems.map(p =>
+      p.id === id ? { ...p, attempts: (p.attempts||0)+1, date: new Date().toISOString() } : p
+    )};
+    persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
+  };
+
+  const quickMarkSent = (sectorName, id) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    const updated = { ...log, currentProblems: log.currentProblems.map(p =>
+      p.id === id ? { ...p, status:"sent", attempts: (p.attempts||0)+1, date: new Date().toISOString() } : p
+    )};
+    persist({ ...cur, sectorLogs: { ...cur.sectorLogs, [sectorName]: updated } });
+  };
+
   const resetSector = (sectorName) => {
     const cur = dataRef.current;
     const log = cur.sectorLogs[sectorName] || emptySectorLog();
@@ -2218,8 +2238,14 @@ function ClimbApp() {
                                           </button>
                                           {expandedProblem===p.id && (
                                             <div style={{marginTop:8,paddingLeft:0,animation:"fadeUp 0.25s ease"}}>
-                                              {p.photo && <img src={p.photo} style={{width:"100%",maxHeight:280,objectFit:"contain",background:"#F5F2ED",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8,display:"block"}}/>}
+                                              {p.photo && <img src={p.photo} style={{width:"100%",height:"auto",display:"block",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8}}/>}
                                               {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
+                                              {p.status==="project" && (
+                                                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                                                  <button onClick={()=>quickAddAttempt(name,p.id)} style={{flex:1,padding:"8px 0",fontSize:11,fontFamily:F.m,fontWeight:700,borderRadius:6,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>+1 ATTEMPT</button>
+                                                  <button onClick={()=>quickMarkSent(name,p.id)} style={{flex:1,padding:"8px 0",fontSize:11,fontFamily:F.m,fontWeight:700,borderRadius:6,background:"#3A8A7A",border:"1.5px solid #3A8A7A",color:"#FFF",cursor:"pointer",letterSpacing:1}}>✓ MARK SENT</button>
+                                                </div>
+                                              )}
                                               <div style={{display:"flex",gap:8}}>
                                                 <button onClick={()=>{setEditingProblem(p);setPrefillSector(p.sector);setView("add");}} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>EDIT</button>
                                                 <button onClick={()=>deleteProblem(name, p.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
