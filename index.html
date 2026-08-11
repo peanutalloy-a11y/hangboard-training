@@ -2147,8 +2147,8 @@ function ClimbApp() {
                                 {p.photo && <img src={p.photo} style={{width:"100%",height:"auto",display:"block",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8}}/>}
                                 {p.videoLink && driveEmbedUrl(p.videoLink) && (
                                   <div style={{marginBottom:8}}>
-                                    <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
-                                      <iframe src={driveEmbedUrl(p.videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                                    <div style={{width:"100%",height:420,borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                                      <iframe src={driveEmbedUrl(p.videoLink)} style={{width:"100%",height:"100%",border:"none",display:"block"}} allow="autoplay" allowFullScreen/>
                                     </div>
                                     <a href={p.videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:10,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
                                   </div>
@@ -2312,8 +2312,8 @@ function ClimbApp() {
                                               {p.photo && <img src={p.photo} style={{width:"100%",height:"auto",display:"block",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8}}/>}
                                               {p.videoLink && driveEmbedUrl(p.videoLink) && (
                                                 <div style={{marginBottom:8}}>
-                                                  <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
-                                                    <iframe src={driveEmbedUrl(p.videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                                                  <div style={{width:"100%",height:420,borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                                                    <iframe src={driveEmbedUrl(p.videoLink)} style={{width:"100%",height:"100%",border:"none",display:"block"}} allow="autoplay" allowFullScreen/>
                                                   </div>
                                                   <a href={p.videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:10,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
                                                 </div>
@@ -2681,8 +2681,8 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
           {videoLink.trim() && (
             driveEmbedUrl(videoLink) ? (
               <div style={{marginTop:10}}>
-                <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
-                  <iframe src={driveEmbedUrl(videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                <div style={{width:"100%",height:420,borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                  <iframe src={driveEmbedUrl(videoLink)} style={{width:"100%",height:"100%",border:"none",display:"block"}} allow="autoplay" allowFullScreen/>
                 </div>
                 <a href={videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:11,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
               </div>
