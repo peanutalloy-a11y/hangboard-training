@@ -1467,6 +1467,22 @@ function compressImage(file, maxDim=1280, quality=0.72) {
   });
 }
 
+// Extracts a Google Drive file ID from any common share-link format, or a bare ID pasted directly.
+function extractDriveFileId(input) {
+  if (!input) return null;
+  const s = input.trim();
+  let m = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(s)) return s; // looks like a bare file ID
+  return null;
+}
+function driveEmbedUrl(link) {
+  const id = extractDriveFileId(link);
+  return id ? `https://drive.google.com/file/d/${id}/preview` : null;
+}
+
 function emptyReset() {
   return { id: Date.now(), startDate: new Date().toISOString(), problems: [] };
 }
@@ -1555,7 +1571,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type","Id","Sector","Color","Grade","Status","Attempts","Notes","Date","Cycle","ArchiveId","ArchiveStart","ArchiveEnd","X","Y","ImageData","ProblemPhoto"];
+const CSV_HEADER = ["Type","Id","Sector","Color","Grade","Status","Attempts","Notes","Date","Cycle","ArchiveId","ArchiveStart","ArchiveEnd","X","Y","ImageData","ProblemPhoto","VideoLink"];
 
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
@@ -1568,20 +1584,20 @@ function buildClimbCSV(data) {
   const rows = [CSV_HEADER];
 
   if (data.gymMap) {
-    rows.push(["gym_map","","","","","","","","","","","","","","",data.gymMap,""]);
+    rows.push(["gym_map","","","","","","","","","","","","","","",data.gymMap,"",""]);
   }
 
   data.sectors.forEach(pin => {
-    rows.push(["sector_pin", pin.id, pin.name, "","","","","","","","","","", pin.x, pin.y, "", ""]);
+    rows.push(["sector_pin", pin.id, pin.name, "","","","","","","","","","", pin.x, pin.y, "", "", ""]);
   });
 
   Object.entries(data.sectorLogs).forEach(([sectorName, log]) => {
     log.currentProblems.forEach(p => {
-      rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "current", "", "", "", "", "", "", p.photo||""]);
+      rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "current", "", "", "", "", "", "", p.photo||"", p.videoLink||""]);
     });
     log.archivedResets.forEach(reset => {
       reset.problems.forEach(p => {
-        rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", ""]);
+        rows.push(["problem", p.id, sectorName, p.color||"", p.grade||"", p.status||"", p.attempts||"", p.notes||"", p.date||"", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink||""]);
       });
     });
   });
@@ -1623,7 +1639,7 @@ function parseClimbCSV(text, existingData) {
   const iType=idx("Type"), iId=idx("Id"), iSector=idx("Sector"), iColor=idx("Color"), iGrade=idx("Grade"),
         iStatus=idx("Status"), iAttempts=idx("Attempts"), iNotes=idx("Notes"), iDate=idx("Date"),
         iCycle=idx("Cycle"), iArchiveId=idx("ArchiveId"), iArchiveStart=idx("ArchiveStart"), iArchiveEnd=idx("ArchiveEnd"),
-        iX=idx("X"), iY=idx("Y"), iImage=idx("ImageData"), iPhoto=idx("ProblemPhoto");
+        iX=idx("X"), iY=idx("Y"), iImage=idx("ImageData"), iPhoto=idx("ProblemPhoto"), iVideo=idx("VideoLink");
   if (iType===-1 || iSector===-1) throw new Error("Missing required columns");
 
   let gymMap = existingData.gymMap;
@@ -1654,6 +1670,7 @@ function parseClimbCSV(text, existingData) {
         notes: row[iNotes],
         date: row[iDate],
         ...(row[iCycle] !== "archived" && row[iPhoto] ? { photo: row[iPhoto] } : {}),
+        ...(row[iVideo] ? { videoLink: row[iVideo] } : {}),
       };
       if (!sectorLogs[sectorName]) sectorLogs[sectorName] = emptySectorLog();
 
@@ -1690,6 +1707,7 @@ function ClimbApp() {
   const [expandedSector, setExpandedSector] = useState(null);
   const [expandedProblem, setExpandedProblem] = useState(null);
   const [expandedColorKey, setExpandedColorKey] = useState(null);
+  const [projectsDropdownOpen, setProjectsDropdownOpen] = useState(false);
   const [editingProblem, setEditingProblem] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [resetConfirmSector, setResetConfirmSector] = useState(null);
@@ -1989,6 +2007,7 @@ function ClimbApp() {
   const flashCount = allCurrentProblems.filter(p=>p.status==="flash").length;
   const sentCount = allCurrentProblems.filter(p=>p.status==="sent").length;
   const projectCount = allCurrentProblems.filter(p=>p.status==="project").length;
+  const allProjects = allCurrentProblems.filter(p=>p.status==="project").sort((a,b)=>new Date(b.date)-new Date(a.date));
   const total = allCurrentProblems.length;
   const flashRate = total>0 ? Math.round((flashCount/total)*100) : 0;
   const sentRate = total>0 ? Math.round(((flashCount+sentCount)/total)*100) : 0;
@@ -2084,10 +2103,13 @@ function ClimbApp() {
                     <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#3A8A7A"}}>{sentCount}</div>
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>SENT</div>
                   </div>
-                  <div style={{textAlign:"center"}}>
-                    <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#9B9690"}}>{projectCount}</div>
+                  <button onClick={()=>{setProjectsDropdownOpen(!projectsDropdownOpen);setExpandedProblem(null);}} disabled={projectCount===0} style={{textAlign:"center",background:"transparent",border:"none",cursor:projectCount>0?"pointer":"default",padding:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:3,justifyContent:"center"}}>
+                      <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#9B9690"}}>{projectCount}</div>
+                      {projectCount>0 && <span style={{color:"#CCC",fontSize:11,transition:"transform 0.2s",transform:projectsDropdownOpen?"rotate(90deg)":"none",marginTop:2}}>▸</span>}
+                    </div>
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>PROJECT</div>
-                  </div>
+                  </button>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-around"}}>
                   <div style={{textAlign:"center"}}>
@@ -2099,6 +2121,55 @@ function ClimbApp() {
                     <div style={{fontFamily:F.m,fontSize:8,color:"#BBB",letterSpacing:1,marginTop:2}}>SENT RATE</div>
                   </div>
                 </div>
+
+                {projectsDropdownOpen && projectCount>0 && (
+                  <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #F0EDE8",animation:"fadeUp 0.25s ease"}}>
+                    <div style={{fontFamily:F.m,fontSize:10,color:"#999",letterSpacing:1,marginBottom:10}}>ALL ACTIVE PROJECTS · {projectCount}</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      {allProjects.map(p=>{
+                        const colorMeta = HOLD_COLORS.find(c=>c.name===p.color) || HOLD_COLORS[0];
+                        const statusMeta = STATUS_META[p.status];
+                        return (
+                          <div key={p.id} style={{background:"#F5F2ED",borderRadius:8,overflow:"hidden"}}>
+                            <button onClick={()=>setExpandedProblem(expandedProblem===p.id?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                              {p.photo && <img src={p.photo} style={{width:32,height:32,borderRadius:6,objectFit:"cover",flexShrink:0,border:"1px solid #E8E4DE"}}/>}
+                              <span style={{width:12,height:12,borderRadius:"50%",background:colorMeta.hex,border:"1.5px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,color:"#2A2520",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.sector}{p.grade?` · ${p.grade}`:""}</div>
+                                <div style={{fontFamily:F.m,fontSize:9,color:"#BBB",marginTop:1}}>{colorMeta.name} · {formatDate(p.date)}</div>
+                              </div>
+                              <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:5,background:`${statusMeta.color}18`,color:statusMeta.color,letterSpacing:1,flexShrink:0}}>
+                                {statusMeta.label}{p.attempts?` ×${p.attempts}`:""}
+                              </span>
+                            </button>
+                            {expandedProblem===p.id && (
+                              <div style={{padding:"0 12px 12px",animation:"fadeUp 0.25s ease"}}>
+                                {p.photo && <img src={p.photo} style={{width:"100%",height:"auto",display:"block",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8}}/>}
+                                {p.videoLink && driveEmbedUrl(p.videoLink) && (
+                                  <div style={{marginBottom:8}}>
+                                    <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                                      <iframe src={driveEmbedUrl(p.videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                                    </div>
+                                    <a href={p.videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:10,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
+                                  </div>
+                                )}
+                                {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
+                                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                                  <button onClick={()=>quickAddAttempt(p.sector,p.id)} style={{flex:1,padding:"8px 0",fontSize:11,fontFamily:F.m,fontWeight:700,borderRadius:6,background:"#FFF",border:"1.5px solid #E8E4DE",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>+1 ATTEMPT</button>
+                                  <button onClick={()=>quickMarkSent(p.sector,p.id)} style={{flex:1,padding:"8px 0",fontSize:11,fontFamily:F.m,fontWeight:700,borderRadius:6,background:"#3A8A7A",border:"1.5px solid #3A8A7A",color:"#FFF",cursor:"pointer",letterSpacing:1}}>✓ MARK SENT</button>
+                                </div>
+                                <div style={{display:"flex",gap:8}}>
+                                  <button onClick={()=>{setEditingProblem(p);setPrefillSector(p.sector);setView("add");}} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:1}}>EDIT</button>
+                                  <button onClick={()=>deleteProblem(p.sector, p.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:F.m,fontWeight:600,borderRadius:6,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:1}}>DELETE</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </Stagger>
           )}
@@ -2239,6 +2310,14 @@ function ClimbApp() {
                                           {expandedProblem===p.id && (
                                             <div style={{marginTop:8,paddingLeft:0,animation:"fadeUp 0.25s ease"}}>
                                               {p.photo && <img src={p.photo} style={{width:"100%",height:"auto",display:"block",borderRadius:8,border:"1px solid #E8E4DE",marginBottom:8}}/>}
+                                              {p.videoLink && driveEmbedUrl(p.videoLink) && (
+                                                <div style={{marginBottom:8}}>
+                                                  <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                                                    <iframe src={driveEmbedUrl(p.videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                                                  </div>
+                                                  <a href={p.videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:10,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
+                                                </div>
+                                              )}
                                               {p.notes && <p style={{fontSize:12,color:"#666",margin:"0 0 8px",fontStyle:"italic"}}>"{p.notes}"</p>}
                                               {p.status==="project" && (
                                                 <div style={{display:"flex",gap:8,marginBottom:8}}>
@@ -2382,6 +2461,7 @@ function ClimbApp() {
                           <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F2ED"}}>
                             <span style={{width:12,height:12,borderRadius:"50%",background:colorMeta.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
                             <span style={{fontSize:13,color:"#2A2520",flex:1}}>{p.grade || colorMeta.name}</span>
+                            {p.videoLink && <a href={p.videoLink} target="_blank" rel="noopener noreferrer" style={{fontSize:13,textDecoration:"none"}} title="Watch video">🎥</a>}
                             <span style={{fontFamily:F.m,fontSize:9,fontWeight:700,color:statusMeta.color}}>{statusMeta.label}{p.status!=="flash"&&p.attempts?` ×${p.attempts}`:""}</span>
                           </div>
                         );
@@ -2490,6 +2570,7 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
   const [notes, setNotes] = useState(initial?.notes || "");
   const [photo, setPhoto] = useState(initial?.photo || null);
   const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [videoLink, setVideoLink] = useState(initial?.videoLink || "");
   const photoInputRef = useRef(null);
 
   const handlePhotoUpload = async (e) => {
@@ -2516,6 +2597,7 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
       notes: notes.trim(),
       date: initial?.date || new Date().toISOString(),
       ...(photo ? { photo } : {}),
+      ...(videoLink.trim() ? { videoLink: videoLink.trim() } : {}),
     });
   };
 
@@ -2590,6 +2672,25 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
           )}
           <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:"none"}}/>
           <p style={{fontFamily:F.b,fontSize:10,color:"#BBB",marginTop:8,marginBottom:0}}>Cleared automatically when this sector resets — only current climbs keep a photo.</p>
+        </div>
+
+        <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+          <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Video <span style={{color:"#CCC",fontWeight:400}}>(optional)</span></div>
+          <input value={videoLink} onChange={e=>setVideoLink(e.target.value)} placeholder="Paste a Google Drive share link"
+            style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          {videoLink.trim() && (
+            driveEmbedUrl(videoLink) ? (
+              <div style={{marginTop:10}}>
+                <div style={{position:"relative",width:"100%",paddingTop:"56.25%",borderRadius:8,overflow:"hidden",border:"1px solid #E8E4DE",background:"#000"}}>
+                  <iframe src={driveEmbedUrl(videoLink)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay" allowFullScreen/>
+                </div>
+                <a href={videoLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:6,fontFamily:F.m,fontSize:11,fontWeight:700,color:"#3A8A7A",letterSpacing:0.5,textDecoration:"none"}}>Open in Drive ↗</a>
+              </div>
+            ) : (
+              <p style={{fontFamily:F.b,fontSize:11,color:"#C49A2A",marginTop:8,marginBottom:0}}>Doesn't look like a Google Drive link yet — paste the full share link or file ID.</p>
+            )
+          )}
+          <p style={{fontFamily:F.b,fontSize:10,color:"#BBB",marginTop:8,marginBottom:0}}>Set sharing to "Anyone with the link" so it plays properly.</p>
         </div>
 
         <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
