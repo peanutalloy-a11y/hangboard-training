@@ -1515,148 +1515,6 @@ function VideoEmbed({ link }) {
 // Records a clip directly in the browser (no separate Camera app needed), then hands it off via the
 // native Share Sheet — pick YouTube there to upload it, then paste the resulting link back into the form.
 // This never uploads anything itself; it only removes the "leave the app to go film" step.
-function CameraRecorder({ onClose }) {
-  const videoPreviewRef = useRef(null);
-  const streamRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const timerRef = useRef(null);
-  const [recording, setRecording] = useState(false);
-  const [recordedUrl, setRecordedUrl] = useState(null);
-  const [recordedBlob, setRecordedBlob] = useState(null);
-  const [facingMode, setFacingMode] = useState("environment");
-  const [error, setError] = useState(null);
-  const [elapsed, setElapsed] = useState(0);
-  const [shareState, setShareState] = useState(null); // null | "saved" | "unsupported"
-
-  const startCamera = async (mode) => {
-    setError(null);
-    try {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal: mode } }, audio:true });
-      streamRef.current = stream;
-      if (videoPreviewRef.current) { videoPreviewRef.current.srcObject = stream; videoPreviewRef.current.play().catch(()=>{}); }
-    } catch(e) {
-      setError("Couldn't access the camera. Check camera/microphone permissions for this site.");
-    }
-  };
-
-  useEffect(() => {
-    startCamera(facingMode);
-    return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    };
-    // eslint-disable-next-line
-  }, []);
-
-  const flipCamera = () => {
-    const next = facingMode==="environment" ? "user" : "environment";
-    setFacingMode(next);
-    startCamera(next);
-  };
-
-  const pickMimeType = () => {
-    const candidates = ["video/mp4","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];
-    for (const t of candidates) { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; }
-    return "";
-  };
-
-  const startRecording = () => {
-    if (!streamRef.current) return;
-    chunksRef.current = [];
-    const mimeType = pickMimeType();
-    try {
-      const mr = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
-      mr.ondataavailable = (e) => { if (e.data && e.data.size>0) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType || "video/mp4" });
-        setRecordedBlob(blob);
-        setRecordedUrl(URL.createObjectURL(blob));
-      };
-      mr.start();
-      mediaRecorderRef.current = mr;
-      setRecording(true); setElapsed(0);
-      timerRef.current = setInterval(()=>setElapsed(e=>e+1), 1000);
-    } catch(e) {
-      setError("Recording isn't supported in this browser.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-    setRecording(false);
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-  };
-
-  const retake = () => {
-    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    setRecordedUrl(null); setRecordedBlob(null); setShareState(null);
-    startCamera(facingMode);
-  };
-
-  const shareOrSave = async () => {
-    if (!recordedBlob) return;
-    const ext = (recordedBlob.type||"").includes("mp4") ? "mp4" : "webm";
-    const file = new File([recordedBlob], `climb-${Date.now()}.${ext}`, { type: recordedBlob.type||"video/mp4" });
-    if (navigator.canShare && navigator.canShare({ files:[file] })) {
-      try { await navigator.share({ files:[file], title:"Climb video" }); return; } catch(e) { /* cancelled — fall through */ }
-    }
-    const a = document.createElement("a");
-    a.href = recordedUrl; a.download = file.name;
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>document.body.removeChild(a), 100);
-    setShareState("saved");
-  };
-
-  const fmtTime = (s) => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"#000",zIndex:1000,display:"flex",flexDirection:"column"}}>
-      <div style={{position:"relative",flex:1,background:"#000",overflow:"hidden"}}>
-        {!recordedUrl ? (
-          <video ref={videoPreviewRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-        ) : (
-          <video src={recordedUrl} controls playsInline style={{width:"100%",height:"100%",objectFit:"contain",background:"#000"}}/>
-        )}
-        {recording && (
-          <div style={{position:"absolute",top:"calc(env(safe-area-inset-top,16px) + 10px)",left:16,display:"flex",alignItems:"center",gap:6,background:"rgba(0,0,0,0.55)",padding:"6px 12px",borderRadius:20}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:"#E8574A",animation:"pulseGlow 1s infinite"}}/>
-            <span style={{color:"#FFF",fontFamily:F.m,fontSize:12,fontWeight:700}}>{fmtTime(elapsed)}</span>
-          </div>
-        )}
-        {error && (
-          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"rgba(0,0,0,0.9)"}}>
-            <p style={{color:"#FFF",fontFamily:F.b,fontSize:14,textAlign:"center"}}>{error}</p>
-          </div>
-        )}
-      </div>
-      <div style={{padding:"20px 20px calc(env(safe-area-inset-bottom,20px) + 20px)",background:"#111"}}>
-        {!recordedUrl ? (
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <button onClick={onClose} style={{color:"#FFF",background:"transparent",border:"none",fontFamily:F.m,fontSize:12,fontWeight:700,letterSpacing:1,cursor:"pointer"}}>CANCEL</button>
-            <button onClick={recording?stopRecording:startRecording} style={{width:70,height:70,borderRadius:"50%",border:"4px solid #FFF",background:recording?"#E8574A":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              {recording && <div style={{width:24,height:24,borderRadius:4,background:"#FFF"}}/>}
-            </button>
-            <button onClick={flipCamera} disabled={recording} style={{color:recording?"#555":"#FFF",background:"transparent",border:"none",fontSize:22,cursor:recording?"default":"pointer"}}>🔄</button>
-          </div>
-        ) : (
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={retake} style={{flex:1,padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"transparent",border:"1.5px solid #555",color:"#FFF",letterSpacing:1}}>RETAKE</button>
-            <button onClick={shareOrSave} style={{flex:2,padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#D4663A",border:"none",color:"#FFF",letterSpacing:1}}>SHARE / SAVE ↗</button>
-          </div>
-        )}
-        {!recordedUrl && !error && (
-          <p style={{color:"#999",fontFamily:F.b,fontSize:11,textAlign:"center",marginTop:14}}>Record your attempt, then share it straight to the YouTube app to upload — come back and paste the link when it's up.</p>
-        )}
-        {recordedUrl && (
-          <p style={{color:"#999",fontFamily:F.b,fontSize:11,textAlign:"center",marginTop:12}}>{shareState==="saved" ? "Saved — now upload it to YouTube as Unlisted, then paste the link back here." : "Tap Share, choose YouTube, upload as Unlisted, then paste the link back here."}</p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function emptyReset() {
   return { id: Date.now(), startDate: new Date().toISOString(), problems: [] };
@@ -2732,7 +2590,42 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
   const [photo, setPhoto] = useState(initial?.photo || null);
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [videoLink, setVideoLink] = useState(initial?.videoLink || "");
-  const [showCamera, setShowCamera] = useState(false);
+  const [capturedVideo, setCapturedVideo] = useState(null); // { file, url } once native camera hands back a clip
+  const [captureShareState, setCaptureShareState] = useState(null);
+  const videoCaptureInputRef = useRef(null);
+
+  const handleVideoCapture = (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return; // user backed out of the native camera — nothing to do
+    if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
+    setCapturedVideo({ file, url: URL.createObjectURL(file) });
+    setCaptureShareState(null);
+  };
+
+  const retakeVideo = () => {
+    if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
+    setCapturedVideo(null); setCaptureShareState(null);
+    videoCaptureInputRef.current?.click();
+  };
+
+  const closeVideoReview = () => {
+    if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
+    setCapturedVideo(null); setCaptureShareState(null);
+  };
+
+  const shareCapturedVideo = async () => {
+    if (!capturedVideo) return;
+    const { file, url } = capturedVideo;
+    if (navigator.canShare && navigator.canShare({ files:[file] })) {
+      try { await navigator.share({ files:[file], title:"Climb video" }); return; } catch(e) { /* cancelled — fall through */ }
+    }
+    const a = document.createElement("a");
+    a.href = url; a.download = file.name || `climb-${Date.now()}.mp4`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>document.body.removeChild(a), 100);
+    setCaptureShareState("saved");
+  };
   const photoInputRef = useRef(null);
 
   const handlePhotoUpload = async (e) => {
@@ -2841,7 +2734,8 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
           <div style={{display:"flex",gap:8}}>
             <input value={videoLink} onChange={e=>setVideoLink(e.target.value)} placeholder="Paste a YouTube link"
               style={{flex:1,padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
-            <button onClick={()=>setShowCamera(true)} title="Record a clip" style={{width:40,height:40,flexShrink:0,borderRadius:8,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
+            <button onClick={()=>videoCaptureInputRef.current?.click()} title="Record with Camera" style={{width:40,height:40,flexShrink:0,borderRadius:8,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
+            <input ref={videoCaptureInputRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{display:"none"}}/>
           </div>
           {videoLink.trim() && (
             videoEmbedInfo(videoLink) ? (
@@ -2867,7 +2761,21 @@ function ProblemForm({ initial, initialSector, sectors, onSave, onCancel }) {
           color:sector.trim()?"#F5F2ED":"#BBB",letterSpacing:3,
         }}>{initial ? "SAVE CHANGES" : "LOG PROBLEM"}</button>
       </div>
-      {showCamera && <CameraRecorder onClose={()=>setShowCamera(false)}/>}
+      {capturedVideo && (
+        <div style={{position:"fixed",inset:0,background:"#000",zIndex:1000,display:"flex",flexDirection:"column"}}>
+          <div style={{position:"relative",flex:1,background:"#000"}}>
+            <video src={capturedVideo.url} controls playsInline style={{width:"100%",height:"100%",objectFit:"contain",background:"#000"}}/>
+          </div>
+          <div style={{padding:"20px 20px calc(env(safe-area-inset-bottom,20px) + 20px)",background:"#111"}}>
+            <div style={{display:"flex",gap:10,marginBottom:10}}>
+              <button onClick={retakeVideo} style={{flex:1,padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"transparent",border:"1.5px solid #555",color:"#FFF",letterSpacing:1}}>RETAKE</button>
+              <button onClick={shareCapturedVideo} style={{flex:2,padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#D4663A",border:"none",color:"#FFF",letterSpacing:1}}>SHARE / SAVE ↗</button>
+            </div>
+            <button onClick={closeVideoReview} style={{width:"100%",padding:"12px 0",borderRadius:10,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"transparent",border:"1.5px solid #333",color:"#999",letterSpacing:1}}>DONE</button>
+            <p style={{color:"#999",fontFamily:F.b,fontSize:11,textAlign:"center",marginTop:12}}>{captureShareState==="saved" ? "Saved — now upload it to YouTube as Unlisted, then paste the link back here." : "Tap Share, choose YouTube, upload as Unlisted, then paste the link back here."}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
