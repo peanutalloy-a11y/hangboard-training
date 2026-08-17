@@ -2787,6 +2787,519 @@ const CS = {
 // ═══════════════════════════════════════════════════
 // ─── ROOT APP (tab switcher) ─────────────────────────
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// ─── STRETCH (day-based stretch routines + timer) ────
+// ═══════════════════════════════════════════════════
+
+const STRETCH_STORAGE_KEY = "stretch-routines";
+const STRETCH_ACCENT = "#5B7FA6";
+
+function emptyStretchRoutines() {
+  const obj = {};
+  DAYS_OF_WEEK.forEach(d => { obj[d] = []; });
+  return obj;
+}
+
+function StretchApp() {
+  const [view, setView] = useState("home");
+  const [routines, setRoutines] = useState(emptyStretchRoutines());
+  const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const jsDay = new Date().getDay(); // 0=Sunday..6=Saturday
+    return DAYS_OF_WEEK[(jsDay + 6) % 7]; // convert to our Monday-first array
+  });
+
+  const [expandedRoutineId, setExpandedRoutineId] = useState(null);
+  const [editingRoutine, setEditingRoutine] = useState(null);
+  const [routineName, setRoutineName] = useState("");
+  const [deleteRoutineConfirmId, setDeleteRoutineConfirmId] = useState(null);
+
+  const [activeRoutineId, setActiveRoutineId] = useState(null); // which routine a stretch add/edit belongs to
+  const [editingStretch, setEditingStretch] = useState(null);
+  const [stretchName, setStretchName] = useState("");
+  const [stretchReps, setStretchReps] = useState(3);
+  const [stretchMode, setStretchMode] = useState("reps"); // "single" | "reps"
+  const [stretchHoldSec, setStretchHoldSec] = useState(30);
+  const [stretchRestSec, setStretchRestSec] = useState(10);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  // Guided timer state
+  const [timerRoutineName, setTimerRoutineName] = useState("");
+  const [timerSeq, setTimerSeq] = useState([]);
+  const [timerIndex, setTimerIndex] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerStarted, setTimerStarted] = useState(false);
+  const [timerRemaining, setTimerRemaining] = useState(0);
+  const timerEndRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+
+  const dataRef = useRef(routines);
+  dataRef.current = routines;
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STRETCH_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Migrate the old shape (day -> flat stretch list) into the new shape (day -> list of named routines)
+        const migrated = {};
+        DAYS_OF_WEEK.forEach(d => {
+          const dayVal = parsed[d];
+          if (!Array.isArray(dayVal) || dayVal.length === 0) { migrated[d] = []; return; }
+          const looksLikeOldStretch = dayVal[0] && typeof dayVal[0].holdSec !== "undefined" && typeof dayVal[0].stretches === "undefined";
+          migrated[d] = looksLikeOldStretch
+            ? [{ id: Date.now()+Math.random(), name: "My Routine", stretches: dayVal }]
+            : dayVal;
+        });
+        setRoutines(migrated); dataRef.current = migrated;
+        try { localStorage.setItem(STRETCH_STORAGE_KEY, JSON.stringify(migrated)); } catch(e2) {}
+      }
+    } catch(e) {}
+    setLoading(false);
+  }, []);
+
+  const persist = (next) => {
+    setRoutines(next); dataRef.current = next;
+    try { localStorage.setItem(STRETCH_STORAGE_KEY, JSON.stringify(next)); } catch(e) {}
+  };
+
+  // ─── Routine CRUD ───────────────────────────────────
+  const openAddRoutine = () => {
+    setEditingRoutine(null); setRoutineName("");
+    setView("routineForm");
+  };
+  const openEditRoutine = (routine) => {
+    setEditingRoutine(routine); setRoutineName(routine.name);
+    setView("routineForm");
+  };
+  const saveRoutine = () => {
+    if (!routineName.trim()) return;
+    const cur = dataRef.current;
+    const dayList = cur[selectedDay] || [];
+    let nextList;
+    if (editingRoutine) {
+      nextList = dayList.map(r => r.id===editingRoutine.id ? {...r, name:routineName.trim()} : r);
+    } else {
+      nextList = [...dayList, { id: Date.now(), name: routineName.trim(), stretches: [] }];
+    }
+    persist({ ...cur, [selectedDay]: nextList });
+    setView("home"); setEditingRoutine(null);
+  };
+  const deleteRoutine = (id) => {
+    const cur = dataRef.current;
+    persist({ ...cur, [selectedDay]: (cur[selectedDay]||[]).filter(r=>r.id!==id) });
+    setDeleteRoutineConfirmId(null);
+    if (expandedRoutineId===id) setExpandedRoutineId(null);
+  };
+
+  // ─── Stretch CRUD (scoped to a routine) ─────────────
+  const openAddStretch = (routineId) => {
+    setActiveRoutineId(routineId);
+    setEditingStretch(null);
+    setStretchName(""); setStretchMode("reps"); setStretchReps(3); setStretchHoldSec(30); setStretchRestSec(10);
+    setView("stretchForm");
+  };
+
+  const openEditStretch = (routineId, stretch) => {
+    setActiveRoutineId(routineId);
+    setEditingStretch(stretch);
+    setStretchName(stretch.name);
+    setStretchMode(stretch.reps <= 1 ? "single" : "reps");
+    setStretchReps(stretch.reps);
+    setStretchHoldSec(stretch.holdSec); setStretchRestSec(stretch.restSec);
+    setView("stretchForm");
+  };
+
+  const saveStretch = () => {
+    if (!stretchName.trim() || !activeRoutineId) return;
+    const cur = dataRef.current;
+    const dayList = cur[selectedDay] || [];
+    const fields = stretchMode === "single"
+      ? { name: stretchName.trim(), reps: 1, holdSec: Math.max(1, Number(stretchHoldSec)||1), restSec: 0 }
+      : { name: stretchName.trim(), reps: Math.max(1, Number(stretchReps)||1), holdSec: Math.max(1, Number(stretchHoldSec)||1), restSec: Math.max(0, Number(stretchRestSec)||0) };
+    const nextList = dayList.map(r => {
+      if (r.id !== activeRoutineId) return r;
+      let nextStretches;
+      if (editingStretch) {
+        nextStretches = r.stretches.map(s => s.id===editingStretch.id ? {...s, ...fields} : s);
+      } else {
+        nextStretches = [...r.stretches, { id: Date.now(), ...fields }];
+      }
+      return { ...r, stretches: nextStretches };
+    });
+    persist({ ...cur, [selectedDay]: nextList });
+    setView("home"); setEditingStretch(null); setActiveRoutineId(null);
+  };
+
+  const deleteStretch = (routineId, id) => {
+    const cur = dataRef.current;
+    const dayList = cur[selectedDay] || [];
+    const nextList = dayList.map(r => r.id===routineId ? {...r, stretches: r.stretches.filter(s=>s.id!==id)} : r);
+    persist({ ...cur, [selectedDay]: nextList });
+    setDeleteConfirmId(null);
+  };
+
+  // ─── Guided Timer ───────────────────────────────────
+  const buildStretchSequence = (stretches) => {
+    const seq = [];
+    stretches.forEach((s, si) => {
+      if (si > 0) seq.push({ type:"nextup", name:s.name, duration:5 });
+      for (let r = 0; r < s.reps; r++) {
+        seq.push({ type:"hold", name:s.name, rep:r+1, totalReps:s.reps, duration:s.holdSec });
+        if (r < s.reps-1 && s.restSec > 0) seq.push({ type:"rest", name:s.name, rep:r+1, totalReps:s.reps, duration:s.restSec });
+      }
+    });
+    return seq;
+  };
+
+  const playBeep = (freq, durMs) => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.frequency.value = freq; osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.16, ctx.currentTime);
+      osc.start(); osc.stop(ctx.currentTime + durMs/1000);
+      setTimeout(()=>{try{ctx.close();}catch(e){}}, durMs+80);
+    } catch(e) {}
+  };
+  const cueForPhase = (type) => {
+    if (type === "hold") playBeep(880, 180);
+    else if (type === "rest" || type === "nextup") playBeep(440, 160);
+    else if (type === "done") { playBeep(660,120); setTimeout(()=>playBeep(880,120),160); setTimeout(()=>playBeep(1100,220),320); }
+  };
+
+  const openTimer = (routine) => {
+    const stretches = routine.stretches || [];
+    if (!stretches.length) return;
+    const seq = buildStretchSequence(stretches);
+    setTimerRoutineName(routine.name);
+    setTimerSeq(seq); setTimerIndex(0);
+    setTimerRemaining(seq[0]?.duration || 0); setTimerRunning(false); setTimerStarted(false);
+    setView("timer");
+  };
+
+  const timerStart = () => {
+    if (!timerStarted) { cueForPhase(timerSeq[0]?.type); setTimerStarted(true); }
+    timerEndRef.current = Date.now() + timerRemaining*1000;
+    setTimerRunning(true);
+  };
+  const timerPause = () => {
+    if (timerEndRef.current) setTimerRemaining(Math.max(0, Math.ceil((timerEndRef.current-Date.now())/1000)));
+    setTimerRunning(false);
+  };
+  const timerAdvance = () => {
+    const nextIndex = timerIndex+1;
+    if (nextIndex >= timerSeq.length) {
+      setTimerIndex(nextIndex); setTimerRunning(false); cueForPhase("done");
+      return;
+    }
+    cueForPhase(timerSeq[nextIndex].type);
+    setTimerIndex(nextIndex);
+    setTimerRemaining(timerSeq[nextIndex].duration);
+    timerEndRef.current = Date.now() + timerSeq[nextIndex].duration*1000;
+  };
+  const timerSkip = () => { timerAdvance(); };
+  const timerExit = () => { setTimerRunning(false); setView("home"); };
+
+  useEffect(() => {
+    if (!timerRunning) return;
+    timerIntervalRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((timerEndRef.current-Date.now())/1000));
+      setTimerRemaining(remaining);
+      if (remaining <= 0) timerAdvance();
+    }, 250);
+    return () => clearInterval(timerIntervalRef.current);
+  }, [timerRunning, timerIndex, timerSeq]);
+
+  const dayRoutines = routines[selectedDay] || [];
+
+  if (loading) return (
+    <div style={CS.page}><TopoBackground/>
+      <div style={{textAlign:"center",paddingTop:100,position:"relative",zIndex:1}}>
+        <CarabinerSpinner/>
+        <p style={{fontFamily:F.m,fontSize:11,color:"#AAA",letterSpacing:3}}>LOADING...</p>
+      </div>
+    </div>
+  );
+
+  // ═══════════ HOME ═══════════
+  if (view === "home") {
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <Stagger delay={0}>
+            <div style={{padding:"16px 0 16px",display:"flex",alignItems:"center",gap:14}}>
+              <svg width="40" height="40" viewBox="0 0 40 40">
+                <path d="M12 8 Q20 4 28 8 Q24 20 20 32 Q16 20 12 8 Z" fill="none" stroke={STRETCH_ACCENT} strokeWidth="2.5" strokeLinejoin="round"/>
+                <circle cx="20" cy="14" r="2.5" fill={STRETCH_ACCENT} opacity="0.4"/>
+              </svg>
+              <div>
+                <h1 style={{fontFamily:F.h,fontSize:28,fontWeight:800,color:"#2A2520",margin:0,lineHeight:1}}>STRETCH<span style={{color:STRETCH_ACCENT}}>.</span></h1>
+                <p style={{fontFamily:F.m,fontSize:9,color:"#BBB",letterSpacing:4,marginTop:3}}>DAILY MOBILITY ROUTINE</p>
+              </div>
+            </div>
+          </Stagger>
+
+          <Stagger delay={60}>
+            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+              {DAYS_OF_WEEK.map(d=>(
+                <button key={d} onClick={()=>{setSelectedDay(d);setExpandedRoutineId(null);}} style={{
+                  flex:"1 0 auto",padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:800,fontFamily:F.m,cursor:"pointer",letterSpacing:1,
+                  background:selectedDay===d?"#2A2520":"#FFF",border:`1.5px solid ${selectedDay===d?"#2A2520":"#E8E4DE"}`,
+                  color:selectedDay===d?"#F5F2ED":"#999",
+                }}>{DAY_LABELS[d]}</button>
+              ))}
+            </div>
+          </Stagger>
+
+          <Divider text={`${DAY_LABELS[selectedDay]} ROUTINES`}/>
+
+          {dayRoutines.length === 0 && (
+            <div style={{textAlign:"center",padding:"30px 20px"}}>
+              <p style={{fontFamily:F.m,fontSize:11,color:"#CCC",letterSpacing:2}}>NO ROUTINES YET</p>
+              <p style={{fontSize:13,color:"#BBB",marginTop:6}}>Add one below — e.g. "Warmup" or "Warm Down"</p>
+            </div>
+          )}
+
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+            {dayRoutines.map((r,idx)=>{
+              const isExpanded = expandedRoutineId === r.id;
+              return (
+                <Stagger key={r.id} delay={100+idx*40}>
+                  <div style={{background:"#FFF",borderRadius:10,border:"1px solid #E8E4DE",overflow:"hidden"}}>
+                    <button onClick={()=>{setExpandedRoutineId(isExpanded?null:r.id);setDeleteRoutineConfirmId(null);}} style={{
+                      display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"14px 16px",
+                      background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
+                    }}>
+                      <div>
+                        <div style={{fontFamily:F.h,fontSize:15,fontWeight:700,color:"#2A2520"}}>{r.name}</div>
+                        <div style={{fontFamily:F.m,fontSize:11,color:"#BBB",marginTop:3,letterSpacing:0.5}}>{r.stretches.length} stretch{r.stretches.length!==1?"es":""}</div>
+                      </div>
+                      <span style={{color:"#CCC",fontSize:13,transition:"transform 0.2s",transform:isExpanded?"rotate(90deg)":"none"}}>▸</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div style={{padding:"0 16px 16px",borderTop:"1px solid #F0EDE8",animation:"fadeUp 0.25s ease"}}>
+                        {r.stretches.length > 0 && (
+                          <button onClick={()=>openTimer(r)} style={{
+                            width:"100%",padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:800,fontFamily:F.m,
+                            cursor:"pointer",background:STRETCH_ACCENT,border:"none",color:"#FFF",letterSpacing:2,margin:"14px 0",
+                          }}>▶ START {r.name.toUpperCase()}</button>
+                        )}
+
+                        {r.stretches.length === 0 && (
+                          <p style={{fontSize:12,color:"#BBB",margin:"12px 0"}}>No stretches in this routine yet.</p>
+                        )}
+
+                        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+                          {r.stretches.map(s=>(
+                            <div key={s.id} style={{background:"#F5F2ED",borderRadius:8,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <div>
+                                <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520"}}>{s.name}</div>
+                                <div style={{fontFamily:F.m,fontSize:10,color:"#BBB",marginTop:2}}>
+                                  {s.reps<=1 ? `${s.holdSec}s hold` : `${s.reps} × ${s.holdSec}s hold${s.restSec>0?` · ${s.restSec}s rest`:""}`}
+                                </div>
+                              </div>
+                              <div style={{display:"flex",gap:5,flexShrink:0}}>
+                                <button onClick={()=>openEditStretch(r.id, s)} style={{width:28,height:28,borderRadius:7,background:"#FFF",border:"1.5px solid #E8E4DE",color:"#AAA",cursor:"pointer",fontSize:11}}>✎</button>
+                                {deleteConfirmId!==s.id ? (
+                                  <button onClick={()=>setDeleteConfirmId(s.id)} style={{width:28,height:28,borderRadius:7,background:"#FFF",border:"1.5px solid #E8E4DE",color:"#C45A5A",cursor:"pointer",fontSize:11}}>×</button>
+                                ) : (
+                                  <button onClick={()=>deleteStretch(r.id, s.id)} style={{padding:"0 8px",height:28,borderRadius:7,background:"#C45A5A",border:"none",color:"#FFF",cursor:"pointer",fontSize:9,fontFamily:F.m,fontWeight:700}}>OK?</button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button onClick={()=>openAddStretch(r.id)} style={{
+                          width:"100%",padding:"10px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+                          cursor:"pointer",background:"transparent",border:"1.5px dashed #DDD8D0",color:"#999",letterSpacing:1,marginBottom:10,
+                        }}>+ ADD STRETCH</button>
+
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={()=>openEditRoutine(r)} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:F.m,background:"transparent",border:"1.5px solid #DDD8D0",color:"#2A2520",cursor:"pointer",letterSpacing:0.5}}>RENAME ROUTINE</button>
+                          {deleteRoutineConfirmId!==r.id ? (
+                            <button onClick={()=>setDeleteRoutineConfirmId(r.id)} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:F.m,background:"transparent",border:"1.5px solid #E8C4C4",color:"#C45A5A",cursor:"pointer",letterSpacing:0.5}}>DELETE ROUTINE</button>
+                          ) : (
+                            <button onClick={()=>deleteRoutine(r.id)} style={{flex:1,padding:"9px 0",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:F.m,background:"#C45A5A",border:"none",color:"#FFF",cursor:"pointer",letterSpacing:0.5}}>CONFIRM DELETE</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Stagger>
+              );
+            })}
+          </div>
+
+          <button onClick={openAddRoutine} style={{
+            width:"100%",padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,
+            cursor:"pointer",background:"transparent",border:"1.5px dashed #DDD8D0",color:"#999",letterSpacing:2,
+          }}>+ ADD ROUTINE TO {DAY_LABELS[selectedDay]}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ ADD / EDIT ROUTINE ═══════════
+  if (view === "routineForm") {
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <button onClick={()=>{setView("home");setEditingRoutine(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+          <h2 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",margin:"0 0 6px"}}>{editingRoutine?"Rename Routine":"Add Routine"}</h2>
+          <p style={{fontFamily:F.b,fontSize:12,color:"#BBB",margin:"0 0 20px"}}>For {DAY_LABELS[selectedDay]}</p>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Routine Name</div>
+            <input value={routineName} onChange={e=>setRoutineName(e.target.value)} placeholder="e.g. Warmup, Warm Down"
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          <button onClick={saveRoutine} disabled={!routineName.trim()} style={{
+            width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+            cursor:routineName.trim()?"pointer":"default",background:routineName.trim()?"#2A2520":"#E8E4DE",border:"none",
+            color:routineName.trim()?"#F5F2ED":"#BBB",letterSpacing:3,
+          }}>{editingRoutine?"SAVE CHANGES":"ADD ROUTINE"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ ADD / EDIT STRETCH ═══════════
+  if (view === "stretchForm") {
+    return (
+      <div style={CS.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <button onClick={()=>{setView("home");setEditingStretch(null);setActiveRoutineId(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Back</button>
+          <h2 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",margin:"0 0 6px"}}>{editingStretch?"Edit Stretch":"Add Stretch"}</h2>
+          <p style={{fontFamily:F.b,fontSize:12,color:"#BBB",margin:"0 0 20px"}}>{DAY_LABELS[selectedDay]} · {(dayRoutines.find(r=>r.id===activeRoutineId)||{}).name || ""}</p>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:12}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:8}}>Stretch Name</div>
+            <input value={stretchName} onChange={e=>setStretchName(e.target.value)} placeholder="e.g. Hip Flexor Stretch"
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,fontSize:14,fontFamily:F.b,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          <div style={{background:"#FFF",borderRadius:10,padding:16,border:"1px solid #E8E4DE",marginBottom:20}}>
+            <div style={{fontFamily:F.h,fontSize:13,fontWeight:700,color:"#2A2520",marginBottom:4}}>Timer Protocol</div>
+            <p style={{fontFamily:F.b,fontSize:11,color:"#BBB",margin:"0 0 12px"}}>Drives the guided timer for this stretch.</p>
+
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>setStretchMode("single")} style={{
+                flex:1,padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",letterSpacing:0.5,
+                background:stretchMode==="single"?"#2A2520":"#F5F2ED",border:`1.5px solid ${stretchMode==="single"?"#2A2520":"#E8E4DE"}`,
+                color:stretchMode==="single"?"#F5F2ED":"#999",
+              }}>SINGLE HOLD</button>
+              <button onClick={()=>setStretchMode("reps")} style={{
+                flex:1,padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,cursor:"pointer",letterSpacing:0.5,
+                background:stretchMode==="reps"?"#2A2520":"#F5F2ED",border:`1.5px solid ${stretchMode==="reps"?"#2A2520":"#E8E4DE"}`,
+                color:stretchMode==="reps"?"#F5F2ED":"#999",
+              }}>MULTIPLE REPS</button>
+            </div>
+
+            {stretchMode==="single" ? (
+              <div>
+                <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>HOLD (SEC)</div>
+                <input type="number" min="1" value={stretchHoldSec} onChange={e=>setStretchHoldSec(e.target.value)}
+                  style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>REPS</div>
+                  <input type="number" min="1" value={stretchReps} onChange={e=>setStretchReps(e.target.value)}
+                    style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+                </div>
+                <div>
+                  <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>HOLD (SEC)</div>
+                  <input type="number" min="1" value={stretchHoldSec} onChange={e=>setStretchHoldSec(e.target.value)}
+                    style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+                </div>
+                <div style={{gridColumn:"1 / -1"}}>
+                  <div style={{fontFamily:F.m,fontSize:10,color:"#999",marginBottom:5,letterSpacing:0.5}}>REST BETWEEN REPS (SEC)</div>
+                  <input type="number" min="0" value={stretchRestSec} onChange={e=>setStretchRestSec(e.target.value)}
+                    style={{width:"100%",padding:"9px 10px",borderRadius:8,fontSize:14,fontWeight:700,fontFamily:F.h,background:"#F5F2ED",border:"1.5px solid #E8E4DE",color:"#2A2520",outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button onClick={saveStretch} disabled={!stretchName.trim()} style={{
+            width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,
+            cursor:stretchName.trim()?"pointer":"default",background:stretchName.trim()?"#2A2520":"#E8E4DE",border:"none",
+            color:stretchName.trim()?"#F5F2ED":"#BBB",letterSpacing:3,
+          }}>{editingStretch?"SAVE CHANGES":"ADD STRETCH"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ GUIDED TIMER ═══════════
+  if (view === "timer") {
+    const isDone = timerIndex >= timerSeq.length;
+    const step = !isDone ? timerSeq[timerIndex] : null;
+    const PHASE_META = {
+      hold: { label:"HOLD", color:STRETCH_ACCENT, bg:"rgba(91,127,166,0.08)" },
+      rest: { label:"REST", color:"#3A8A7A", bg:"rgba(58,138,122,0.08)" },
+      nextup: { label:"NEXT UP", color:"#C49A2A", bg:"rgba(196,154,42,0.08)" },
+    };
+    const meta = step ? PHASE_META[step.type] : null;
+    const totalSteps = timerSeq.length;
+
+    return(
+      <div style={S.page}><TopoBackground/>
+        <div style={{position:"relative",zIndex:1}}>
+          <button onClick={timerExit} style={{display:"flex",alignItems:"center",gap:6,background:"#FFF",border:"1.5px solid #E8E4DE",borderRadius:20,color:"#2A2520",fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:16,padding:"8px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>← Exit</button>
+          <h2 style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520",margin:"0 0 24px"}}>{timerRoutineName}</h2>
+
+          {!isDone ? (
+            <>
+              <div style={{background:meta.bg,border:`2px solid ${meta.color}`,borderRadius:20,padding:"36px 20px",textAlign:"center",marginBottom:20}}>
+                <div style={{fontFamily:F.m,fontSize:13,fontWeight:800,letterSpacing:3,color:meta.color,marginBottom:10}}>{meta.label}</div>
+                <div style={{fontFamily:F.h,fontSize:20,fontWeight:800,color:"#2A2520",marginBottom:10}}>{step.name}</div>
+                <div style={{fontFamily:F.h,fontSize:60,fontWeight:800,color:"#2A2520",lineHeight:1}}>{timerRemaining}</div>
+                {step.type!=="nextup" && step.totalReps>1 && (
+                  <div style={{fontFamily:F.m,fontSize:11,color:"#999",marginTop:14,letterSpacing:1}}>REP {step.rep} OF {step.totalReps}</div>
+                )}
+              </div>
+
+              <div style={{display:"flex",gap:6,marginBottom:20}}>
+                {timerSeq.map((s,i)=>(
+                  <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<timerIndex?"#2A2520":i===timerIndex?PHASE_META[s.type].color:"#E8E4DE"}}/>
+                ))}
+              </div>
+
+              <div style={{display:"flex",gap:10}}>
+                {!timerRunning ? (
+                  <button onClick={timerStart} style={{flex:1,padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2}}>{!timerStarted?"START":"RESUME"}</button>
+                ) : (
+                  <button onClick={timerPause} style={{flex:1,padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#2A2520",letterSpacing:2}}>PAUSE</button>
+                )}
+                <button onClick={timerSkip} style={{padding:"16px 20px",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,cursor:"pointer",background:"#FFF",border:"1.5px solid #E8E4DE",color:"#999",letterSpacing:1}}>SKIP ›</button>
+              </div>
+              <p style={{fontFamily:F.b,fontSize:11,color:"#BBB",textAlign:"center",marginTop:14}}>Step {timerIndex+1} of {totalSteps}</p>
+            </>
+          ) : (
+            <div style={{textAlign:"center",paddingTop:20}}>
+              <div style={{fontSize:48,marginBottom:10}}>🎉</div>
+              <h3 style={{fontFamily:F.h,fontSize:22,fontWeight:800,color:"#2A2520",marginBottom:6}}>Routine Complete</h3>
+              <p style={{fontFamily:F.b,fontSize:13,color:"#999",marginBottom:28}}>Nice work stretching it out.</p>
+              <button onClick={()=>setView("home")} style={{width:"100%",padding:"16px 0",borderRadius:10,fontSize:13,fontWeight:800,fontFamily:F.m,cursor:"pointer",background:"#2A2520",border:"none",color:"#F5F2ED",letterSpacing:2}}>DONE</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+
+
 function RootApp() {
   const [page, setPage] = useState("fingers");
   return (
@@ -2810,9 +3323,16 @@ function RootApp() {
             border:`1.5px solid ${page==="climbs"?"#2A2520":"#E8E4DE"}`,
             color:page==="climbs"?"#F5F2ED":"#999",
           }}>CLIMBS</button>
+          <button onClick={()=>setPage("stretch")} style={{
+            flex:1,padding:"9px 0",borderRadius:8,fontSize:11,fontWeight:800,fontFamily:F.m,
+            cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+            background:page==="stretch"?"#2A2520":"#FFF",
+            border:`1.5px solid ${page==="stretch"?"#2A2520":"#E8E4DE"}`,
+            color:page==="stretch"?"#F5F2ED":"#999",
+          }}>STRETCH</button>
         </div>
       </div>
-      {page==="fingers" ? <FingerApp/> : <ClimbApp/>}
+      {page==="fingers" ? <FingerApp/> : page==="climbs" ? <ClimbApp/> : <StretchApp/>}
     </div>
   );
 }
