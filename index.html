@@ -2800,6 +2800,66 @@ function emptyStretchRoutines() {
   return obj;
 }
 
+const STRETCH_CSV_HEADER = ["Day","RoutineId","RoutineName","StretchId","StretchName","Reps","HoldSec","RestSec"];
+
+function buildStretchCSV(routinesData) {
+  const rows = [STRETCH_CSV_HEADER];
+  DAYS_OF_WEEK.forEach(day => {
+    (routinesData[day]||[]).forEach(routine => {
+      if (!routine.stretches || routine.stretches.length===0) {
+        // Still emit a row so an empty (stretch-less) routine survives a backup/restore round trip
+        rows.push([day, routine.id, routine.name, "", "", "", "", ""]);
+      } else {
+        routine.stretches.forEach(s => {
+          rows.push([day, routine.id, routine.name, s.id, s.name, s.reps, s.holdSec, s.restSec]);
+        });
+      }
+    });
+  });
+  return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+
+function parseStretchCSV(text, existingData) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error("Empty or invalid CSV");
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const iDay=idx("Day"), iRId=idx("RoutineId"), iRName=idx("RoutineName"),
+        iSId=idx("StretchId"), iSName=idx("StretchName"), iReps=idx("Reps"), iHold=idx("HoldSec"), iRest=idx("RestSec");
+  if (iDay===-1 || iRId===-1) throw new Error("Missing required columns");
+
+  const result = {};
+  DAYS_OF_WEEK.forEach(day => { result[day] = JSON.parse(JSON.stringify(existingData[day] || [])); });
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.every(c => c==="")) continue;
+    const day = row[iDay];
+    if (!DAYS_OF_WEEK.includes(day)) continue;
+
+    let routine = result[day].find(rt => String(rt.id) === String(row[iRId]));
+    if (!routine) {
+      routine = { id: Number(row[iRId]) || (Date.now()+Math.random()), name: row[iRName] || "Routine", stretches: [] };
+      result[day].push(routine);
+    } else {
+      routine.name = row[iRName] || routine.name;
+    }
+    if (row[iSId]) {
+      const sId = Number(row[iSId]) || (Date.now()+Math.random());
+      const fields = {
+        name: row[iSName] || "Stretch",
+        reps: Math.max(1, Number(row[iReps])||1),
+        holdSec: Math.max(1, Number(row[iHold])||30),
+        restSec: Math.max(0, Number(row[iRest])||0),
+      };
+      const existingStretch = routine.stretches.find(s => String(s.id) === String(sId));
+      if (existingStretch) Object.assign(existingStretch, fields);
+      else routine.stretches.push({ id: sId, ...fields });
+    }
+  }
+  return result;
+}
+
 function StretchApp() {
   const [view, setView] = useState("home");
   const [routines, setRoutines] = useState(emptyStretchRoutines());
@@ -2834,6 +2894,8 @@ function StretchApp() {
   const timerIntervalRef = useRef(null);
 
   const dataRef = useRef(routines);
+  const csvInputRef = useRef(null);
+  const [backupStatus, setBackupStatus] = useState(null);
   dataRef.current = routines;
 
   useEffect(() => {
@@ -2861,6 +2923,42 @@ function StretchApp() {
   const persist = (next) => {
     setRoutines(next); dataRef.current = next;
     try { localStorage.setItem(STRETCH_STORAGE_KEY, JSON.stringify(next)); } catch(e) {}
+  };
+
+  const exportStretchCSV = () => {
+    try {
+      const csv = buildStretchCSV(dataRef.current);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stretch-routines-backup-${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      setBackupStatus("exported");
+    } catch(e) {
+      setBackupStatus("error");
+    }
+    setTimeout(() => setBackupStatus(null), 3000);
+  };
+
+  const importStretchCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const merged = parseStretchCSV(ev.target.result, dataRef.current);
+        persist(merged);
+        setBackupStatus("restored");
+      } catch(err) {
+        setBackupStatus("error");
+      }
+      setTimeout(() => setBackupStatus(null), 3000);
+    };
+    reader.onerror = () => { setBackupStatus("error"); setTimeout(() => setBackupStatus(null), 3000); };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   // ─── Routine CRUD ───────────────────────────────────
@@ -3138,6 +3236,30 @@ function StretchApp() {
             width:"100%",padding:"14px 0",borderRadius:10,fontSize:12,fontWeight:700,fontFamily:F.m,
             cursor:"pointer",background:"transparent",border:"1.5px dashed #DDD8D0",color:"#999",letterSpacing:2,
           }}>+ ADD ROUTINE TO {DAY_LABELS[selectedDay]}</button>
+
+          <div style={{display:"flex",alignItems:"center",gap:12,margin:"28px 0 16px"}}>
+            <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+            <span style={{fontFamily:F.m,fontSize:10,color:"#AAA",letterSpacing:3}}>DATA</span>
+            <div style={{flex:1,height:1,background:"#DDD8D0"}}/>
+          </div>
+          <p style={{fontFamily:F.b,fontSize:11,color:"#3A8A7A",marginBottom:10}}>✓ Your routines are saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device.</p>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={exportStretchCSV} style={{
+              flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+              cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+              background:backupStatus==="exported"?"#2A2520":"#FFF",
+              border:`1.5px solid ${backupStatus==="exported"?"#2A2520":"#E8E4DE"}`,
+              color:backupStatus==="exported"?"#F5F2ED":"#2A2520",
+            }}>{backupStatus==="exported"?"DOWNLOADED ✓":"EXPORT CSV"}</button>
+            <button onClick={()=>csvInputRef.current?.click()} style={{
+              flex:1,padding:"12px 0",borderRadius:8,fontSize:11,fontWeight:700,fontFamily:F.m,
+              cursor:"pointer",letterSpacing:2,transition:"all 0.2s",
+              background:backupStatus==="restored"?"#3A8A7A":backupStatus==="error"?"#C45A5A":"#FFF",
+              border:`1.5px solid ${backupStatus==="restored"?"#3A8A7A":backupStatus==="error"?"#C45A5A":"#E8E4DE"}`,
+              color:backupStatus==="restored"||backupStatus==="error"?"#FFF":"#2A2520",
+            }}>{backupStatus==="restored"?"RESTORED ✓":backupStatus==="error"?"INVALID FILE":"RESTORE CSV"}</button>
+          </div>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={importStretchCSV} style={{display:"none"}}/>
         </div>
       </div>
     );
