@@ -8026,12 +8026,17 @@ function StretchApp() {
       }, durMs + 80);
     } catch (e) {}
   };
-  const cueForPhase = type => {
-    if (type === "hold") playBeep(880, 180);else if (type === "rest" || type === "nextup") playBeep(440, 160);else if (type === "done") {
-      playBeep(660, 120);
-      setTimeout(() => playBeep(880, 120), 160);
-      setTimeout(() => playBeep(1100, 220), 320);
-    }
+  // Short tick for the 3-2-1 countdown into the end of whatever's currently timing.
+  const playTick = () => playBeep(880, 90);
+  // A single, slightly longer, lower-pitched beep marking that one phase (a hold, a rest, etc.)
+  // has just ended — distinct from both the quick ticks and the full routine-complete sound below.
+  const playPhaseComplete = () => playBeep(600, 280);
+  // A three-note ascending phrase reserved for "the whole routine is done" — meant to be
+  // unmistakably different from a single phase ending, since it means something bigger.
+  const playRoutineComplete = () => {
+    playBeep(660, 120);
+    setTimeout(() => playBeep(880, 120), 160);
+    setTimeout(() => playBeep(1100, 220), 320);
   };
   const openTimer = routine => {
     const stretches = routine.stretches || [];
@@ -8046,10 +8051,7 @@ function StretchApp() {
     setView("timer");
   };
   const timerStart = () => {
-    if (!timerStarted) {
-      cueForPhase(timerSeq[0]?.type);
-      setTimerStarted(true);
-    }
+    setTimerStarted(true);
     timerEndRef.current = Date.now() + timerRemaining * 1000;
     setTimerRunning(true);
     requestWakeLock();
@@ -8064,11 +8066,11 @@ function StretchApp() {
     if (nextIndex >= timerSeq.length) {
       setTimerIndex(nextIndex);
       setTimerRunning(false);
-      cueForPhase("done");
+      playRoutineComplete();
       releaseWakeLock();
       return;
     }
-    cueForPhase(timerSeq[nextIndex].type);
+    playPhaseComplete();
     setTimerIndex(nextIndex);
     setTimerRemaining(timerSeq[nextIndex].duration);
     timerEndRef.current = Date.now() + timerSeq[nextIndex].duration * 1000;
@@ -8107,6 +8109,13 @@ function StretchApp() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [timerRunning]);
+
+  // Fires a short tick each time the countdown lands on 3, 2, or 1 — this only re-runs when
+  // timerRemaining actually changes value, so it naturally fires once per second, not once per tick.
+  useEffect(() => {
+    if (!timerRunning) return;
+    if (timerRemaining === 3 || timerRemaining === 2 || timerRemaining === 1) playTick();
+  }, [timerRemaining, timerRunning]);
   useEffect(() => {
     if (!timerRunning) return;
     timerIntervalRef.current = setInterval(() => {
