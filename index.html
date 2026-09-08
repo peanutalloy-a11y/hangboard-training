@@ -1449,10 +1449,22 @@ function FingerApp() {
     }
     return seq;
   };
+
+  // A single, reused audio context — rather than a fresh one per beep — unlocked once by a real
+  // tap on Start. Mobile browsers (iOS Safari especially) only allow sound to play if it's tied
+  // to a genuine user gesture; creating a new, never-unlocked context per beep stays silent.
+  const audioCtxRef = useRef(null);
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtxRef.current = new Ctx();
+    }
+    return audioCtxRef.current;
+  };
   const playBeep = (freq, durMs) => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new Ctx();
+      const ctx = getAudioCtx();
+      if (ctx.state === "suspended") ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = freq;
@@ -1461,11 +1473,6 @@ function FingerApp() {
       gain.gain.setValueAtTime(0.16, ctx.currentTime);
       osc.start();
       osc.stop(ctx.currentTime + durMs / 1000);
-      setTimeout(() => {
-        try {
-          ctx.close();
-        } catch (e) {}
-      }, durMs + 80);
     } catch (e) {}
   };
   const cueForPhase = type => {
@@ -1542,6 +1549,13 @@ function FingerApp() {
       cueForPhase(timerSeq[0]?.type);
       setTimerStarted(true);
     }
+    // Explicitly unlock audio here too, synchronously inside this real tap — belt-and-braces
+    // alongside the cueForPhase call above, since that's what lets later timer-driven beeps
+    // (not tied to a tap) actually produce sound on mobile browsers.
+    try {
+      const ctx = getAudioCtx();
+      if (ctx.state === "suspended") ctx.resume();
+    } catch (e) {}
     timerEndRef.current = Date.now() + timerRemaining * 1000;
     setTimerRunning(true);
     requestWakeLock();
@@ -8007,10 +8021,22 @@ function StretchApp() {
     });
     return seq;
   };
+
+  // A single, reused audio context — rather than a fresh one per beep — unlocked once by a real
+  // tap on Start. Mobile browsers (iOS Safari especially) only allow sound to play if it's tied
+  // to a genuine user gesture; creating a new, never-unlocked context per beep stays silent.
+  const audioCtxRef = useRef(null);
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtxRef.current = new Ctx();
+    }
+    return audioCtxRef.current;
+  };
   const playBeep = (freq, durMs) => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new Ctx();
+      const ctx = getAudioCtx();
+      if (ctx.state === "suspended") ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = freq;
@@ -8019,11 +8045,6 @@ function StretchApp() {
       gain.gain.setValueAtTime(0.16, ctx.currentTime);
       osc.start();
       osc.stop(ctx.currentTime + durMs / 1000);
-      setTimeout(() => {
-        try {
-          ctx.close();
-        } catch (e) {}
-      }, durMs + 80);
     } catch (e) {}
   };
   // Short tick for the 3-2-1 countdown into the end of whatever's currently timing.
@@ -8052,6 +8073,12 @@ function StretchApp() {
   };
   const timerStart = () => {
     setTimerStarted(true);
+    // Explicitly unlock audio here, synchronously inside this real tap — this is what lets every
+    // later tick/beep (triggered from a timer, not a tap) actually produce sound.
+    try {
+      const ctx = getAudioCtx();
+      if (ctx.state === "suspended") ctx.resume();
+    } catch (e) {}
     timerEndRef.current = Date.now() + timerRemaining * 1000;
     setTimerRunning(true);
     requestWakeLock();
