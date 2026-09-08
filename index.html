@@ -7689,6 +7689,7 @@ function StretchApp() {
   const [timerRemaining, setTimerRemaining] = useState(0);
   const timerEndRef = useRef(null);
   const timerIntervalRef = useRef(null);
+  const wakeLockRef = useRef(null);
   const dataRef = useRef(routines);
   const csvInputRef = useRef(null);
   const [backupStatus, setBackupStatus] = useState(null);
@@ -8008,10 +8009,12 @@ function StretchApp() {
     }
     timerEndRef.current = Date.now() + timerRemaining * 1000;
     setTimerRunning(true);
+    requestWakeLock();
   };
   const timerPause = () => {
     if (timerEndRef.current) setTimerRemaining(Math.max(0, Math.ceil((timerEndRef.current - Date.now()) / 1000)));
     setTimerRunning(false);
+    releaseWakeLock();
   };
   const timerAdvance = () => {
     const nextIndex = timerIndex + 1;
@@ -8019,6 +8022,7 @@ function StretchApp() {
       setTimerIndex(nextIndex);
       setTimerRunning(false);
       cueForPhase("done");
+      releaseWakeLock();
       return;
     }
     cueForPhase(timerSeq[nextIndex].type);
@@ -8031,8 +8035,35 @@ function StretchApp() {
   };
   const timerExit = () => {
     setTimerRunning(false);
+    releaseWakeLock();
     setView("home");
   };
+
+  // Keeps the screen from auto-locking while a routine is actively running, so you're not
+  // getting kicked back to a locked phone mid-hold. Fails silently on anything that doesn't
+  // support this (or won't grant it) — the timer works exactly the same either way.
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      }
+    } catch (e) {/* not supported, or refused (e.g. low battery) — timer still works normally */}
+  };
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  };
+  useEffect(() => {
+    // If the phone is locked/backgrounded mid-hold, the OS releases the wake lock itself — if the
+    // person comes back while the timer is still meant to be running, quietly try to reacquire it.
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && timerRunning) requestWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [timerRunning]);
   useEffect(() => {
     if (!timerRunning) return;
     timerIntervalRef.current = setInterval(() => {
