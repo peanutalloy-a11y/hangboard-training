@@ -3959,20 +3959,53 @@ function formatResetCountdown(resetDateStr, intervalDays) {
   return `${days} day${days !== 1 ? "s" : ""} till reset`;
 }
 
+// Formats "today" as a plain YYYY-MM-DD string using LOCAL date components — deliberately not
+// toISOString(), which converts to UTC first and can silently roll over to the wrong calendar day
+// depending on the time of day and timezone (e.g. showing tomorrow's date in the evening).
+function todayLocalISODate() {
+  const now = new Date();
+  const y = now.getFullYear(),
+    m = String(now.getMonth() + 1).padStart(2, "0"),
+    d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Finds the most recent scheduled reset that has actually come due — the fixed anchor date itself
+// for a one-off sector, or the latest cycle mark that's already passed for a recurring one. Returns
+// null if nothing has come due yet (the anchor is still upcoming). This never moves the anchor
+// itself, so it stays a stable source of truth regardless of when you actually get around to
+// confirming it.
+function getLatestResetBoundary(resetDateStr, intervalDays) {
+  if (!resetDateStr) return null;
+  const ref = new Date(resetDateStr + "T00:00:00");
+  if (isNaN(ref.getTime())) return null;
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysUntilRef = Math.round((ref - startOfToday) / (1000 * 60 * 60 * 24));
+  if (daysUntilRef >= 0) return null; // anchor hasn't happened yet — nothing due to confirm
+  const interval = Number(intervalDays) || 0;
+  if (interval <= 0) return resetDateStr; // one-off: the anchor itself is the (already past) boundary
+  const elapsed = -daysUntilRef;
+  const cyclesFullyPassed = Math.floor(elapsed / interval);
+  const boundary = new Date(ref);
+  boundary.setDate(boundary.getDate() + cyclesFullyPassed * interval);
+  const y = boundary.getFullYear(),
+    m = String(boundary.getMonth() + 1).padStart(2, "0"),
+    d = String(boundary.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 // Whether a sector has missed its reset — deliberately independent of the rolling countdown
 // above. For a recurring sector, the displayed countdown intentionally rolls forward to the next
 // cycle once one passes, so it never "gets stuck" — but that would also quietly hide a reset you
-// forgot to actually do. This checks the raw reference date directly instead, so once at least one
-// full day has passed it stays flagged no matter how many cycles the display rolls through
-// afterward — only clearing when the sector is actually reset (which moves the reference date).
-function isSectorOverdue(resetDateStr) {
-  if (!resetDateStr) return false;
-  const now = new Date();
-  const ref = new Date(resetDateStr + "T00:00:00");
-  if (isNaN(ref.getTime())) return false;
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const daysUntilRef = Math.round((ref - startOfToday) / (1000 * 60 * 60 * 24));
-  return daysUntilRef < 0;
+// forgot to actually do. This compares against the last time you actually confirmed a reset
+// (lastConfirmedDate), not the schedule's anchor date itself — the anchor never moves, so the
+// schedule can't quietly drift just because you reset it a few days later than planned.
+function isSectorOverdue(resetDateStr, intervalDays, lastConfirmedDate) {
+  const boundary = getLatestResetBoundary(resetDateStr, intervalDays);
+  if (!boundary) return false;
+  if (!lastConfirmedDate) return true;
+  return lastConfirmedDate < boundary;
 }
 
 // Compress an uploaded image via canvas before storing — keeps localStorage small.
@@ -4113,7 +4146,8 @@ function emptySectorLog() {
     startDate: new Date().toISOString(),
     completedGroups: [],
     resetDate: null,
-    resetIntervalDays: null
+    resetIntervalDays: null,
+    lastConfirmedDate: null
   };
 }
 function mergeLogs(a, b) {
@@ -4218,7 +4252,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays"];
+const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate"];
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
   const s = String(val);
@@ -4228,23 +4262,23 @@ function csvEscape(val) {
 function buildClimbCSV(data) {
   const rows = [CSV_HEADER];
   if (data.gymMap) {
-    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", ""]);
+    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", "", ""]);
   }
   data.sectors.forEach(pin => {
-    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", ""]);
+    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", "", ""]);
   });
   Object.entries(data.sectorLogs).forEach(([sectorName, log]) => {
     // A sector's reset schedule lives on the sector log itself, not on any individual climb, so it
     // needs its own row to survive a backup — otherwise it's silently lost on export/restore.
     if (log.resetDate || log.resetIntervalDays) {
-      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || ""]);
+      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || "", log.lastConfirmedDate || ""]);
     }
     log.currentProblems.forEach(p => {
-      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", ""]);
+      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", ""]);
     });
     log.archivedResets.forEach(reset => {
       reset.problems.forEach(p => {
-        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", ""]);
+        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", ""]);
       });
     });
   });
@@ -4309,7 +4343,8 @@ function parseClimbCSV(text, existingData) {
     iPhoto = idx("ProblemPhoto"),
     iVideo = idx("VideoLink"),
     iResetDate = idx("ResetDate"),
-    iResetInterval = idx("ResetIntervalDays");
+    iResetInterval = idx("ResetIntervalDays"),
+    iLastConfirmed = idx("LastConfirmedDate");
   if (iType === -1 || iSector === -1) throw new Error("Missing required columns");
   let gymMap = existingData.gymMap;
   const sectorsById = {};
@@ -4335,6 +4370,7 @@ function parseClimbCSV(text, existingData) {
       if (!sectorLogs[sectorName]) sectorLogs[sectorName] = emptySectorLog();
       if (iResetDate !== -1 && row[iResetDate]) sectorLogs[sectorName].resetDate = row[iResetDate];
       if (iResetInterval !== -1 && row[iResetInterval]) sectorLogs[sectorName].resetIntervalDays = row[iResetInterval];
+      if (iLastConfirmed !== -1 && row[iLastConfirmed]) sectorLogs[sectorName].lastConfirmedDate = row[iLastConfirmed];
     } else if (type === "problem") {
       const sectorName = row[iSector];
       const problem = {
@@ -4791,10 +4827,12 @@ function ClimbApp() {
       archivedResets: [archived, ...log.archivedResets],
       startDate: new Date().toISOString(),
       completedGroups: [],
-      // A recurring sector keeps its schedule going — today becomes the new reference point.
-      // A one-off sector's date has done its job, so it clears completely, same as before.
-      resetDate: isRecurring ? new Date().toISOString().slice(0, 10) : null,
-      resetIntervalDays: isRecurring ? log.resetIntervalDays : null
+      // A recurring sector's schedule (anchor date + interval) is the gym's actual, fixed cadence —
+      // it never gets rewritten here, even if you reset a few days later than planned, so the
+      // schedule can't quietly drift. Only record that today's the last time you confirmed it.
+      resetDate: isRecurring ? log.resetDate : null,
+      resetIntervalDays: isRecurring ? log.resetIntervalDays : null,
+      lastConfirmedDate: isRecurring ? todayLocalISODate() : null
     };
     persist({
       ...cur,
@@ -5557,7 +5595,7 @@ function ClimbApp() {
       const allGroupKeys = sectorGroupKeys(log.currentProblems, gradeMode);
       const completedBadges = (log.completedGroups || []).filter(g => allGroupKeys.includes(g));
       const resetCountdown = formatResetCountdown(log.resetDate, log.resetIntervalDays);
-      const resetOverdue = isSectorOverdue(log.resetDate);
+      const resetOverdue = isSectorOverdue(log.resetDate, log.resetIntervalDays, log.lastConfirmedDate);
       return /*#__PURE__*/React.createElement(Stagger, {
         key: name,
         delay: 180 + idx * 40
