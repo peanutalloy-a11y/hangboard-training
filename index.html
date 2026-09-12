@@ -3959,6 +3959,22 @@ function formatResetCountdown(resetDateStr, intervalDays) {
   return `${days} day${days !== 1 ? "s" : ""} till reset`;
 }
 
+// Whether a sector has missed its reset — deliberately independent of the rolling countdown
+// above. For a recurring sector, the displayed countdown intentionally rolls forward to the next
+// cycle once one passes, so it never "gets stuck" — but that would also quietly hide a reset you
+// forgot to actually do. This checks the raw reference date directly instead, so once at least one
+// full day has passed it stays flagged no matter how many cycles the display rolls through
+// afterward — only clearing when the sector is actually reset (which moves the reference date).
+function isSectorOverdue(resetDateStr) {
+  if (!resetDateStr) return false;
+  const now = new Date();
+  const ref = new Date(resetDateStr + "T00:00:00");
+  if (isNaN(ref.getTime())) return false;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysUntilRef = Math.round((ref - startOfToday) / (1000 * 60 * 60 * 24));
+  return daysUntilRef < 0;
+}
+
 // Compress an uploaded image via canvas before storing — keeps localStorage small.
 // A raw phone photo can be 3-8MB; this brings it down to roughly 100-300KB.
 function compressImage(file, maxDim = 1280, quality = 0.72) {
@@ -5541,6 +5557,7 @@ function ClimbApp() {
       const allGroupKeys = sectorGroupKeys(log.currentProblems, gradeMode);
       const completedBadges = (log.completedGroups || []).filter(g => allGroupKeys.includes(g));
       const resetCountdown = formatResetCountdown(log.resetDate, log.resetIntervalDays);
+      const resetOverdue = isSectorOverdue(log.resetDate);
       return /*#__PURE__*/React.createElement(Stagger, {
         key: name,
         delay: 180 + idx * 40
@@ -5580,11 +5597,11 @@ function ClimbApp() {
           fontFamily: F.m,
           fontSize: 9,
           fontWeight: 700,
-          color: resetCountdown === "0 days until reset" ? "#C4453A" : "#C49A2A",
+          color: resetOverdue ? "#C4453A" : "#C49A2A",
           marginTop: 3,
           letterSpacing: 0.3
         }
-      }, "⏱ ", resetCountdown), completedBadges.length > 0 && /*#__PURE__*/React.createElement("div", {
+      }, "⏱ ", resetOverdue ? "OVERDUE — " : "", resetCountdown), completedBadges.length > 0 && /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 4,
