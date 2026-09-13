@@ -4538,6 +4538,7 @@ function ClimbApp() {
   const [prefillSector, setPrefillSector] = useState("");
   const [historySector, setHistorySector] = useState(null);
   const [expandedArchive, setExpandedArchive] = useState(null);
+  const [expandedHistoryProblem, setExpandedHistoryProblem] = useState(null);
   const fileInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const [backupStatus, setBackupStatus] = useState(null);
@@ -6512,6 +6513,7 @@ function ClimbApp() {
         setView("home");
         setHistorySector(null);
         setExpandedArchive(null);
+        setExpandedHistoryProblem(null);
       },
       style: {
         display: "flex",
@@ -6565,6 +6567,13 @@ function ClimbApp() {
       const pr = reset.problems.filter(p => p.status === "project").length;
       const resetTotal = reset.problems.length;
       const resetFlashRate = resetTotal > 0 ? Math.round(f / resetTotal * 100) : 0;
+      const gradeMode = sectorUsesGradeMode(reset.problems);
+      const groups = {};
+      reset.problems.forEach(p => {
+        const key = gradeMode ? (p.grade || "").trim() : p.color;
+        (groups[key] = groups[key] || []).push(p);
+      });
+      const groupKeys = sectorGroupKeys(reset.problems, gradeMode);
       return /*#__PURE__*/React.createElement("div", {
         key: reset.id,
         style: {
@@ -6574,7 +6583,10 @@ function ClimbApp() {
           overflow: "hidden"
         }
       }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => setExpandedArchive(expandedArchive === reset.id ? null : reset.id),
+        onClick: () => {
+          setExpandedArchive(expandedArchive === reset.id ? null : reset.id);
+          setExpandedHistoryProblem(null);
+        },
         style: {
           width: "100%",
           padding: "12px 14px",
@@ -6685,17 +6697,41 @@ function ClimbApp() {
           letterSpacing: 1,
           marginTop: 2
         }
-      }, "FLASH RATE"))), reset.problems.map(p => {
+      }, "FLASH RATE"))), groupKeys.map(groupKey => /*#__PURE__*/React.createElement("div", {
+        key: groupKey,
+        style: {
+          marginBottom: 4
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: F.m,
+          fontSize: 9,
+          fontWeight: 700,
+          color: "#BBB",
+          letterSpacing: 1,
+          padding: "8px 0 4px"
+        }
+      }, gradeMode ? groupKey : groupKey.toUpperCase()), groups[groupKey].map(p => {
         const colorMeta = HOLD_COLORS.find(c => c.name === p.color) || HOLD_COLORS[0];
         const statusMeta = STATUS_META[p.status];
+        const isOpen = expandedHistoryProblem === p.id;
         return /*#__PURE__*/React.createElement("div", {
           key: p.id,
+          style: {
+            borderBottom: "1px solid #F5F2ED"
+          }
+        }, /*#__PURE__*/React.createElement("button", {
+          onClick: () => setExpandedHistoryProblem(isOpen ? null : p.id),
           style: {
             display: "flex",
             alignItems: "center",
             gap: 8,
+            width: "100%",
             padding: "8px 0",
-            borderBottom: "1px solid #F5F2ED"
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            textAlign: "left"
           }
         }, /*#__PURE__*/React.createElement("span", {
           style: {
@@ -6712,24 +6748,14 @@ function ClimbApp() {
             color: "#2A2520",
             flex: 1
           }
-        }, p.grade || colorMeta.name), p.photoLink && /*#__PURE__*/React.createElement("a", {
-          href: p.photoLink,
-          target: "_blank",
-          rel: "noopener noreferrer",
+        }, p.grade || colorMeta.name), p.photoLink && /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 13,
-            textDecoration: "none"
-          },
-          title: "View photo"
-        }, "📷"), p.videoLink && /*#__PURE__*/React.createElement("a", {
-          href: p.videoLink,
-          target: "_blank",
-          rel: "noopener noreferrer",
+            fontSize: 13
+          }
+        }, "📷"), p.videoLink && /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 13,
-            textDecoration: "none"
-          },
-          title: "Watch video"
+            fontSize: 13
+          }
         }, "🎥"), /*#__PURE__*/React.createElement("span", {
           style: {
             fontFamily: F.m,
@@ -6737,8 +6763,38 @@ function ClimbApp() {
             fontWeight: 700,
             color: statusMeta.color
           }
-        }, statusMeta.label, p.status !== "flash" && p.attempts ? ` ×${p.attempts}` : ""));
-      }), /*#__PURE__*/React.createElement("button", {
+        }, statusMeta.label, p.status !== "flash" && p.attempts ? ` ×${p.attempts}` : ""), /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: "#CCC",
+            fontSize: 11,
+            transition: "transform 0.2s",
+            transform: isOpen ? "rotate(90deg)" : "none"
+          }
+        }, "▸")), isOpen && /*#__PURE__*/React.createElement("div", {
+          style: {
+            padding: "0 0 12px",
+            animation: "fadeUp 0.25s ease"
+          }
+        }, /*#__PURE__*/React.createElement(ClimbPhotoFull, {
+          p: p
+        }), p.videoLink && /*#__PURE__*/React.createElement(VideoEmbed, {
+          link: p.videoLink
+        }), p.notes && /*#__PURE__*/React.createElement("p", {
+          style: {
+            fontSize: 12,
+            color: "#666",
+            margin: "0 0 4px",
+            fontStyle: "italic"
+          }
+        }, "\"", p.notes, "\""), !p.photoLink && !p.videoLink && !p.notes && /*#__PURE__*/React.createElement("p", {
+          style: {
+            fontFamily: F.b,
+            fontSize: 11,
+            color: "#CCC",
+            margin: 0
+          }
+        }, "No photo, video, or notes saved for this climb.")));
+      }))), /*#__PURE__*/React.createElement("button", {
         onClick: () => deleteSectorArchive(historySector, reset.id),
         style: {
           marginTop: 10,
