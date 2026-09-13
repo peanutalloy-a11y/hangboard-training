@@ -32,10 +32,7 @@
 </head>
 <body>
 <div id="root"><div id="boot-loading"><div style="width:28px;height:28px;border:2.5px solid #E8E4DE;border-top-color:#D4663A;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div></div>
-
-<!-- React and ReactDOM are bundled inline below — works fully offline, no CDN needed -->
-<script>
-/**
+<script>/**
  * @license React
  * react.production.min.js
  *
@@ -66,10 +63,8 @@ render:a}};c.isValidElement=M;c.lazy=function(a){return{$$typeof:Aa,_payload:{_s
 c.useEffect=function(a,b){return g.current.useEffect(a,b)};c.useId=function(){return g.current.useId()};c.useImperativeHandle=function(a,b,c){return g.current.useImperativeHandle(a,b,c)};c.useInsertionEffect=function(a,b){return g.current.useInsertionEffect(a,b)};c.useLayoutEffect=function(a,b){return g.current.useLayoutEffect(a,b)};c.useMemo=function(a,b){return g.current.useMemo(a,b)};c.useReducer=function(a,b,c){return g.current.useReducer(a,b,c)};c.useRef=function(a){return g.current.useRef(a)};
 c.useState=function(a){return g.current.useState(a)};c.useSyncExternalStore=function(a,b,c){return g.current.useSyncExternalStore(a,b,c)};c.useTransition=function(){return g.current.useTransition()};c.version="18.3.1"});
 })();
-
 </script>
-<script>
-/**
+<script>/**
  * @license React
  * react-dom.production.min.js
  *
@@ -336,13 +331,8 @@ c,!1,d,e);a[Ja]=b.current;sc(8===a.nodeType?a.parentNode:a);return new Xf(b)};Q.
 var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0===c.unstable_strictMode&&(e=!0),void 0!==c.identifierPrefix&&(f=c.identifierPrefix),void 0!==c.onRecoverableError&&(g=c.onRecoverableError));b=Wi(b,null,a,1,null!=c?c:null,e,!1,f,g);a[Ja]=b.current;sc(a);if(d)for(a=0;a<d.length;a++)c=d[a],e=c._getVersion,e=e(c._source),null==b.mutableSourceEagerHydrationData?b.mutableSourceEagerHydrationData=[c,e]:b.mutableSourceEagerHydrationData.push(c,e);return new Ud(b)};Q.render=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
-
 </script>
-
-<!-- App code, precompiled ahead of time from JSX to plain JavaScript (via Babel, offline, at build time)
-     so the browser never has to do that conversion itself on every load. -->
-<script>
-const {
+<script>const {
   useState,
   useEffect,
   useCallback,
@@ -3924,6 +3914,174 @@ function sectorGroupKeys(problems, gradeMode) {
   return HOLD_COLORS.map(c => c.name).filter(name => present.has(name));
 }
 
+// ─── Analytics helpers ────────────────────────────────
+// Everything here is a pure function over a flat list of logged climbs, so it works the same
+// whether a climb is still active or sitting in an old archived reset — nothing here mutates or
+// depends on component state.
+
+// Flattens every climb ever logged (current + every archived reset, across every sector) into
+// one plain array, each carrying its own logged date — the full history to analyze.
+function allLoggedProblems(data) {
+  const all = [];
+  Object.entries(data.sectorLogs || {}).forEach(([sectorName, log]) => {
+    (log.currentProblems || []).forEach(p => all.push({
+      ...p,
+      sector: sectorName
+    }));
+    (log.archivedResets || []).forEach(reset => {
+      (reset.problems || []).forEach(p => all.push({
+        ...p,
+        sector: sectorName
+      }));
+    });
+  });
+  return all;
+}
+
+// Splits logged climbs into a "current" period and the equivalent "previous" period right before
+// it, so trends can be compared against a like-for-like baseline. "all" has no fixed window to
+// compare against, so it instead splits the full history in half chronologically.
+function splitByRange(problems, rangeKey) {
+  const dated = problems.filter(p => p.date);
+  const sorted = [...dated].sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (sorted.length === 0) return {
+    current: [],
+    previous: [],
+    previousLabel: "EARLIER"
+  };
+  if (rangeKey === "all") {
+    const mid = Math.floor(sorted.length / 2);
+    return {
+      current: sorted.slice(mid),
+      previous: sorted.slice(0, mid),
+      previousLabel: "EARLIER"
+    };
+  }
+  const days = rangeKey === "180" ? 180 : 90;
+  const now = new Date();
+  const currentStart = new Date(now);
+  currentStart.setDate(currentStart.getDate() - days);
+  const previousStart = new Date(now);
+  previousStart.setDate(previousStart.getDate() - days * 2);
+  const current = sorted.filter(p => new Date(p.date) >= currentStart);
+  const previous = sorted.filter(p => {
+    const d = new Date(p.date);
+    return d >= previousStart && d < currentStart;
+  });
+  return {
+    current,
+    previous,
+    previousLabel: `${days === 180 ? "6" : "3"} MONTHS AGO`
+  };
+}
+
+// Flash rate for one color within a set of climbs. Returns null if there's not enough data to
+// say anything meaningful — a single flash isn't "consistent," so this requires at least 3.
+function colorFlashStat(problems, color, minSample = 3) {
+  const forColor = problems.filter(p => p.color === color);
+  if (forColor.length < minSample) return null;
+  const flashes = forColor.filter(p => p.status === "flash").length;
+  return {
+    rate: flashes / forColor.length,
+    count: forColor.length
+  };
+}
+
+// The hardest color (by HOLD_COLORS order) with a flash rate at or above the threshold — walks
+// easiest to hardest and keeps the last one that qualifies, since anything harder that also
+// qualifies is a stronger claim than an easier one.
+function hardestConsistentColor(problems, threshold = 0.7) {
+  let best = null;
+  HOLD_COLORS.forEach(c => {
+    if (colorFlashStat(problems, c.name)) {
+      const s = colorFlashStat(problems, c.name);
+      if (s.rate >= threshold) best = c.name;
+    }
+  });
+  return best;
+}
+
+// Raw counts per color, in HOLD_COLORS order, for the pyramid.
+function colorPyramidCounts(problems) {
+  const counts = {};
+  HOLD_COLORS.forEach(c => {
+    counts[c.name] = problems.filter(p => p.color === c.name).length;
+  });
+  return counts;
+}
+
+// Average attempts among climbs of one color that were actually sent (not flashed, not left as
+// a project) — a flash is 1 attempt by definition, so folding it in would understate genuine
+// multi-try effort at harder colors.
+function avgAttemptsToSend(problems, color) {
+  const sends = problems.filter(p => p.color === color && p.status === "sent" && p.attempts);
+  if (sends.length === 0) return null;
+  return sends.reduce((sum, p) => sum + Number(p.attempts || 1), 0) / sends.length;
+}
+
+// Groups climbs into calendar-month buckets, oldest to newest, ending at the current month.
+function monthlyBuckets(problems, count) {
+  const now = new Date();
+  const buckets = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const label = start.toLocaleDateString('en-US', {
+      month: 'short'
+    }).toUpperCase();
+    buckets.push({
+      label,
+      problems: problems.filter(p => {
+        const d = new Date(p.date);
+        return d >= start && d < end;
+      })
+    });
+  }
+  return buckets;
+}
+
+// Converts a list of values (null = no data that bucket) into an SVG polyline points string,
+// scaled to fit. Returns null if there are fewer than 2 real points to draw a line between.
+function buildTrendPoints(values, width, height, padTop, padBottom) {
+  const real = values.map((v, i) => ({
+    v,
+    i
+  })).filter(d => d.v !== null && d.v !== undefined);
+  if (real.length < 2) return null;
+  const vals = real.map(d => d.v);
+  const min = Math.min(...vals),
+    max = Math.max(...vals);
+  const usableH = height - padTop - padBottom;
+  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
+  // An unchanging value has nothing to scale against — plotting it against a fake range would
+  // pin it to the very bottom of the chart regardless of whether the value itself is high or
+  // low, which reads as "declining" rather than "steady." Center it instead.
+  const isFlat = min === max;
+  const range = isFlat ? 1 : max - min;
+  const toXY = d => ({
+    x: d.i * stepX,
+    y: isFlat ? padTop + usableH / 2 : padTop + usableH - (d.v - min) / range * usableH
+  });
+  return {
+    points: real.map(d => {
+      const {
+        x,
+        y
+      } = toXY(d);
+      return `${x},${y}`;
+    }).join(" "),
+    dots: real.map(d => toXY(d)),
+    first: {
+      ...toXY(real[0]),
+      val: real[0].v
+    },
+    last: {
+      ...toXY(real[real.length - 1]),
+      val: real[real.length - 1].v
+    }
+  };
+}
+
 // Given a reference reset date (which may be the *next* upcoming reset, or a past reset if the
 // sector recurs on a schedule) and an optional interval, works out how many days remain until the
 // next actual reset — rolling forward through however many cycles have already silently elapsed.
@@ -4539,6 +4697,8 @@ function ClimbApp() {
   const [historySector, setHistorySector] = useState(null);
   const [expandedArchive, setExpandedArchive] = useState(null);
   const [expandedHistoryProblem, setExpandedHistoryProblem] = useState(null);
+  const [analyticsRange, setAnalyticsRange] = useState("90");
+  const [analyticsColor, setAnalyticsColor] = useState(null);
   const fileInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const [backupStatus, setBackupStatus] = useState(null);
@@ -6402,7 +6562,24 @@ function ClimbApp() {
           letterSpacing: 1
         }
       }, "CANCEL"))))));
-    })), /*#__PURE__*/React.createElement("div", {
+    })), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("analytics"),
+      style: {
+        width: "100%",
+        padding: "14px 0",
+        borderRadius: 10,
+        fontSize: 12,
+        fontWeight: 800,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#2A2520",
+        border: "none",
+        color: "#F5F2ED",
+        letterSpacing: 2,
+        marginTop: 24,
+        marginBottom: 16
+      }
+    }, "📊 ANALYTICS"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
@@ -6811,6 +6988,615 @@ function ClimbApp() {
         }
       }, "DELETE ARCHIVE")));
     }))));
+  }
+
+  // ═══════════ ANALYTICS ═══════════
+  if (view === "analytics") {
+    const allProblems = allLoggedProblems(data);
+    const {
+      current,
+      previous,
+      previousLabel
+    } = splitByRange(allProblems, analyticsRange);
+    const headlineNow = hardestConsistentColor(current);
+    const headlinePrev = hardestConsistentColor(previous);
+    const idxNow = headlineNow ? HOLD_COLORS.findIndex(c => c.name === headlineNow) : -1;
+    const idxPrev = headlinePrev ? HOLD_COLORS.findIndex(c => c.name === headlinePrev) : -1;
+    const headlineMeta = headlineNow ? HOLD_COLORS.find(c => c.name === headlineNow) : null;
+    const headlineStat = headlineNow ? colorFlashStat(current, headlineNow) : null;
+    const pyramidNow = colorPyramidCounts(current);
+    const pyramidPrev = colorPyramidCounts(previous);
+    const maxNow = Math.max(1, ...Object.values(pyramidNow));
+    const maxPrev = Math.max(1, ...Object.values(pyramidPrev));
+    // Rendered top-to-bottom, so this needs to be hardest-first — the widest, easiest rung
+    // belongs at the bottom of a pyramid, not the top.
+    const pyramidColors = HOLD_COLORS.filter(c => pyramidNow[c.name] > 0 || pyramidPrev[c.name] > 0).reverse();
+
+    // The pyramid/headline deliberately split the range in half for a before/after comparison —
+    // but that means "current" is only the back half of your whole history when range is "all",
+    // which would starve the trend charts of most of your data. They should see the full
+    // history for "all", and just the recent window for 3/6 months.
+    const trendProblems = analyticsRange === "all" ? allProblems : current;
+    const availableColors = HOLD_COLORS.filter(c => trendProblems.some(p => p.color === c.name));
+    const selectedColor = analyticsColor && availableColors.some(c => c.name === analyticsColor) ? analyticsColor : availableColors[availableColors.length - 1]?.name || null;
+    let bucketCount = analyticsRange === "90" ? 3 : analyticsRange === "180" ? 6 : 12;
+    if (analyticsRange === "all" && allProblems.length > 0) {
+      const dated = allProblems.filter(p => p.date).map(p => new Date(p.date));
+      if (dated.length > 0) {
+        const earliest = new Date(Math.min(...dated));
+        const months = (new Date().getFullYear() - earliest.getFullYear()) * 12 + (new Date().getMonth() - earliest.getMonth()) + 1;
+        bucketCount = Math.min(24, Math.max(3, months));
+      }
+    }
+    const buckets = selectedColor ? monthlyBuckets(trendProblems.filter(p => p.color === selectedColor), bucketCount) : [];
+    const flashRateValues = buckets.map(b => b.problems.length > 0 ? Math.round(b.problems.filter(p => p.status === "flash").length / b.problems.length * 100) : null);
+    const attemptsValues = buckets.map(b => {
+      const sends = b.problems.filter(p => p.status === "sent" && p.attempts);
+      return sends.length > 0 ? Math.round(sends.reduce((s, p) => s + Number(p.attempts || 1), 0) / sends.length * 10) / 10 : null;
+    });
+    const flashTrend = buildTrendPoints(flashRateValues, 400, 140, 15, 15);
+    // With up to 24 monthly buckets for "All Time", labeling every single one crams them into
+    // an unreadable smear — thin them out to roughly 6 evenly-spaced labels, always keeping the
+    // most recent one so there's a clear "now" reference point.
+    const labelInterval = Math.max(1, Math.ceil(buckets.length / 6));
+    const attemptsTrend = buildTrendPoints(attemptsValues, 400, 140, 15, 15);
+    const RANGE_LABELS = {
+      "90": "3 MONTHS",
+      "180": "6 MONTHS",
+      "all": "ALL TIME"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: CS.page
+    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        zIndex: 1
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("home"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        borderRadius: 20,
+        color: "#2A2520",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+        marginBottom: 16,
+        padding: "8px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      }
+    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 26,
+        fontWeight: 800,
+        color: "#2A2520",
+        margin: "0 0 2px"
+      }
+    }, "Analytics"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 3,
+        marginBottom: 16
+      }
+    }, "CLIMBING PROGRESS OVER TIME"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        marginBottom: 20
+      }
+    }, ["90", "180", "all"].map(r => /*#__PURE__*/React.createElement("button", {
+      key: r,
+      onClick: () => setAnalyticsRange(r),
+      style: {
+        flex: 1,
+        padding: "9px 0",
+        borderRadius: 8,
+        fontSize: 11,
+        fontWeight: 800,
+        fontFamily: F.m,
+        cursor: "pointer",
+        letterSpacing: 1,
+        background: analyticsRange === r ? "#2A2520" : "#FFF",
+        border: `1.5px solid ${analyticsRange === r ? "#2A2520" : "#E8E4DE"}`,
+        color: analyticsRange === r ? "#F5F2ED" : "#999"
+      }
+    }, RANGE_LABELS[r]))), allProblems.length === 0 ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        padding: "40px 20px"
+      }
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 11,
+        color: "#CCC",
+        letterSpacing: 1
+      }
+    }, "NO CLIMBS LOGGED YET"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 13,
+        color: "#BBB",
+        marginTop: 6
+      }
+    }, "Log a few climbs and check back here to see how you're progressing.")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 12,
+        border: "1px solid #E8E4DE",
+        padding: 18,
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 2,
+        marginBottom: 8
+      }
+    }, "HARDEST CONSISTENT FLASH COLOUR"), headlineMeta ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 16
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        flexShrink: 0,
+        background: headlineMeta.hex,
+        border: "2px solid rgba(0,0,0,0.06)"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#2A2520"
+      }
+    }, headlineMeta.name, " · ", Math.round(headlineStat.rate * 100), "%+ flash rate"), idxPrev === -1 ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#3A8A7A",
+        marginTop: 3
+      }
+    }, "▲ First colour to reach this level") : idxNow > idxPrev ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#3A8A7A",
+        marginTop: 3
+      }
+    }, "▲ Up from ", headlinePrev, ", over the last ", previousLabel.toLowerCase()) : idxNow < idxPrev ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#C4453A",
+        marginTop: 3
+      }
+    }, "▼ Down from ", headlinePrev) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#BBB",
+        marginTop: 3
+      }
+    }, "■ Holding steady at ", headlinePrev), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginTop: 6,
+        lineHeight: 1.4
+      }
+    }, "The hardest colour where at least 7 in 10 attempts are flashes (min. 3 logged), tracked over time."))) : /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#BBB",
+        lineHeight: 1.5
+      }
+    }, "Not enough flashes yet at any one colour to call a consistent level — needs at least 3 climbs at a colour with a 70%+ flash rate.")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        margin: "22px 0 4px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#E8E4DE"
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 2
+      }
+    }, "COLOUR PYRAMID"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#E8E4DE"
+      }
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 12,
+        border: "1px solid #E8E4DE",
+        padding: 18,
+        marginBottom: 16
+      }
+    }, pyramidColors.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#BBB",
+        textAlign: "center"
+      }
+    }, "No climbs logged in this window yet.") : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 20
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 1,
+        marginBottom: 10
+      }
+    }, previousLabel), pyramidColors.map(c => /*#__PURE__*/React.createElement("div", {
+      key: c.name,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 5
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 12,
+        height: 12,
+        borderRadius: 3,
+        flexShrink: 0,
+        background: c.hex
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 14,
+        borderRadius: 3,
+        background: "#3A8A7A",
+        width: `${pyramidPrev[c.name] / maxPrev * 100}%`
+      }
+    }))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 1,
+        marginBottom: 10
+      }
+    }, "NOW"), pyramidColors.map(c => /*#__PURE__*/React.createElement("div", {
+      key: c.name,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 5
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 12,
+        height: 12,
+        borderRadius: 3,
+        flexShrink: 0,
+        background: c.hex
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 14,
+        borderRadius: 3,
+        background: "#C49A2A",
+        width: `${pyramidNow[c.name] / maxNow * 100}%`
+      }
+    })))))), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginTop: 10
+      }
+    }, "Bar length = number of climbs logged at that colour. A widening top means your base is broadening upward, not just moving up.")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        margin: "22px 0 4px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#E8E4DE"
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        color: "#BBB",
+        letterSpacing: 2
+      }
+    }, "PROGRESS BY COLOUR"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#E8E4DE"
+      }
+    })), availableColors.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#BBB",
+        textAlign: "center",
+        marginTop: 10
+      }
+    }, "No climbs logged in this window to break down by colour yet.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        overflowX: "auto",
+        marginBottom: 14,
+        paddingBottom: 2
+      }
+    }, availableColors.map(c => /*#__PURE__*/React.createElement("button", {
+      key: c.name,
+      onClick: () => setAnalyticsColor(c.name),
+      style: {
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "7px 13px",
+        borderRadius: 20,
+        fontFamily: F.m,
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: "pointer",
+        background: selectedColor === c.name ? "#3A8A7A" : "#FFF",
+        border: `1.5px solid ${selectedColor === c.name ? "#3A8A7A" : "#E8E4DE"}`,
+        color: selectedColor === c.name ? "#FFF" : "#999"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 9,
+        height: 9,
+        borderRadius: "50%",
+        background: c.hex,
+        flexShrink: 0
+      }
+    }), c.name))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 12,
+        border: "1px solid #E8E4DE",
+        padding: 18,
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 2
+      }
+    }, "Flash Rate at ", selectedColor), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginBottom: 10
+      }
+    }, "Percentage of ", selectedColor, " attempts that were flashed, by month."), flashTrend ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 400 140",
+      style: {
+        width: "100%"
+      }
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "35",
+      x2: "400",
+      y2: "35",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "70",
+      x2: "400",
+      y2: "70",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "105",
+      x2: "400",
+      y2: "105",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: flashTrend.points,
+      fill: "none",
+      stroke: "#3A8A7A",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }), flashTrend.dots.map((d, i) => /*#__PURE__*/React.createElement("circle", {
+      key: i,
+      cx: d.x,
+      cy: d.y,
+      r: "4",
+      fill: "#3A8A7A"
+    })), /*#__PURE__*/React.createElement("text", {
+      x: flashTrend.first.x,
+      y: flashTrend.first.y + 22,
+      fontFamily: "SF Mono, monospace",
+      fontSize: "10",
+      fill: "#8A7A6E"
+    }, flashTrend.first.val, "%"), /*#__PURE__*/React.createElement("text", {
+      x: flashTrend.last.x,
+      y: flashTrend.last.y - 10,
+      textAnchor: "end",
+      fontFamily: "SF Mono, monospace",
+      fontSize: "11",
+      fontWeight: "700",
+      fill: "#3A8A7A"
+    }, flashTrend.last.val, "%")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        fontFamily: F.m,
+        fontSize: 8,
+        color: "#BBB",
+        marginTop: 4
+      }
+    }, buckets.map((b, i) => /*#__PURE__*/React.createElement("span", {
+      key: i
+    }, i % labelInterval === 0 || i === buckets.length - 1 ? b.label : "")))) : /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#CCC",
+        textAlign: "center",
+        padding: "20px 0"
+      }
+    }, "Not enough months of ", selectedColor, " climbs yet to draw a trend.")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 12,
+        border: "1px solid #E8E4DE",
+        padding: 18,
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 2
+      }
+    }, "Avg. Attempts to Send at ", selectedColor), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginBottom: 10
+      }
+    }, "Among ", selectedColor, " climbs you didn't flash, how many tries it typically took to send."), attemptsTrend ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 400 140",
+      style: {
+        width: "100%"
+      }
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "35",
+      x2: "400",
+      y2: "35",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "70",
+      x2: "400",
+      y2: "70",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "105",
+      x2: "400",
+      y2: "105",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: attemptsTrend.points,
+      fill: "none",
+      stroke: "#C49A2A",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }), attemptsTrend.dots.map((d, i) => /*#__PURE__*/React.createElement("circle", {
+      key: i,
+      cx: d.x,
+      cy: d.y,
+      r: "4",
+      fill: "#C49A2A"
+    })), /*#__PURE__*/React.createElement("text", {
+      x: attemptsTrend.first.x,
+      y: attemptsTrend.first.y - 10,
+      fontFamily: "SF Mono, monospace",
+      fontSize: "10",
+      fill: "#8A7A6E"
+    }, attemptsTrend.first.val, " tries"), /*#__PURE__*/React.createElement("text", {
+      x: attemptsTrend.last.x,
+      y: attemptsTrend.last.y + 22,
+      textAnchor: "end",
+      fontFamily: "SF Mono, monospace",
+      fontSize: "11",
+      fontWeight: "700",
+      fill: "#C49A2A"
+    }, attemptsTrend.last.val, " tries")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        fontFamily: F.m,
+        fontSize: 8,
+        color: "#BBB",
+        marginTop: 4
+      }
+    }, buckets.map((b, i) => /*#__PURE__*/React.createElement("span", {
+      key: i
+    }, i % labelInterval === 0 || i === buckets.length - 1 ? b.label : ""))), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginTop: 10
+      }
+    }, "Fewer tries needed at the same colour over time is real efficiency progress — flash rate alone won't show this.")) : /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#CCC",
+        textAlign: "center",
+        padding: "20px 0"
+      }
+    }, "Not enough sent ", selectedColor, " climbs yet to draw a trend."))))));
   }
 
   // ═══════════ MAP MANAGEMENT ═══════════
@@ -9646,7 +10432,6 @@ function RootApp() {
   }, "STRETCH"))), page === "fingers" ? /*#__PURE__*/React.createElement(FingerApp, null) : page === "climbs" ? /*#__PURE__*/React.createElement(ClimbApp, null) : /*#__PURE__*/React.createElement(StretchApp, null));
 }
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(/*#__PURE__*/React.createElement(RootApp, null));
-</script>
+root.render(/*#__PURE__*/React.createElement(RootApp, null));</script>
 </body>
 </html>
