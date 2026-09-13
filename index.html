@@ -4129,12 +4129,14 @@ function VideoEmbed({
 }
 
 // Resolves a displayable image URL for a climb: prefers the new Google Drive link (converted to
-// Drive's direct-image-view format), falling back to a legacy embedded photo from before the
-// switch to Drive links, if one is present from an older save.
+// Drive's thumbnail endpoint — the older uc?export=view format Google used to support for direct
+// embedding was broken by Google's own third-party cookie changes, so this is the current
+// working alternative), falling back to a legacy embedded photo from before the switch to Drive
+// links, if one is present from an older save.
 function climbPhotoUrl(p) {
   if (p.photoLink) {
     const fileId = extractDriveFileId(p.photoLink);
-    if (fileId) return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
     return null;
   }
   if (p.photo) return p.photo;
