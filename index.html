@@ -8051,10 +8051,13 @@ function StretchApp() {
     stretches.forEach((s, si) => {
       if (si > 0) {
         const prev = stretches[si - 1];
-        seq.push({
+        const nextRest = prev.nextRestSec ?? 5;
+        // A 0-second "rest before next" means there's nothing to actually show — skip the
+        // transition screen entirely rather than flashing a "0" for a moment.
+        if (nextRest > 0) seq.push({
           type: "nextup",
           name: s.name,
-          duration: prev.nextRestSec ?? 5
+          duration: nextRest
         });
       }
       for (let r = 0; r < s.reps; r++) {
