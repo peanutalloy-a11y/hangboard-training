@@ -7034,12 +7034,20 @@ function ClimbApp() {
       const sends = b.problems.filter(p => p.status === "sent" && p.attempts);
       return sends.length > 0 ? Math.round(sends.reduce((s, p) => s + Number(p.attempts || 1), 0) / sends.length * 10) / 10 : null;
     });
+    // Of everything beyond a first-try flash (i.e. sent-after-multiple-tries or still sitting
+    // open as a project), what fraction actually got finished — a dropping rate over time means
+    // projects are piling up faster than they're being closed out.
+    const conversionValues = buckets.map(b => {
+      const nonFlash = b.problems.filter(p => p.status === "sent" || p.status === "project");
+      return nonFlash.length > 0 ? Math.round(nonFlash.filter(p => p.status === "sent").length / nonFlash.length * 100) : null;
+    });
     const flashTrend = buildTrendPoints(flashRateValues, 400, 140, 15, 15);
     // With up to 24 monthly buckets for "All Time", labeling every single one crams them into
     // an unreadable smear — thin them out to roughly 6 evenly-spaced labels, always keeping the
     // most recent one so there's a clear "now" reference point.
     const labelInterval = Math.max(1, Math.ceil(buckets.length / 6));
     const attemptsTrend = buildTrendPoints(attemptsValues, 400, 140, 15, 15);
+    const conversionTrend = buildTrendPoints(conversionValues, 400, 140, 15, 15);
     const RANGE_LABELS = {
       "90": "3 MONTHS",
       "180": "6 MONTHS",
@@ -7596,7 +7604,106 @@ function ClimbApp() {
         textAlign: "center",
         padding: "20px 0"
       }
-    }, "Not enough sent ", selectedColor, " climbs yet to draw a trend."))))));
+    }, "Not enough sent ", selectedColor, " climbs yet to draw a trend.")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 12,
+        border: "1px solid #E8E4DE",
+        padding: 18,
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 2
+      }
+    }, "Project Conversion Rate at ", selectedColor), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginBottom: 10
+      }
+    }, "Of ", selectedColor, " climbs you didn't flash, the percentage that ended up actually sent rather than left as an open project."), conversionTrend ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 400 140",
+      style: {
+        width: "100%"
+      }
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "35",
+      x2: "400",
+      y2: "35",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "70",
+      x2: "400",
+      y2: "70",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "0",
+      y1: "105",
+      x2: "400",
+      y2: "105",
+      stroke: "#F0EDE8",
+      strokeWidth: "1"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: conversionTrend.points,
+      fill: "none",
+      stroke: "#9B9690",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }), conversionTrend.dots.map((d, i) => /*#__PURE__*/React.createElement("circle", {
+      key: i,
+      cx: d.x,
+      cy: d.y,
+      r: "4",
+      fill: "#9B9690"
+    })), /*#__PURE__*/React.createElement("text", {
+      x: conversionTrend.first.x,
+      y: conversionTrend.first.y + 22,
+      fontFamily: "SF Mono, monospace",
+      fontSize: "10",
+      fill: "#8A7A6E"
+    }, conversionTrend.first.val, "%"), /*#__PURE__*/React.createElement("text", {
+      x: conversionTrend.last.x,
+      y: conversionTrend.last.y - 10,
+      textAnchor: "end",
+      fontFamily: "SF Mono, monospace",
+      fontSize: "11",
+      fontWeight: "700",
+      fill: "#9B9690"
+    }, conversionTrend.last.val, "%")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        fontFamily: F.m,
+        fontSize: 8,
+        color: "#BBB",
+        marginTop: 4
+      }
+    }, buckets.map((b, i) => /*#__PURE__*/React.createElement("span", {
+      key: i
+    }, i % labelInterval === 0 || i === buckets.length - 1 ? b.label : ""))), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "#BBB",
+        marginTop: 10
+      }
+    }, "A dropping rate over time can mean projects are piling up faster than you're finishing them.")) : /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "#CCC",
+        textAlign: "center",
+        padding: "20px 0"
+      }
+    }, "Not enough ", selectedColor, " projects or sends yet to draw a trend."))))));
   }
 
   // ═══════════ MAP MANAGEMENT ═══════════
