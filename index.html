@@ -1444,12 +1444,28 @@ function FingerApp() {
   // tap on Start. Mobile browsers (iOS Safari especially) only allow sound to play if it's tied
   // to a genuine user gesture; creating a new, never-unlocked context per beep stays silent.
   const audioCtxRef = useRef(null);
+  const [audioSuspended, setAudioSuspended] = useState(false);
   const getAudioCtx = () => {
     if (!audioCtxRef.current) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      audioCtxRef.current = new Ctx();
+      const ctx = new Ctx();
+      // A phone call, Siri, or even just a notification sound can force iOS to suspend an
+      // active audio context mid-routine, with no visibility change to hook into — this fires
+      // specifically when that happens, so we can try to recover automatically, and fall back
+      // to a visible "tap to restore sound" prompt if iOS won't allow a silent resume.
+      ctx.addEventListener("statechange", () => {
+        setAudioSuspended(ctx.state === "suspended");
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      });
+      audioCtxRef.current = ctx;
     }
     return audioCtxRef.current;
+  };
+  const resumeAudioTap = () => {
+    try {
+      const ctx = getAudioCtx();
+      ctx.resume().then(() => setAudioSuspended(ctx.state === "suspended"));
+    } catch (e) {}
   };
   const playBeep = (freq, durMs) => {
     try {
@@ -2989,7 +3005,7 @@ function FingerApp() {
       hang: {
         label: "HANG",
         color: "#D4663A",
-        bg: "rgba(212,102,58,0.08)"
+        bg: "rgba(212,102,58,0.22)"
       },
       represt: {
         label: "REST",
@@ -3044,7 +3060,27 @@ function FingerApp() {
         color: "#2A2520",
         margin: "0 0 24px"
       }
-    }, cfg?.name || "Timer"), !isDone ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    }, cfg?.name || "Timer"), audioSuspended && timerRunning && /*#__PURE__*/React.createElement("button", {
+      onClick: resumeAudioTap,
+      style: {
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: "10px 0",
+        borderRadius: 10,
+        fontSize: 12,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#FBF3E3",
+        border: "1.5px solid #E8D5A8",
+        color: "#8A6A1E",
+        letterSpacing: 0.5,
+        marginBottom: 16
+      }
+    }, "🔇 Sound interrupted — tap to restore"), !isDone ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       style: {
         background: meta.bg,
         border: `2px solid ${meta.color}`,
@@ -3078,7 +3114,43 @@ function FingerApp() {
         marginTop: 14,
         letterSpacing: 1
       }
-    }, "SET ", step.set, " OF ", step.totalSets, step.type !== "setrest" ? ` · REP ${step.rep} OF ${step.totalReps}` : "")), step.type === "setrest" && /*#__PURE__*/React.createElement(TimerEntryCard, {
+    }, "SET ", step.set, " OF ", step.totalSets, step.type !== "setrest" ? ` · REP ${step.rep} OF ${step.totalReps}` : "")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#F5F2ED",
+        border: "1px solid #E8E4DE",
+        borderRadius: 12,
+        padding: "12px 16px",
+        marginBottom: 20,
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        fontWeight: 800,
+        color: "#BBB",
+        letterSpacing: 1.5,
+        flexShrink: 0
+      }
+    }, "NEXT"), timerIndex + 1 < timerSeq.length ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 13,
+        color: "#2A2520"
+      }
+    }, /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: PHASE_META[timerSeq[timerIndex + 1].type].color
+      }
+    }, PHASE_META[timerSeq[timerIndex + 1].type].label), " · ", timerSeq[timerIndex + 1].duration, "s") : /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 13,
+        color: "#2A2520"
+      }
+    }, "🎉 Workout Complete")), step.type === "setrest" && /*#__PURE__*/React.createElement(TimerEntryCard, {
       pendingSet: pendingSet,
       pendingSetIndex: pendingSetIndex,
       updateTimerRep: updateTimerRep
@@ -9221,12 +9293,28 @@ function StretchApp() {
   // tap on Start. Mobile browsers (iOS Safari especially) only allow sound to play if it's tied
   // to a genuine user gesture; creating a new, never-unlocked context per beep stays silent.
   const audioCtxRef = useRef(null);
+  const [audioSuspended, setAudioSuspended] = useState(false);
   const getAudioCtx = () => {
     if (!audioCtxRef.current) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      audioCtxRef.current = new Ctx();
+      const ctx = new Ctx();
+      // A phone call, Siri, or even just a notification sound can force iOS to suspend an
+      // active audio context mid-routine, with no visibility change to hook into — this fires
+      // specifically when that happens, so we can try to recover automatically, and fall back
+      // to a visible "tap to restore sound" prompt if iOS won't allow a silent resume.
+      ctx.addEventListener("statechange", () => {
+        setAudioSuspended(ctx.state === "suspended");
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      });
+      audioCtxRef.current = ctx;
     }
     return audioCtxRef.current;
+  };
+  const resumeAudioTap = () => {
+    try {
+      const ctx = getAudioCtx();
+      ctx.resume().then(() => setAudioSuspended(ctx.state === "suspended"));
+    } catch (e) {}
   };
   const playBeep = (freq, durMs) => {
     try {
@@ -10265,7 +10353,7 @@ function StretchApp() {
       hold: {
         label: "HOLD",
         color: STRETCH_ACCENT,
-        bg: "rgba(91,127,166,0.08)"
+        bg: "rgba(91,127,166,0.22)"
       },
       rest: {
         label: "REST",
@@ -10312,7 +10400,27 @@ function StretchApp() {
         color: "#2A2520",
         margin: "0 0 24px"
       }
-    }, timerRoutineName), !isDone ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    }, timerRoutineName), audioSuspended && timerRunning && /*#__PURE__*/React.createElement("button", {
+      onClick: resumeAudioTap,
+      style: {
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: "10px 0",
+        borderRadius: 10,
+        fontSize: 12,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#FBF3E3",
+        border: "1.5px solid #E8D5A8",
+        color: "#8A6A1E",
+        letterSpacing: 0.5,
+        marginBottom: 16
+      }
+    }, "🔇 Sound interrupted — tap to restore"), !isDone ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       style: {
         background: meta.bg,
         border: `2px solid ${meta.color}`,
@@ -10355,6 +10463,42 @@ function StretchApp() {
         letterSpacing: 1
       }
     }, "REP ", step.rep, " OF ", step.totalReps)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#F5F2ED",
+        border: "1px solid #E8E4DE",
+        borderRadius: 12,
+        padding: "12px 16px",
+        marginBottom: 20,
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 9,
+        fontWeight: 800,
+        color: "#BBB",
+        letterSpacing: 1.5,
+        flexShrink: 0
+      }
+    }, "NEXT"), timerIndex + 1 < timerSeq.length ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 13,
+        color: "#2A2520"
+      }
+    }, /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: PHASE_META[timerSeq[timerIndex + 1].type].color
+      }
+    }, PHASE_META[timerSeq[timerIndex + 1].type].label), " · ", timerSeq[timerIndex + 1].name, " · ", timerSeq[timerIndex + 1].duration, "s") : /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 13,
+        color: "#2A2520"
+      }
+    }, "🎉 Routine Complete")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 6,
