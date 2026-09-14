@@ -4567,7 +4567,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink"];
+const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups"];
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
   const s = String(val);
@@ -4577,26 +4577,27 @@ function csvEscape(val) {
 function buildClimbCSV(data) {
   const rows = [CSV_HEADER];
   if (data.gymMap) {
-    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", "", "", ""]);
+    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", "", "", "", ""]);
   }
   data.sectors.forEach(pin => {
-    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", "", "", ""]);
+    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", "", "", "", ""]);
   });
   Object.entries(data.sectorLogs).forEach(([sectorName, log]) => {
-    // A sector's reset schedule lives on the sector log itself, not on any individual climb, so it
-    // needs its own row to survive a backup — otherwise it's silently lost on export/restore.
-    if (log.resetDate || log.resetIntervalDays) {
-      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || "", log.lastConfirmedDate || "", ""]);
+    // A sector's reset schedule and its "marked complete" colours/grades both live on the sector
+    // log itself, not on any individual climb, so they need their own row to survive a backup —
+    // otherwise they're silently lost on export/restore, same as resetDate was before this fix.
+    if (log.resetDate || log.resetIntervalDays || log.completedGroups && log.completedGroups.length > 0) {
+      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || "", log.lastConfirmedDate || "", "", (log.completedGroups || []).join(";")]);
     }
     // PhotoLink (unlike the legacy ProblemPhoto column) is populated for both current AND
     // archived problems, since a link is small enough to keep around forever — the whole point
     // of moving photos to Drive was so sector history could stop losing them on reset.
     log.currentProblems.forEach(p => {
-      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || ""]);
+      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || "", ""]);
     });
     log.archivedResets.forEach(reset => {
       reset.problems.forEach(p => {
-        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || ""]);
+        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || "", ""]);
       });
     });
   });
@@ -4663,7 +4664,8 @@ function parseClimbCSV(text, existingData) {
     iResetDate = idx("ResetDate"),
     iResetInterval = idx("ResetIntervalDays"),
     iLastConfirmed = idx("LastConfirmedDate"),
-    iPhotoLink = idx("PhotoLink");
+    iPhotoLink = idx("PhotoLink"),
+    iCompletedGroups = idx("CompletedGroups");
   if (iType === -1 || iSector === -1) throw new Error("Missing required columns");
   let gymMap = existingData.gymMap;
   const sectorsById = {};
@@ -4690,6 +4692,11 @@ function parseClimbCSV(text, existingData) {
       if (iResetDate !== -1 && row[iResetDate]) sectorLogs[sectorName].resetDate = row[iResetDate];
       if (iResetInterval !== -1 && row[iResetInterval]) sectorLogs[sectorName].resetIntervalDays = row[iResetInterval];
       if (iLastConfirmed !== -1 && row[iLastConfirmed]) sectorLogs[sectorName].lastConfirmedDate = row[iLastConfirmed];
+      if (iCompletedGroups !== -1 && row[iCompletedGroups]) {
+        const imported = row[iCompletedGroups].split(";").filter(Boolean);
+        const existing = sectorLogs[sectorName].completedGroups || [];
+        sectorLogs[sectorName].completedGroups = [...new Set([...existing, ...imported])];
+      }
     } else if (type === "problem") {
       const sectorName = row[iSector];
       const problem = {
