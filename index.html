@@ -1184,6 +1184,11 @@ const TimerEntryCard = ({
 };
 function FingerApp() {
   const [view, setView] = useState("home");
+  // Otherwise the scroll position from whatever view you were on carries over into the new one —
+  // navigating into a page while scrolled down would land you scrolled down there too.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
   const [prevView, setPrevView] = useState(null);
   const [transitioning, setTransitioning] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
@@ -1905,16 +1910,16 @@ function FingerApp() {
       setTimeout(() => setCopiedId(null), 2000);
     });
   };
-  const exportFingerCSV = () => {
+  const exportEverything = () => {
     try {
-      const csv = buildFingerCSV(logsRef.current);
+      const csv = buildUnifiedCSV();
       const blob = new Blob([csv], {
         type: "text/csv;charset=utf-8;"
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `send-log-backup-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -1927,30 +1932,31 @@ function FingerApp() {
     }
     setTimeout(() => setLoadStatus(null), 3000);
   };
-  const importFingerCSV = e => {
+  const restoreEverything = e => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        const merged = parseFingerCSV(ev.target.result, logsRef.current);
-        setLogs(merged);
-        logsRef.current = merged;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        } catch (ex) {}
+        restoreUnifiedCSV(ev.target.result);
         setLoadStatus("loaded");
+        // Climb Log and Stretch each keep their own in-memory copy loaded from localStorage at
+        // mount time, so a restore triggered from here needs a full reload for those other two
+        // sections to actually pick up what just landed in storage — not just this one.
+        setTimeout(() => {
+          window.location.reload();
+        }, 900);
       } catch (err) {
         setLoadStatus("error");
+        setTimeout(() => setLoadStatus(null), 3000);
       }
-      setTimeout(() => setLoadStatus(null), 3000);
     };
     reader.onerror = () => {
       setLoadStatus("error");
       setTimeout(() => setLoadStatus(null), 3000);
     };
     reader.readAsText(file);
-    e.target.value = "";
   };
   const formatDate = iso => new Date(iso).toLocaleDateString("en-AU", {
     weekday: "short",
@@ -2048,6 +2054,13 @@ function FingerApp() {
         padding: "16px 0 16px",
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
         gap: 14
       }
     }, /*#__PURE__*/React.createElement("svg", {
@@ -2084,7 +2097,93 @@ function FingerApp() {
         letterSpacing: 4,
         marginTop: 3
       }
-    }, "FINGER STRENGTH TRACKER")))), logs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Stagger, {
+    }, "FINGER STRENGTH TRACKER"))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("settings"),
+      title: "Settings",
+      style: {
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: 9,
+        margin: -9,
+        flexShrink: 0,
+        display: "flex"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "22",
+      height: "22",
+      viewBox: "0 0 40 40"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "8",
+      fill: "none",
+      stroke: "#2A2520",
+      strokeWidth: "2.5"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "3",
+      fill: "#2A2520",
+      opacity: "0.3"
+    }), /*#__PURE__*/React.createElement("g", {
+      fill: "#2A2520"
+    }, /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(45 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(90 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(135 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(180 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(225 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(270 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(315 20 20)"
+    })))))), logs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Stagger, {
       delay: 60
     }, /*#__PURE__*/React.createElement(SummitFlag, {
       count: logs.length
@@ -2534,14 +2633,47 @@ function FingerApp() {
         color: "#BBB",
         marginTop: 6
       }
-    }, "Tap a session above to start"))), /*#__PURE__*/React.createElement(Stagger, {
-      delay: 260
-    }, /*#__PURE__*/React.createElement("div", {
+    }, "Tap a session above to start")))));
+  }
+  if (view === "settings") {
+    return /*#__PURE__*/React.createElement("div", {
+      style: S.page
+    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        zIndex: 1
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("home"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        borderRadius: 20,
+        color: "#2A2520",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+        marginBottom: 16,
+        padding: "8px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      }
+    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 26,
+        fontWeight: 800,
+        color: "#2A2520",
+        margin: "0 0 20px"
+      }
+    }, "Settings"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "28px 0 16px"
+        margin: "0 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -2556,7 +2688,7 @@ function FingerApp() {
         color: "#AAA",
         letterSpacing: 3
       }
-    }, "DATA"), /*#__PURE__*/React.createElement("div", {
+    }, "BACKUP"), /*#__PURE__*/React.createElement("div", {
       style: {
         flex: 1,
         height: 1,
@@ -2569,13 +2701,13 @@ function FingerApp() {
         color: "#3A8A7A",
         marginBottom: 10
       }
-    }, "✓ Your data is saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
       }
-    }, logs.length > 0 && /*#__PURE__*/React.createElement("button", {
-      onClick: exportFingerCSV,
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: exportEverything,
       style: {
         flex: 1,
         padding: "12px 0",
@@ -2584,13 +2716,13 @@ function FingerApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: loadStatus === "exported" ? "#2A2520" : "#FFF",
         border: `1.5px solid ${loadStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: loadStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, loadStatus === "exported" ? "DOWNLOADED ✓" : "EXPORT CSV"), /*#__PURE__*/React.createElement("button", {
+    }, loadStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -2600,21 +2732,21 @@ function FingerApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: loadStatus === "loaded" ? "#3A8A7A" : loadStatus === "error" ? "#C45A5A" : "#FFF",
         border: `1.5px solid ${loadStatus === "loaded" ? "#3A8A7A" : loadStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: loadStatus === "loaded" || loadStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, loadStatus === "loaded" ? "RESTORED ✓" : loadStatus === "error" ? "INVALID FILE" : "RESTORE CSV")), /*#__PURE__*/React.createElement("input", {
+    }, loadStatus === "loaded" ? "RESTORED ✓" : loadStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
-      onChange: importFingerCSV,
+      onChange: restoreEverything,
       style: {
         display: "none"
       }
-    }))));
+    })));
   }
   if (view === "sessionForm") {
     return /*#__PURE__*/React.createElement("div", {
@@ -4212,7 +4344,7 @@ function getLatestResetBoundary(resetDateStr, intervalDays) {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const daysUntilRef = Math.round((ref - startOfToday) / (1000 * 60 * 60 * 24));
-  if (daysUntilRef >= 0) return null; // anchor hasn't happened yet — nothing due to confirm
+  if (daysUntilRef > 0) return null; // anchor is still in the future — nothing due to confirm yet
   const interval = Number(intervalDays) || 0;
   if (interval <= 0) return resetDateStr; // one-off: the anchor itself is the (already past) boundary
   const elapsed = -daysUntilRef;
@@ -4462,7 +4594,8 @@ function emptySectorLog() {
     completedGroups: [],
     resetDate: null,
     resetIntervalDays: null,
-    lastConfirmedDate: null
+    lastConfirmedDate: null,
+    archived: false
   };
 }
 function mergeLogs(a, b) {
@@ -4567,7 +4700,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups"];
+const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived"];
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
   const s = String(val);
@@ -4577,27 +4710,28 @@ function csvEscape(val) {
 function buildClimbCSV(data) {
   const rows = [CSV_HEADER];
   if (data.gymMap) {
-    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", "", "", "", ""]);
+    rows.push(["gym_map", "", "", "", "", "", "", "", "", "", "", "", "", "", "", data.gymMap, "", "", "", "", "", "", "", ""]);
   }
   data.sectors.forEach(pin => {
-    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", "", "", "", ""]);
+    rows.push(["sector_pin", pin.id, pin.name, "", "", "", "", "", "", "", "", "", "", pin.x, pin.y, "", "", "", "", "", "", "", "", ""]);
   });
   Object.entries(data.sectorLogs).forEach(([sectorName, log]) => {
-    // A sector's reset schedule and its "marked complete" colours/grades both live on the sector
-    // log itself, not on any individual climb, so they need their own row to survive a backup —
-    // otherwise they're silently lost on export/restore, same as resetDate was before this fix.
-    if (log.resetDate || log.resetIntervalDays || log.completedGroups && log.completedGroups.length > 0) {
-      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || "", log.lastConfirmedDate || "", "", (log.completedGroups || []).join(";")]);
+    // A sector's reset schedule, its "marked complete" colours/grades, and its archived flag all
+    // live on the sector log itself, not on any individual climb, so they need their own row to
+    // survive a backup — otherwise they're silently lost on export/restore, same as resetDate was
+    // before this fix.
+    if (log.resetDate || log.resetIntervalDays || log.completedGroups && log.completedGroups.length > 0 || log.archived) {
+      rows.push(["sector_meta", "", sectorName, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", log.resetDate || "", log.resetIntervalDays || "", log.lastConfirmedDate || "", "", (log.completedGroups || []).join(";"), log.archived ? "1" : ""]);
     }
     // PhotoLink (unlike the legacy ProblemPhoto column) is populated for both current AND
     // archived problems, since a link is small enough to keep around forever — the whole point
     // of moving photos to Drive was so sector history could stop losing them on reset.
     log.currentProblems.forEach(p => {
-      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || "", ""]);
+      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || "", "", ""]);
     });
     log.archivedResets.forEach(reset => {
       reset.problems.forEach(p => {
-        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || "", ""]);
+        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || "", "", ""]);
       });
     });
   });
@@ -4665,7 +4799,8 @@ function parseClimbCSV(text, existingData) {
     iResetInterval = idx("ResetIntervalDays"),
     iLastConfirmed = idx("LastConfirmedDate"),
     iPhotoLink = idx("PhotoLink"),
-    iCompletedGroups = idx("CompletedGroups");
+    iCompletedGroups = idx("CompletedGroups"),
+    iArchived = idx("Archived");
   if (iType === -1 || iSector === -1) throw new Error("Missing required columns");
   let gymMap = existingData.gymMap;
   const sectorsById = {};
@@ -4697,6 +4832,9 @@ function parseClimbCSV(text, existingData) {
         const existing = sectorLogs[sectorName].completedGroups || [];
         sectorLogs[sectorName].completedGroups = [...new Set([...existing, ...imported])];
       }
+      // Only ever sets archived=true from a backup, matching every other field here — an older
+      // backup that predates archiving a sector shouldn't silently un-archive it on restore.
+      if (iArchived !== -1 && row[iArchived]) sectorLogs[sectorName].archived = true;
     } else if (type === "problem") {
       const sectorName = row[iSector];
       const problem = {
@@ -4759,6 +4897,11 @@ function parseClimbCSV(text, existingData) {
 }
 function ClimbApp() {
   const [view, setView] = useState("home");
+  // Otherwise the scroll position from whatever view you were on carries over into the new one —
+  // navigating into a page while scrolled down would land you scrolled down there too.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
   const [data, setData] = useState({
     gymMap: null,
     sectors: [],
@@ -4776,6 +4919,10 @@ function ClimbApp() {
   const [historySector, setHistorySector] = useState(null);
   const [expandedArchive, setExpandedArchive] = useState(null);
   const [expandedHistoryProblem, setExpandedHistoryProblem] = useState(null);
+  const [editingResetSchedule, setEditingResetSchedule] = useState(null);
+  const [mergeStep, setMergeStep] = useState(null); // null | "pick-first" | "pick-second" | "confirm"
+  const [mergeFirst, setMergeFirst] = useState(null);
+  const [mergeSecond, setMergeSecond] = useState(null);
   const [analyticsRange, setAnalyticsRange] = useState("90");
   const [analyticsColor, setAnalyticsColor] = useState(null);
   const fileInputRef = useRef(null);
@@ -5071,7 +5218,13 @@ function ClimbApp() {
     sectorLogs[destSector] = {
       ...destLog,
       currentProblems,
-      completedGroups
+      completedGroups,
+      // Logging a fresh climb into a sector that's currently archived is a clear signal it's
+      // back in active use — without this, the climb would save correctly but silently vanish
+      // into a sector still hidden from the everyday list, with nothing telling the user why.
+      ...(!isEdit && destLog.archived ? {
+        archived: false
+      } : {})
     };
     persist({
       ...cur,
@@ -5237,16 +5390,74 @@ function ClimbApp() {
       }
     });
   };
-  const exportClimbCSV = () => {
+
+  // Archiving only ever flips this one flag — it never touches the sector's climbs or history,
+  // since the whole point is that Analytics (which reads every sector regardless of this flag)
+  // keeps seeing that data exactly as before. It only changes what shows up in daily use.
+  const toggleSectorArchived = sectorName => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName] || emptySectorLog();
+    const updated = {
+      ...log,
+      archived: !log.archived
+    };
+    persist({
+      ...cur,
+      sectorLogs: {
+        ...cur.sectorLogs,
+        [sectorName]: updated
+      }
+    });
+  };
+
+  // Folds one sector entirely into another: every current climb and every archived reset from
+  // both, combined under whichever name survives. Individual climbs carry their own `sector`
+  // field (used directly by quick actions, edit, and delete), so anything moving across from the
+  // discarded name has to be re-stamped with the surviving one, or those would silently break.
+  const mergeSectors = (nameToKeep, nameToDiscard) => {
+    const cur = dataRef.current;
+    const keepLog = cur.sectorLogs[nameToKeep] || emptySectorLog();
+    const discardLog = cur.sectorLogs[nameToDiscard] || emptySectorLog();
+    const restamp = p => ({
+      ...p,
+      sector: nameToKeep
+    });
+    const merged = {
+      ...keepLog,
+      currentProblems: [...keepLog.currentProblems, ...discardLog.currentProblems.map(restamp)],
+      archivedResets: [...keepLog.archivedResets, ...discardLog.archivedResets.map(reset => ({
+        ...reset,
+        problems: reset.problems.map(restamp)
+      }))],
+      completedGroups: [...new Set([...(keepLog.completedGroups || []), ...(discardLog.completedGroups || [])])]
+      // Anything that can't cleanly combine between two sectors — the reset schedule, the
+      // archived flag itself — keeps whatever the surviving sector already had.
+    };
+    const newSectorLogs = {
+      ...cur.sectorLogs
+    };
+    delete newSectorLogs[nameToDiscard];
+    newSectorLogs[nameToKeep] = merged;
+
+    // The discarded sector's own map pin (if any) no longer refers to anything — drop it. The
+    // surviving sector's pin, if it has one, is untouched.
+    const newSectors = cur.sectors.filter(pin => pin.name !== nameToDiscard);
+    persist({
+      ...cur,
+      sectorLogs: newSectorLogs,
+      sectors: newSectors
+    });
+  };
+  const exportEverything = () => {
     try {
-      const csv = buildClimbCSV(dataRef.current);
+      const csv = buildUnifiedCSV();
       const blob = new Blob([csv], {
         type: "text/csv;charset=utf-8;"
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `climb-log-backup-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -5259,30 +5470,39 @@ function ClimbApp() {
     }
     setTimeout(() => setBackupStatus(null), 3000);
   };
-  const importClimbCSV = e => {
+  const restoreEverything = e => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        const merged = parseClimbCSV(ev.target.result, dataRef.current);
-        persist(merged);
+        restoreUnifiedCSV(ev.target.result);
         setBackupStatus("restored");
+        // Send Log and Stretch each keep their own in-memory copy loaded from localStorage at
+        // mount time, so a restore triggered from here needs a full reload for those other two
+        // sections to actually pick up what just landed in storage — not just this one.
+        setTimeout(() => {
+          window.location.reload();
+        }, 900);
       } catch (err) {
         setBackupStatus("error");
+        setTimeout(() => setBackupStatus(null), 3000);
       }
-      setTimeout(() => setBackupStatus(null), 3000);
     };
     reader.onerror = () => {
       setBackupStatus("error");
       setTimeout(() => setBackupStatus(null), 3000);
     };
     reader.readAsText(file);
-    e.target.value = "";
   };
   const allSectorNames = [...new Set([...data.sectors.map(s => s.name), ...Object.keys(data.sectorLogs)])].sort();
-  const sectorOptions = allSectorNames;
-  const allCurrentProblems = Object.entries(data.sectorLogs).flatMap(([name, log]) => log.currentProblems.map(p => ({
+  // Archived sectors keep their data (climbs, history) fully intact for Analytics, which reads
+  // every sector regardless — they're just hidden from the everyday list and from being offered
+  // as a target for new climbs, so old or merged-away sector names stop cluttering daily use.
+  const visibleSectorNames = allSectorNames.filter(name => !(data.sectorLogs[name] && data.sectorLogs[name].archived));
+  const sectorOptions = visibleSectorNames;
+  const allCurrentProblems = Object.entries(data.sectorLogs).filter(([name]) => visibleSectorNames.includes(name)).flatMap(([name, log]) => log.currentProblems.map(p => ({
     ...p,
     sector: name
   })));
@@ -5291,8 +5511,6 @@ function ClimbApp() {
   const projectCount = allCurrentProblems.filter(p => p.status === "project").length;
   const allProjects = allCurrentProblems.filter(p => p.status === "project").sort((a, b) => new Date(b.date) - new Date(a.date));
   const total = allCurrentProblems.length;
-  const flashRate = total > 0 ? Math.round(flashCount / total * 100) : 0;
-  const sentRate = total > 0 ? Math.round((flashCount + sentCount) / total * 100) : 0;
   const formatDate = iso => new Date(iso).toLocaleDateString("en-AU", {
     day: "numeric",
     month: "short",
@@ -5392,6 +5610,13 @@ function ClimbApp() {
         padding: "16px 0 16px",
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
         gap: 14
       }
     }, /*#__PURE__*/React.createElement("svg", {
@@ -5431,7 +5656,93 @@ function ClimbApp() {
         letterSpacing: 4,
         marginTop: 3
       }
-    }, "BOULDERING TRACKER")))), /*#__PURE__*/React.createElement(Stagger, {
+    }, "BOULDERING TRACKER"))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("settings"),
+      title: "Settings",
+      style: {
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: 9,
+        margin: -9,
+        flexShrink: 0,
+        display: "flex"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "22",
+      height: "22",
+      viewBox: "0 0 40 40"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "8",
+      fill: "none",
+      stroke: "#2A2520",
+      strokeWidth: "2.5"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "3",
+      fill: "#2A2520",
+      opacity: "0.3"
+    }), /*#__PURE__*/React.createElement("g", {
+      fill: "#2A2520"
+    }, /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(45 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(90 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(135 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(180 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(225 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(270 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(315 20 20)"
+    })))))), /*#__PURE__*/React.createElement(Stagger, {
       delay: 60
     }, data.gymMap ? /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5545,10 +5856,7 @@ function ClimbApp() {
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
-        justifyContent: "space-around",
-        paddingBottom: 14,
-        marginBottom: 14,
-        borderBottom: "1px solid #F0EDE8"
+        justifyContent: "space-around"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5631,50 +5939,7 @@ function ClimbApp() {
         letterSpacing: 1,
         marginTop: 2
       }
-    }, "PROJECT"))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-around"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: F.h,
-        fontSize: 20,
-        fontWeight: 800,
-        color: "#2A2520"
-      }
-    }, flashRate, "%"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: F.m,
-        fontSize: 8,
-        color: "#BBB",
-        letterSpacing: 1,
-        marginTop: 2
-      }
-    }, "FLASH RATE")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: F.h,
-        fontSize: 20,
-        fontWeight: 800,
-        color: "#2A2520"
-      }
-    }, sentRate, "%"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: F.m,
-        fontSize: 8,
-        color: "#BBB",
-        letterSpacing: 1,
-        marginTop: 2
-      }
-    }, "SENT RATE"))), projectsDropdownOpen && projectCount > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "PROJECT"))), projectsDropdownOpen && projectCount > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 16,
         paddingTop: 14,
@@ -5852,7 +6117,7 @@ function ClimbApp() {
           letterSpacing: 1
         }
       }, "DELETE"))));
-    }))))), allSectorNames.length === 0 && /*#__PURE__*/React.createElement(Stagger, {
+    }))))), visibleSectorNames.length === 0 && /*#__PURE__*/React.createElement(Stagger, {
       delay: 140
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
@@ -5876,7 +6141,7 @@ function ClimbApp() {
       }
     }, "+ LOG PROBLEM")), /*#__PURE__*/React.createElement(Divider, {
       text: "SECTORS"
-    }), allSectorNames.length === 0 && /*#__PURE__*/React.createElement("div", {
+    }), visibleSectorNames.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
         padding: "30px 20px"
@@ -5900,14 +6165,12 @@ function ClimbApp() {
         flexDirection: "column",
         gap: 6
       }
-    }, allSectorNames.map((name, idx) => {
+    }, visibleSectorNames.map((name, idx) => {
       const log = data.sectorLogs[name] || emptySectorLog();
       const f = log.currentProblems.filter(p => p.status === "flash").length;
       const s = log.currentProblems.filter(p => p.status === "sent").length;
       const pr = log.currentProblems.filter(p => p.status === "project").length;
       const sTotal = log.currentProblems.length;
-      const sFlashRate = sTotal > 0 ? Math.round(f / sTotal * 100) : 0;
-      const sSentRate = sTotal > 0 ? Math.round((f + s) / sTotal * 100) : 0;
       const isExpanded = expandedSector === name;
       const gradeMode = sectorUsesGradeMode(log.currentProblems);
       const allGroupKeys = sectorGroupKeys(log.currentProblems, gradeMode);
@@ -6065,12 +6328,8 @@ function ClimbApp() {
         return groupKeys.map(groupKey => {
           const problems = groups[groupKey] || [];
           const colorMeta = HOLD_COLORS.find(c => c.name === groupKey) || HOLD_COLORS[0];
-          const cf = problems.filter(p => p.status === "flash").length;
-          const cs = problems.filter(p => p.status === "sent").length;
           const cp = problems.filter(p => p.status === "project").length;
           const cTotal = problems.length;
-          const cFlashRate = cTotal > 0 ? Math.round(cf / cTotal * 100) : 0;
-          const cSentRate = cTotal > 0 ? Math.round((cf + cs) / cTotal * 100) : 0;
           const colorKey = name + "::" + groupKey;
           const isColorExpanded = expandedColorKey === colorKey;
           const isGroupComplete = (log.completedGroups || []).includes(groupKey);
@@ -6177,122 +6436,7 @@ function ClimbApp() {
               paddingLeft: 24,
               animation: "fadeUp 0.25s ease"
             }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              padding: "10px 0",
-              marginBottom: 8,
-              background: "#F5F2ED",
-              borderRadius: 8
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              display: "flex",
-              justifyContent: "space-around",
-              paddingBottom: 8,
-              marginBottom: 8,
-              borderBottom: "1px solid #E8E4DE"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              textAlign: "center"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.h,
-              fontSize: 16,
-              fontWeight: 800,
-              color: "#C49A2A"
-            }
-          }, cf), /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.m,
-              fontSize: 7,
-              color: "#BBB",
-              letterSpacing: 1,
-              marginTop: 1
-            }
-          }, "FLASH")), /*#__PURE__*/React.createElement("div", {
-            style: {
-              textAlign: "center"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.h,
-              fontSize: 16,
-              fontWeight: 800,
-              color: "#3A8A7A"
-            }
-          }, cs), /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.m,
-              fontSize: 7,
-              color: "#BBB",
-              letterSpacing: 1,
-              marginTop: 1
-            }
-          }, "SENT")), /*#__PURE__*/React.createElement("div", {
-            style: {
-              textAlign: "center"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.h,
-              fontSize: 16,
-              fontWeight: 800,
-              color: "#9B9690"
-            }
-          }, cp), /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.m,
-              fontSize: 7,
-              color: "#BBB",
-              letterSpacing: 1,
-              marginTop: 1
-            }
-          }, "PROJECT"))), /*#__PURE__*/React.createElement("div", {
-            style: {
-              display: "flex",
-              justifyContent: "space-around"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              textAlign: "center"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.h,
-              fontSize: 16,
-              fontWeight: 800,
-              color: "#2A2520"
-            }
-          }, cFlashRate, "%"), /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.m,
-              fontSize: 7,
-              color: "#BBB",
-              letterSpacing: 1,
-              marginTop: 1
-            }
-          }, "FLASH RATE")), /*#__PURE__*/React.createElement("div", {
-            style: {
-              textAlign: "center"
-            }
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.h,
-              fontSize: 16,
-              fontWeight: 800,
-              color: "#2A2520"
-            }
-          }, cSentRate, "%"), /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontFamily: F.m,
-              fontSize: 7,
-              color: "#BBB",
-              letterSpacing: 1,
-              marginTop: 1
-            }
-          }, "SENT RATE")))), problems.map(p => {
+          }, problems.map(p => {
             const statusMeta = STATUS_META[p.status];
             return /*#__PURE__*/React.createElement("div", {
               key: p.id,
@@ -6445,15 +6589,75 @@ function ClimbApp() {
           padding: 10,
           overflow: "hidden"
         }
+      }, log.resetDate && editingResetSchedule !== name ? /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontFamily: F.m,
           fontSize: 9,
           color: "#999",
           letterSpacing: 1,
-          marginBottom: 6
+          marginBottom: 3
         }
       }, "SECTOR RESET SCHEDULE"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          fontWeight: 600,
+          color: isSectorOverdue(log.resetDate, log.resetIntervalDays, log.lastConfirmedDate) ? "#C4453A" : "#2A2520"
+        }
+      }, isSectorOverdue(log.resetDate, log.resetIntervalDays, log.lastConfirmedDate) ? "OVERDUE — " : "", formatResetCountdown(log.resetDate, log.resetIntervalDays), log.resetIntervalDays ? ` · every ${log.resetIntervalDays} days` : " · one-off")), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setEditingResetSchedule(name),
+        style: {
+          flexShrink: 0,
+          padding: "5px 10px",
+          borderRadius: 6,
+          fontSize: 10,
+          fontWeight: 700,
+          fontFamily: F.m,
+          cursor: "pointer",
+          background: "#FFF",
+          border: "1.5px solid #E8E4DE",
+          color: "#2A2520",
+          letterSpacing: 0.5
+        }
+      }, "EDIT")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: F.m,
+          fontSize: 9,
+          color: "#999",
+          letterSpacing: 1
+        }
+      }, "SECTOR RESET SCHEDULE"), log.resetDate && /*#__PURE__*/React.createElement("button", {
+        onClick: () => setEditingResetSchedule(null),
+        style: {
+          padding: "3px 8px",
+          borderRadius: 6,
+          fontSize: 9,
+          fontWeight: 700,
+          fontFamily: F.m,
+          cursor: "pointer",
+          background: "transparent",
+          border: "1.5px solid #E8E4DE",
+          color: "#999",
+          letterSpacing: 0.5
+        }
+      }, "DONE")), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 8
@@ -6475,7 +6679,10 @@ function ClimbApp() {
       }, "NEXT OR LAST RESET"), /*#__PURE__*/React.createElement("input", {
         type: "date",
         value: log.resetDate || "",
-        onChange: e => setSectorResetDate(name, e.target.value),
+        onChange: e => {
+          setEditingResetSchedule(name);
+          setSectorResetDate(name, e.target.value);
+        },
         style: {
           WebkitAppearance: "none",
           appearance: "none",
@@ -6511,7 +6718,10 @@ function ClimbApp() {
         min: "1",
         placeholder: "—",
         value: log.resetIntervalDays || "",
-        onChange: e => setSectorResetInterval(name, e.target.value),
+        onChange: e => {
+          setEditingResetSchedule(name);
+          setSectorResetInterval(name, e.target.value);
+        },
         style: {
           width: "100%",
           padding: "8px 8px",
@@ -6532,7 +6742,7 @@ function ClimbApp() {
           color: "#BBB",
           margin: "8px 0 0"
         }
-      }, "Enter the next reset date, or the last one if that's what you know — add a repeat interval if this gym resets on a schedule.")), /*#__PURE__*/React.createElement("div", {
+      }, "Enter the next reset date, or the last one if that's what you know — add a repeat interval if this gym resets on a schedule."))), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 8,
@@ -6658,12 +6868,47 @@ function ClimbApp() {
         marginTop: 24,
         marginBottom: 16
       }
-    }, "📊 ANALYTICS"), /*#__PURE__*/React.createElement("div", {
+    }, "📊 ANALYTICS")));
+  }
+  if (view === "settings") {
+    return /*#__PURE__*/React.createElement("div", {
+      style: CS.page
+    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        zIndex: 1
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("home"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        borderRadius: 20,
+        color: "#2A2520",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+        marginBottom: 16,
+        padding: "8px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      }
+    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 26,
+        fontWeight: 800,
+        color: "#2A2520",
+        margin: "0 0 20px"
+      }
+    }, "Settings"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "28px 0 16px"
+        margin: "0 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -6678,7 +6923,7 @@ function ClimbApp() {
         color: "#AAA",
         letterSpacing: 3
       }
-    }, "DATA"), /*#__PURE__*/React.createElement("div", {
+    }, "BACKUP"), /*#__PURE__*/React.createElement("div", {
       style: {
         flex: 1,
         height: 1,
@@ -6691,13 +6936,13 @@ function ClimbApp() {
         color: "#3A8A7A",
         marginBottom: 10
       }
-    }, "✓ Your data is saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
       }
     }, /*#__PURE__*/React.createElement("button", {
-      onClick: exportClimbCSV,
+      onClick: exportEverything,
       style: {
         flex: 1,
         padding: "12px 0",
@@ -6706,13 +6951,13 @@ function ClimbApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: backupStatus === "exported" ? "#2A2520" : "#FFF",
         border: `1.5px solid ${backupStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: backupStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "EXPORT CSV"), /*#__PURE__*/React.createElement("button", {
+    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -6722,17 +6967,17 @@ function ClimbApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#FFF",
         border: `1.5px solid ${backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: backupStatus === "restored" || backupStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE CSV")), /*#__PURE__*/React.createElement("input", {
+    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
-      onChange: importClimbCSV,
+      onChange: restoreEverything,
       style: {
         display: "none"
       }
@@ -8098,7 +8343,306 @@ function ClimbApp() {
         marginTop: 10,
         textAlign: "center"
       }
-    }, "Photos are compressed and stored on this device only.")));
+    }, "Photos are compressed and stored on this device only."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 28,
+        paddingTop: 20,
+        borderTop: "1px solid #E8E4DE"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 10,
+        color: "#999",
+        letterSpacing: 2,
+        marginBottom: 4
+      }
+    }, "SECTOR MANAGEMENT"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 11,
+        color: "#BBB",
+        margin: "0 0 12px"
+      }
+    }, "Archive a sector to hide it from your everyday list without losing its history — Analytics still sees everything. Merge two sectors if the gym combines walls or renames one."), allSectorNames.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 11,
+        color: "#CCC",
+        letterSpacing: 1,
+        textAlign: "center",
+        padding: "12px 0"
+      }
+    }, "NO SECTORS YET") : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: 14
+      }
+    }, allSectorNames.map(name => {
+      const log = data.sectorLogs[name] || emptySectorLog();
+      const isArchived = !!log.archived;
+      return /*#__PURE__*/React.createElement("div", {
+        key: name,
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          padding: "10px 12px",
+          background: "#FFF",
+          borderRadius: 8,
+          border: "1px solid #E8E4DE",
+          opacity: isArchived ? 0.6 : 1
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#2A2520",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }
+      }, name), isArchived && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: F.m,
+          fontSize: 9,
+          color: "#BBB",
+          letterSpacing: 0.5,
+          marginTop: 2
+        }
+      }, "ARCHIVED")), /*#__PURE__*/React.createElement("button", {
+        onClick: () => toggleSectorArchived(name),
+        style: {
+          flexShrink: 0,
+          padding: "6px 12px",
+          borderRadius: 6,
+          fontSize: 10,
+          fontWeight: 700,
+          fontFamily: F.m,
+          cursor: "pointer",
+          background: isArchived ? "#3A8A7A" : "#FFF",
+          border: `1.5px solid ${isArchived ? "#3A8A7A" : "#E8E4DE"}`,
+          color: isArchived ? "#FFF" : "#2A2520",
+          letterSpacing: 0.5
+        }
+      }, isArchived ? "UNARCHIVE" : "ARCHIVE"));
+    })), mergeStep === null && allSectorNames.length >= 2 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setMergeStep("pick-first");
+        setMergeFirst(null);
+        setMergeSecond(null);
+      },
+      style: {
+        width: "100%",
+        padding: "11px 0",
+        borderRadius: 8,
+        fontSize: 11,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        color: "#2A2520",
+        letterSpacing: 1
+      }
+    }, "MERGE SECTORS"), mergeStep === "pick-first" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 10,
+        padding: 14,
+        border: "1.5px solid #E8E4DE"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 10
+      }
+    }, "Pick the first sector to merge"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: 10
+      }
+    }, allSectorNames.map(name => /*#__PURE__*/React.createElement("button", {
+      key: name,
+      onClick: () => {
+        setMergeFirst(name);
+        setMergeStep("pick-second");
+      },
+      style: {
+        padding: "9px 12px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontFamily: F.b,
+        cursor: "pointer",
+        background: "#F5F2ED",
+        border: "1.5px solid #E8E4DE",
+        color: "#2A2520",
+        textAlign: "left"
+      }
+    }, name))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setMergeStep(null),
+      style: {
+        width: "100%",
+        padding: "8px 0",
+        borderRadius: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "transparent",
+        border: "1.5px solid #E8E4DE",
+        color: "#999",
+        letterSpacing: 0.5
+      }
+    }, "CANCEL")), mergeStep === "pick-second" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 10,
+        padding: 14,
+        border: "1.5px solid #E8E4DE"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 10
+      }
+    }, "Merge \"", mergeFirst, "\" with..."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: 10
+      }
+    }, allSectorNames.filter(n => n !== mergeFirst).map(name => /*#__PURE__*/React.createElement("button", {
+      key: name,
+      onClick: () => {
+        setMergeSecond(name);
+        setMergeStep("confirm");
+      },
+      style: {
+        padding: "9px 12px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontFamily: F.b,
+        cursor: "pointer",
+        background: "#F5F2ED",
+        border: "1.5px solid #E8E4DE",
+        color: "#2A2520",
+        textAlign: "left"
+      }
+    }, name))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setMergeStep(null),
+      style: {
+        width: "100%",
+        padding: "8px 0",
+        borderRadius: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "transparent",
+        border: "1.5px solid #E8E4DE",
+        color: "#999",
+        letterSpacing: 0.5
+      }
+    }, "CANCEL")), mergeStep === "confirm" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF",
+        borderRadius: 10,
+        padding: 14,
+        border: "1.5px solid #D4663A"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#2A2520",
+        marginBottom: 6
+      }
+    }, "Which name should survive?"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 11,
+        color: "#999",
+        margin: "0 0 12px"
+      }
+    }, "All climbs and history from both sectors will end up under whichever name you pick. The other name will be gone for good."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        mergeSectors(mergeFirst, mergeSecond);
+        setMergeStep(null);
+        setMergeFirst(null);
+        setMergeSecond(null);
+      },
+      style: {
+        padding: "10px 12px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#2A2520",
+        border: "none",
+        color: "#F5F2ED",
+        letterSpacing: 0.5
+      }
+    }, "KEEP \"", mergeFirst, "\""), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        mergeSectors(mergeSecond, mergeFirst);
+        setMergeStep(null);
+        setMergeFirst(null);
+        setMergeSecond(null);
+      },
+      style: {
+        padding: "10px 12px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "#2A2520",
+        border: "none",
+        color: "#F5F2ED",
+        letterSpacing: 0.5
+      }
+    }, "KEEP \"", mergeSecond, "\"")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setMergeStep(null),
+      style: {
+        width: "100%",
+        padding: "8px 0",
+        borderRadius: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        background: "transparent",
+        border: "1.5px solid #E8E4DE",
+        color: "#999",
+        letterSpacing: 0.5
+      }
+    }, "CANCEL")))));
   }
   return null;
 }
@@ -8986,8 +9530,205 @@ function parseStretchCSV(text, existingData) {
   });
   return result;
 }
+
+// Reads Stretch data straight from localStorage and applies the same old-format migration the
+// app itself does on load — needed here too, since the unified backup reads storage directly
+// rather than going through a mounted StretchApp instance that might not exist yet this session.
+function getMigratedStretchData() {
+  let parsed = {};
+  try {
+    const raw = localStorage.getItem(STRETCH_STORAGE_KEY);
+    if (raw) parsed = JSON.parse(raw);
+  } catch (e) {}
+  const migrated = {};
+  DAYS_OF_WEEK.forEach(d => {
+    const dayVal = parsed[d];
+    if (!Array.isArray(dayVal) || dayVal.length === 0) {
+      migrated[d] = [];
+      return;
+    }
+    const looksLikeOldStretch = dayVal[0] && typeof dayVal[0].holdSec !== "undefined" && typeof dayVal[0].stretches === "undefined";
+    migrated[d] = looksLikeOldStretch ? [{
+      id: Date.now() + Math.random(),
+      name: "My Routine",
+      stretches: dayVal
+    }] : dayVal;
+  });
+  return migrated;
+}
+
+// ─── Unified backup — one file covering Send Log, Climb Log, and Stretch together ────────
+// Rather than reimplementing each section's row logic from scratch (and risking it drifting out
+// of sync with the real, already-proven builders/parsers), this reuses buildFingerCSV/
+// buildClimbCSV/buildStretchCSV and parseFingerCSV/parseClimbCSV/parseStretchCSV directly —
+// remapping their columns into one shared table on export, and extracting each section's own
+// rows back out on restore. A few column names collide across sections with different meanings
+// (Notes, Date), so those get a section-specific prefix in the unified file only.
+const UNIFIED_CSV_HEADER = ["Section", "Type", "SessionId", "FDate", "SessionType", "ExerciseId", "SetIndex", "RepIndex", "BW", "BWPercent", "AddedWeight", "Duration", "FNotes", "RPE", "ConfigId", "ConfigDay", "ConfigName", "ConfigExerciseId", "ConfigProtocol", "ConfigSets", "ConfigReps", "ConfigHangSec", "ConfigRepRestSec", "ConfigSetRestSec", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "CNotes", "CDate", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "Day", "RoutineId", "RoutineName", "RoutineOrder", "StretchId", "StretchName", "Reps", "HoldSec", "RestSec", "NextRestSec", "StretchOrder"];
+const FINGER_LOG_RENAME = {
+  "Date": "FDate",
+  "Notes": "FNotes"
+}; // original name -> unified name
+const CLIMB_RENAME = {
+  "Notes": "CNotes",
+  "Date": "CDate"
+};
+const FINGER_LOG_REVERSE = {
+  "FDate": "Date",
+  "FNotes": "Notes"
+}; // unified name -> original name
+const CLIMB_REVERSE = {
+  "CDate": "Date",
+  "CNotes": "Notes"
+};
+function remapCSVIntoUnified(csvString, section, renameMap) {
+  const rows = parseCSV(csvString);
+  if (rows.length < 2) return [];
+  const header = rows[0];
+  return rows.slice(1).filter(row => row && !row.every(c => c === "")).map(row => {
+    const unifiedRow = new Array(UNIFIED_CSV_HEADER.length).fill("");
+    unifiedRow[0] = section;
+    header.forEach((colName, i) => {
+      const targetCol = renameMap[colName] || colName;
+      const idx = UNIFIED_CSV_HEADER.indexOf(targetCol);
+      if (idx !== -1) unifiedRow[idx] = row[i] ?? "";
+    });
+    return unifiedRow;
+  });
+}
+function buildUnifiedCSV() {
+  const rows = [UNIFIED_CSV_HEADER];
+  let fingerLogs = [];
+  try {
+    fingerLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch (e) {}
+  if (fingerLogs.length) rows.push(...remapCSVIntoUnified(buildFingerCSV(fingerLogs), "finger_log", FINGER_LOG_RENAME));
+  let sessionsConfig = DEFAULT_SESSIONS_CONFIG;
+  try {
+    const raw = localStorage.getItem(SESSIONS_CONFIG_KEY);
+    if (raw) sessionsConfig = JSON.parse(raw);
+  } catch (e) {}
+  sessionsConfig.forEach(cfg => {
+    const row = new Array(UNIFIED_CSV_HEADER.length).fill("");
+    row[0] = "finger_config";
+    const set = (name, val) => {
+      row[UNIFIED_CSV_HEADER.indexOf(name)] = (val ?? "").toString();
+    };
+    set("ConfigId", cfg.id);
+    set("ConfigDay", cfg.day);
+    set("ConfigName", cfg.name);
+    set("ConfigExerciseId", cfg.exerciseId);
+    set("ConfigProtocol", cfg.protocol);
+    set("ConfigSets", cfg.sets);
+    set("ConfigReps", cfg.reps);
+    set("ConfigHangSec", cfg.hangSec);
+    set("ConfigRepRestSec", cfg.repRestSec);
+    set("ConfigSetRestSec", cfg.setRestSec);
+    rows.push(row);
+  });
+  let climbData = {
+    gymMap: null,
+    sectors: [],
+    sectorLogs: {}
+  };
+  try {
+    const raw = localStorage.getItem(CLIMB_STORAGE_KEY);
+    if (raw) climbData = JSON.parse(raw);
+  } catch (e) {}
+  rows.push(...remapCSVIntoUnified(buildClimbCSV(climbData), "climb", CLIMB_RENAME));
+  rows.push(...remapCSVIntoUnified(buildStretchCSV(getMigratedStretchData()), "stretch", {}));
+  return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+function extractMiniCSV(dataRows, section, reverseMap) {
+  const relevant = dataRows.filter(r => r[0] === section);
+  if (relevant.length === 0) return null;
+  const renamedHeader = UNIFIED_CSV_HEADER.map(col => reverseMap[col] || col);
+  return [renamedHeader, ...relevant].map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+
+// Restores all three sections from one unified file, merging into whatever's already on this
+// device (never wholesale-replacing) the same non-destructive way each section's own restore
+// always has. Returns which sections the file actually contained data for.
+function restoreUnifiedCSV(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 2 || rows[0][0] !== "Section") throw new Error("Not a valid unified backup file");
+  const dataRows = rows.slice(1);
+  const found = {
+    finger: false,
+    climb: false,
+    stretch: false
+  };
+  const fingerLogCSV = extractMiniCSV(dataRows, "finger_log", FINGER_LOG_REVERSE);
+  if (fingerLogCSV) {
+    let existingLogs = [];
+    try {
+      existingLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    } catch (e) {}
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parseFingerCSV(fingerLogCSV, existingLogs)));
+    found.finger = true;
+  }
+  const configRows = dataRows.filter(r => r[0] === "finger_config");
+  if (configRows.length > 0) {
+    let existingConfig = [];
+    try {
+      const raw = localStorage.getItem(SESSIONS_CONFIG_KEY);
+      existingConfig = raw ? JSON.parse(raw) : [];
+    } catch (e) {}
+    const idx = name => UNIFIED_CSV_HEADER.indexOf(name);
+    const iCId = idx("ConfigId"),
+      iCDay = idx("ConfigDay"),
+      iCName = idx("ConfigName"),
+      iCEx = idx("ConfigExerciseId"),
+      iCProto = idx("ConfigProtocol"),
+      iCSets = idx("ConfigSets"),
+      iCReps = idx("ConfigReps"),
+      iCHang = idx("ConfigHangSec"),
+      iCRepRest = idx("ConfigRepRestSec"),
+      iCSetRest = idx("ConfigSetRestSec");
+    const existingIds = new Set(existingConfig.map(c => String(c.id)));
+    const imported = configRows.map(row => ({
+      id: row[iCId] || Date.now() + Math.random(),
+      day: row[iCDay] || "monday",
+      name: row[iCName] || "Session",
+      exerciseId: row[iCEx] || "",
+      protocol: row[iCProto] || "",
+      sets: Number(row[iCSets]) || 3,
+      reps: Number(row[iCReps]) || 6,
+      hangSec: Number(row[iCHang]) || 7,
+      repRestSec: Number(row[iCRepRest]) || 0,
+      setRestSec: Number(row[iCSetRest]) || 180
+    })).filter(c => !existingIds.has(String(c.id)));
+    localStorage.setItem(SESSIONS_CONFIG_KEY, JSON.stringify(normalizeSessionsConfig([...existingConfig, ...imported])));
+    found.finger = true;
+  }
+  const climbCSV = extractMiniCSV(dataRows, "climb", CLIMB_REVERSE);
+  if (climbCSV) {
+    let existingClimbData = {
+      gymMap: null,
+      sectors: [],
+      sectorLogs: {}
+    };
+    try {
+      const raw = localStorage.getItem(CLIMB_STORAGE_KEY);
+      if (raw) existingClimbData = JSON.parse(raw);
+    } catch (e) {}
+    localStorage.setItem(CLIMB_STORAGE_KEY, JSON.stringify(parseClimbCSV(climbCSV, existingClimbData)));
+    found.climb = true;
+  }
+  const stretchCSV = extractMiniCSV(dataRows, "stretch", {});
+  if (stretchCSV) {
+    localStorage.setItem(STRETCH_STORAGE_KEY, JSON.stringify(parseStretchCSV(stretchCSV, getMigratedStretchData())));
+    found.stretch = true;
+  }
+  return found;
+}
 function StretchApp() {
   const [view, setView] = useState("home");
+  // Otherwise the scroll position from whatever view you were on carries over into the new one —
+  // navigating into a page while scrolled down would land you scrolled down there too.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
   const [routines, setRoutines] = useState(emptyStretchRoutines());
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(() => {
@@ -9058,16 +9799,16 @@ function StretchApp() {
       localStorage.setItem(STRETCH_STORAGE_KEY, JSON.stringify(next));
     } catch (e) {}
   };
-  const exportStretchCSV = () => {
+  const exportEverything = () => {
     try {
-      const csv = buildStretchCSV(dataRef.current);
+      const csv = buildUnifiedCSV();
       const blob = new Blob([csv], {
         type: "text/csv;charset=utf-8;"
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `stretch-routines-backup-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -9080,26 +9821,31 @@ function StretchApp() {
     }
     setTimeout(() => setBackupStatus(null), 3000);
   };
-  const importStretchCSV = e => {
+  const restoreEverything = e => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        const merged = parseStretchCSV(ev.target.result, dataRef.current);
-        persist(merged);
+        restoreUnifiedCSV(ev.target.result);
         setBackupStatus("restored");
+        // Send Log and Climb Log each keep their own in-memory copy loaded from localStorage at
+        // mount time, so a restore triggered from here needs a full reload for those other two
+        // sections to actually pick up what just landed in storage — not just this one.
+        setTimeout(() => {
+          window.location.reload();
+        }, 900);
       } catch (err) {
         setBackupStatus("error");
+        setTimeout(() => setBackupStatus(null), 3000);
       }
-      setTimeout(() => setBackupStatus(null), 3000);
     };
     reader.onerror = () => {
       setBackupStatus("error");
       setTimeout(() => setBackupStatus(null), 3000);
     };
     reader.readAsText(file);
-    e.target.value = "";
   };
 
   // ─── Routine CRUD ───────────────────────────────────
@@ -9477,6 +10223,13 @@ function StretchApp() {
         padding: "16px 0 16px",
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
         gap: 14
       }
     }, /*#__PURE__*/React.createElement("svg", {
@@ -9516,7 +10269,93 @@ function StretchApp() {
         letterSpacing: 4,
         marginTop: 3
       }
-    }, "DAILY MOBILITY ROUTINE")))), /*#__PURE__*/React.createElement(Stagger, {
+    }, "DAILY MOBILITY ROUTINE"))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("settings"),
+      title: "Settings",
+      style: {
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: 9,
+        margin: -9,
+        flexShrink: 0,
+        display: "flex"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "22",
+      height: "22",
+      viewBox: "0 0 40 40"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "8",
+      fill: "none",
+      stroke: "#2A2520",
+      strokeWidth: "2.5"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: "20",
+      cy: "20",
+      r: "3",
+      fill: "#2A2520",
+      opacity: "0.3"
+    }), /*#__PURE__*/React.createElement("g", {
+      fill: "#2A2520"
+    }, /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(45 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(90 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(135 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(180 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(225 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(270 20 20)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      x: "18.5",
+      y: "4",
+      width: "3",
+      height: "6",
+      rx: "1",
+      transform: "rotate(315 20 20)"
+    })))))), /*#__PURE__*/React.createElement(Stagger, {
       delay: 60
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9868,12 +10707,47 @@ function StretchApp() {
         color: "#999",
         letterSpacing: 2
       }
-    }, "+ ADD ROUTINE TO ", DAY_LABELS[selectedDay]), /*#__PURE__*/React.createElement("div", {
+    }, "+ ADD ROUTINE TO ", DAY_LABELS[selectedDay])));
+  }
+  if (view === "settings") {
+    return /*#__PURE__*/React.createElement("div", {
+      style: CS.page
+    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        zIndex: 1
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("home"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        borderRadius: 20,
+        color: "#2A2520",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+        marginBottom: 16,
+        padding: "8px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      }
+    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 26,
+        fontWeight: 800,
+        color: "#2A2520",
+        margin: "0 0 20px"
+      }
+    }, "Settings"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "28px 0 16px"
+        margin: "0 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9888,7 +10762,7 @@ function StretchApp() {
         color: "#AAA",
         letterSpacing: 3
       }
-    }, "DATA"), /*#__PURE__*/React.createElement("div", {
+    }, "BACKUP"), /*#__PURE__*/React.createElement("div", {
       style: {
         flex: 1,
         height: 1,
@@ -9901,13 +10775,13 @@ function StretchApp() {
         color: "#3A8A7A",
         marginBottom: 10
       }
-    }, "✓ Your routines are saved automatically on this device. Export a CSV backup periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
       }
     }, /*#__PURE__*/React.createElement("button", {
-      onClick: exportStretchCSV,
+      onClick: exportEverything,
       style: {
         flex: 1,
         padding: "12px 0",
@@ -9916,13 +10790,13 @@ function StretchApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: backupStatus === "exported" ? "#2A2520" : "#FFF",
         border: `1.5px solid ${backupStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: backupStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "EXPORT CSV"), /*#__PURE__*/React.createElement("button", {
+    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -9932,17 +10806,17 @@ function StretchApp() {
         fontWeight: 700,
         fontFamily: F.m,
         cursor: "pointer",
-        letterSpacing: 2,
+        letterSpacing: 1,
         transition: "all 0.2s",
         background: backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#FFF",
         border: `1.5px solid ${backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: backupStatus === "restored" || backupStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE CSV")), /*#__PURE__*/React.createElement("input", {
+    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
-      onChange: importStretchCSV,
+      onChange: restoreEverything,
       style: {
         display: "none"
       }
