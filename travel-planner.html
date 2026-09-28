@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Waypoint — Trip Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF8;
+    --panel:#FFFFFF;
+    --ink:#14213D;
+    --body:#33394A;
+    --muted:#767C8C;
+    --line:#E3E1D9;
+    --meal:#C9862F;
+    --meal-bg:#FBF1E3;
+    --activity:#2E7D6B;
+    --activity-bg:#E9F4F1;
+    --travel:#4A5FBF;
+    --travel-bg:#EDEFFA;
+    --accom:#8B5FA0;
+    --accom-bg:#F4EDF7;
+    --danger:#B3432B;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--body);
+    font-family:'Inter',-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:calc(64px + env(safe-area-inset-bottom,0px));
+    min-height:100vh;
+  }
+  .num{font-family:'Archivo',sans-serif;font-weight:700;}
+  header.app-header{
+    background:var(--ink);
+    color:#fff;
+    padding:18px 18px 16px;
+    position:sticky;top:0;z-index:20;
+  }
+  header.app-header .title{font-family:'Archivo';font-weight:800;font-size:20px;letter-spacing:.2px;}
+  header.app-header .sub{font-size:13px;color:#B9C0D6;margin-top:2px;}
+  .back-row{display:flex;align-items:center;gap:10px;}
+  .back-btn{background:none;border:none;color:#fff;font-size:15px;padding:0;cursor:pointer;font-family:inherit;}
+
+  main{padding:16px;max-width:640px;margin:0 auto;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    margin-bottom:12px;
+  }
+  .trip-card{display:flex;justify-content:space-between;align-items:center;cursor:pointer;}
+  .trip-card .name{font-family:'Archivo';font-weight:700;font-size:17px;color:var(--ink);}
+  .trip-card .dates{font-size:13px;color:var(--muted);margin-top:3px;}
+  .trip-card .chev{color:var(--muted);font-size:20px;}
+
+  .empty{
+    text-align:center;padding:48px 20px;color:var(--muted);
+  }
+  .empty .big{font-family:'Archivo';font-weight:700;color:var(--ink);font-size:17px;margin-bottom:6px;}
+
+  .fab{
+    position:fixed;right:18px;bottom:calc(80px + env(safe-area-inset-bottom,0px));
+    background:var(--ink);color:#fff;border:none;border-radius:50%;
+    width:54px;height:54px;font-size:26px;line-height:54px;text-align:center;
+    box-shadow:0 4px 14px rgba(20,33,61,.35);cursor:pointer;z-index:15;
+  }
+
+  nav.tabbar{
+    position:fixed;bottom:0;left:0;right:0;
+    background:var(--panel);border-top:1px solid var(--line);
+    display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));
+    z-index:20;
+  }
+  nav.tabbar button{
+    flex:1;background:none;border:none;font-family:'Inter';font-size:11.5px;
+    color:var(--muted);padding:6px 2px;cursor:pointer;font-weight:500;
+  }
+  nav.tabbar button.active{color:var(--ink);font-weight:600;}
+
+  .daychips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;-webkit-overflow-scrolling:touch;}
+  .daychip{
+    flex:0 0 auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:7px 14px;font-size:13px;color:var(--body);cursor:pointer;white-space:nowrap;
+  }
+  .daychip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .item{
+    display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;
+  }
+  .item .time{font-family:'Archivo';font-weight:700;font-size:14px;color:var(--ink);min-width:52px;padding-top:1px;}
+  .item .bar{width:3px;border-radius:2px;flex:0 0 3px;}
+  .item.meal .bar{background:var(--meal);} .item.activity .bar{background:var(--activity);}
+  .item.travel .bar{background:var(--travel);} .item.stay .bar{background:var(--accom);}
+  .item .body{flex:1;min-width:0;}
+  .item .kicker{font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
+  .item.meal .kicker{color:var(--meal);} .item.activity .kicker{color:var(--activity);}
+  .item.travel .kicker{color:var(--travel);} .item.stay .kicker{color:var(--accom);}
+  .item .iname{font-weight:600;color:var(--ink);font-size:15px;margin-top:2px;}
+  .item .iloc{font-size:13px;color:var(--muted);margin-top:2px;}
+  .item .inotes{font-size:13px;color:var(--body);margin-top:4px;}
+  .item .actions{display:flex;gap:10px;margin-top:8px;}
+  .item .actions a, .item .actions button{
+    font-size:12.5px;color:var(--travel);background:none;border:none;padding:0;
+    cursor:pointer;font-family:inherit;text-decoration:none;font-weight:600;
+  }
+  .item .actions .del{color:var(--danger);}
+
+  .section-title{font-family:'Archivo';font-weight:700;color:var(--ink);font-size:15px;margin:18px 0 8px;}
+  .section-title:first-child{margin-top:0;}
+
+  .pack-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .pack-row:last-child{border-bottom:none;}
+  .pack-row input[type=checkbox]{width:19px;height:19px;accent-color:var(--activity);}
+  .pack-row .pname{flex:1;font-size:15px;}
+  .pack-row.done .pname{text-decoration:line-through;color:var(--muted);}
+  .pack-row .del{background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer;}
+
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+
+  form label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:12px 0 5px;}
+  form label:first-child{margin-top:0;}
+  input[type=text], input[type=date], input[type=time], input[type=url], textarea, select{
+    width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px;
+    font-size:15px;font-family:inherit;background:#fff;color:var(--body);
+  }
+  textarea{resize:vertical;min-height:56px;}
+  .btn{
+    display:inline-block;background:var(--ink);color:#fff;border:none;border-radius:8px;
+    padding:12px 18px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;
+    width:100%;margin-top:16px;
+  }
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .btn.danger{background:var(--danger);}
+  .type-pick{display:flex;gap:8px;margin-bottom:4px;}
+  .type-pick button{
+    flex:1;padding:10px 4px;border-radius:8px;border:1px solid var(--line);background:#fff;
+    font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);font-family:inherit;
+  }
+  .type-pick button.sel{color:#fff;border-color:transparent;}
+  .type-pick button.sel[data-type=meal]{background:var(--meal);}
+  .type-pick button.sel[data-type=activity]{background:var(--activity);}
+  .type-pick button.sel[data-type=travel]{background:var(--travel);}
+
+  .sheet-backdrop{
+    position:fixed;inset:0;background:rgba(20,33,61,.4);z-index:30;
+    display:flex;align-items:flex-end;
+  }
+  .sheet{
+    background:var(--bg);width:100%;max-height:88vh;overflow-y:auto;
+    border-radius:16px 16px 0 0;padding:18px 18px calc(24px + env(safe-area-inset-bottom,0px));
+    animation:up .18s ease-out;
+  }
+  @keyframes up{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .sheet h3{font-family:'Archivo';font-weight:700;color:var(--ink);margin:0 0 4px;font-size:18px;}
+  .sheet .close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;}
+  .sheet-wrap{position:relative;}
+
+  .hint{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.4;}
+  .filerow{display:flex;gap:8px;}
+  .toast{
+    position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:13.5px;
+    z-index:50;opacity:0;pointer-events:none;transition:opacity .2s;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div id="sheetHost"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- storage ---------- */
+const STORE_KEY = 'waypointData';
+function load(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {trips:[]}; }
+  catch(e){ return {trips:[]}; }
+}
+function save(data){ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+let DATA = load();
+let STATE = { view:'home', tripId:null, tab:'timetable', day:null };
+
+function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1800);
+}
+function getTrip(id){ return DATA.trips.find(t=>t.id===id); }
+
+/* ---------- date helpers ---------- */
+function fmtDate(d){ // d = 'YYYY-MM-DD'
+  const [y,m,day] = d.split('-').map(Number);
+  const dt = new Date(y, m-1, day);
+  return dt.toLocaleDateString('en-AU',{weekday:'short', day:'numeric', month:'short'});
+}
+function fmtRange(a,b){
+  if(!a||!b) return '';
+  return `${fmtDate(a)} – ${fmtDate(b)}`;
+}
+function daysBetween(start,end){
+  const days=[];
+  let [y,m,d]=start.split('-').map(Number);
+  let cur=new Date(y,m-1,d);
+  const [ey,em,ed]=end.split('-').map(Number);
+  const last=new Date(ey,em-1,ed);
+  while(cur<=last){
+    const yyyy=cur.getFullYear(), mm=String(cur.getMonth()+1).padStart(2,'0'), dd=String(cur.getDate()).padStart(2,'0');
+    days.push(`${yyyy}-${mm}-${dd}`);
+    cur.setDate(cur.getDate()+1);
+  }
+  return days;
+}
+function fmtTime(t){ if(!t) return ''; return t; }
+function timeSort(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); }
+
+/* ---------- render root ---------- */
+function render(){
+  const app=document.getElementById('app');
+  if(STATE.view==='home') app.innerHTML = renderHome();
+  else app.innerHTML = renderTrip(getTrip(STATE.tripId));
+  attachHomeHandlers();
+}
+
+/* ---------- HOME ---------- */
+function renderHome(){
+  let body;
+  if(DATA.trips.length===0){
+    body = `<div class="empty"><div class="big">No trips yet</div>Tap + to plan your first one.</div>`;
+  } else {
+    body = DATA.trips.slice().sort((a,b)=>a.startDate.localeCompare(b.startDate))
+      .map(t=>`
+        <div class="card trip-card" onclick="openTrip('${t.id}')">
+          <div>
+            <div class="name">${esc(t.name)}</div>
+            <div class="dates">${fmtRange(t.startDate,t.endDate)}</div>
+          </div>
+          <div class="chev">›</div>
+        </div>`).join('');
+  }
+  return `
+    <header class="app-header">
+      <div class="title">Waypoint</div>
+      <div class="sub">Your trips</div>
+    </header>
+    <main>${body}</main>
+    <button class="fab" onclick="openSheet('addTrip')">+</button>
+  `;
+}
+
+function openTrip(id){ STATE.view='trip'; STATE.tripId=id; STATE.tab='timetable';
+  const t=getTrip(id); STATE.day = t.startDate; render(); }
+function goHome(){ STATE.view='home'; render(); }
+
+/* ---------- TRIP VIEW ---------- */
+function renderTrip(t){
+  if(!t){ STATE.view='home'; return renderHome(); }
+  let tabContent;
+  if(STATE.tab==='timetable') tabContent = renderTimetable(t);
+  else if(STATE.tab==='stay') tabContent = renderAccommodation(t);
+  else if(STATE.tab==='pack') tabContent = renderPacking(t);
+  else if(STATE.tab==='data') tabContent = renderData(t);
+
+  return `
+    <header class="app-header">
+      <div class="back-row"><button class="back-btn" onclick="goHome()">‹ Trips</button></div>
+      <div class="title" style="margin-top:6px;">${esc(t.name)}</div>
+      <div class="sub">${fmtRange(t.startDate,t.endDate)}</div>
+    </header>
+    <main>${tabContent}</main>
+    ${STATE.tab==='timetable' ? `<button class="fab" onclick="openSheet('addItem','${t.id}')">+</button>` : ''}
+    ${STATE.tab==='stay' ? `<button class="fab" onclick="openSheet('addStay','${t.id}')">+</button>` : ''}
+    ${STATE.tab==='pack' ? `<button class="fab" onclick="openSheet('addPack','${t.id}')">+</button>` : ''}
+    <nav class="tabbar">
+      <button class="${STATE.tab==='timetable'?'active':''}" onclick="setTab('timetable')">Timetable</button>
+      <button class="${STATE.tab==='stay'?'active':''}" onclick="setTab('stay')">Stays</button>
+      <button class="${STATE.tab==='pack'?'active':''}" onclick="setTab('pack')">Packing</button>
+      <button class="${STATE.tab==='data'?'active':''}" onclick="setTab('data')">Data</button>
+    </nav>
+  `;
+}
+function setTab(tab){ STATE.tab=tab; render(); }
+
+/* ---- Timetable ---- */
+function renderTimetable(t){
+  const days = daysBetween(t.startDate,t.endDate);
+  if(!STATE.day || !days.includes(STATE.day)) STATE.day = days[0];
+  const chips = days.map((d,i)=>`<div class="daychip ${d===STATE.day?'active':''}" onclick="setDay('${d}')">Day ${i+1} · ${fmtDate(d)}</div>`).join('');
+
+  // gather items for this day
+  let rows = (t.agenda||[]).filter(a=>a.date===STATE.day).map(a=>({...a}));
+  // add accommodation check-in/out pseudo rows
+  (t.accommodations||[]).forEach(a=>{
+    if(a.checkIn===STATE.day) rows.push({id:a.id+'-in',type:'stay',time:a.checkInTime||'15:00',name:a.name+' — check in',location:a.address,notes:a.notes,readonly:true,stayId:a.id});
+    if(a.checkOut===STATE.day) rows.push({id:a.id+'-out',type:'stay',time:a.checkOutTime||'10:00',name:a.name+' — check out',location:a.address,notes:'',readonly:true,stayId:a.id});
+  });
+  rows.sort(timeSort);
+
+  const list = rows.length ? rows.map(r=>renderItem(r,t.id)).join('') :
+    `<div class="empty" style="padding:32px 10px;">Nothing planned yet for this day.</div>`;
+
+  return `<div class="daychips">${chips}</div>${list}`;
+}
+function setDay(d){ STATE.day=d; render(); }
+
+function renderItem(a,tripId){
+  const kicker = a.type==='meal' ? (a.mealSlot||'meal') : a.type==='travel' ? 'travel' : a.type==='stay' ? 'accommodation' : 'activity';
+  let loc = '', extraActions='';
+  if(a.type==='travel'){
+    loc = `${esc(a.origin||'')} → ${esc(a.destination||'')}`;
+    if(a.origin && a.destination){
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(a.origin)}&destination=${encodeURIComponent(a.destination)}&travelmode=${a.mode||'driving'}`;
+      extraActions = `<a href="${url}" target="_blank" rel="noopener">Open in Maps</a>`;
+    }
+    if(a.duration) loc += ` · ${esc(a.duration)}`;
+  } else {
+    loc = esc(a.location||'');
+  }
+  const editBtn = a.readonly ? '' : `<button onclick="openSheet('editItem','${tripId}','${a.id}')">Edit</button>`;
+  const delBtn = a.readonly ? '' : `<button class="del" onclick="deleteItem('${tripId}','${a.id}')">Delete</button>`;
+  return `
+    <div class="item ${a.type}">
+      <div class="bar"></div>
+      <div class="time num">${fmtTime(a.time)||'--:--'}</div>
+      <div class="body">
+        <div class="kicker">${esc(kicker)}</div>
+        <div class="iname">${esc(a.name||'')}</div>
+        ${loc?`<div class="iloc">${loc}</div>`:''}
+        ${a.notes?`<div class="inotes">${esc(a.notes)}</div>`:''}
+        <div class="actions">${extraActions}${editBtn}${delBtn}</div>
+      </div>
+    </div>`;
+}
+function deleteItem(tripId,itemId){
+  const t=getTrip(tripId); t.agenda = (t.agenda||[]).filter(a=>a.id!==itemId);
+  save(DATA); render();
+}
+
+/* ---- Accommodation ---- */
+function renderAccommodation(t){
+  const list=(t.accommodations||[]).slice().sort((a,b)=>a.checkIn.localeCompare(b.checkIn));
+  if(!list.length) return `<div class="empty"><div class="big">No stays added</div>Tap + to add where you're staying.</div>`;
+  return list.map(a=>`
+    <div class="card">
+      <div class="name" style="font-family:'Archivo';font-weight:700;color:var(--ink);font-size:15.5px;">${esc(a.name)}</div>
+      <div class="dates" style="margin-bottom:6px;">${fmtRange(a.checkIn,a.checkOut)}</div>
+      ${a.address?`<div style="font-size:13.5px;color:var(--body);margin-bottom:4px;">${esc(a.address)}</div>`:''}
+      ${a.confirmation?`<div style="font-size:12.5px;color:var(--muted);">Confirmation: ${esc(a.confirmation)}</div>`:''}
+      ${a.notes?`<div class="inotes">${esc(a.notes)}</div>`:''}
+      <div class="actions" style="margin-top:8px;">
+        <button onclick="openSheet('editStay','${t.id}','${a.id}')">Edit</button>
+        <button class="del" onclick="deleteStay('${t.id}','${a.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+function deleteStay(tripId,id){
+  const t=getTrip(tripId); t.accommodations=(t.accommodations||[]).filter(a=>a.id!==id);
+  save(DATA); render();
+}
+
+/* ---- Packing ---- */
+function renderPacking(t){
+  const list=t.packing||[];
+  if(!list.length) return `<div class="empty"><div class="big">Packing list is empty</div>Tap + to add items.</div>`;
+  return `<div class="card">${list.map(p=>`
+    <div class="pack-row ${p.packed?'done':''}">
+      <input type="checkbox" ${p.packed?'checked':''} onchange="togglePack('${t.id}','${p.id}')">
+      <div class="pname">${esc(p.name)}</div>
+      <button class="del" onclick="deletePack('${t.id}','${p.id}')">✕</button>
+    </div>`).join('')}</div>`;
+}
+function togglePack(tripId,id){
+  const t=getTrip(tripId); const p=t.packing.find(x=>x.id===id); p.packed=!p.packed; save(DATA); render();
+}
+function deletePack(tripId,id){
+  const t=getTrip(tripId); t.packing=t.packing.filter(p=>p.id!==id); save(DATA); render();
+}
+
+/* ---- Data / Export-Import ---- */
+function renderData(t){
+  return `
+    <div class="section-title">Backup this trip</div>
+    <div class="card">
+      Everything is saved automatically on this device. Export a CSV to back it up or move it to another device.
+      <button class="btn" onclick="exportCSV('${t.id}')">Export trip as CSV</button>
+    </div>
+    <div class="section-title">Restore from CSV</div>
+    <div class="card">
+      Importing will replace this trip's accommodation, timetable and packing data with the contents of the file.
+      <div class="filerow" style="margin-top:12px;">
+        <input type="file" id="importFile" accept=".csv" style="flex:1;">
+      </div>
+      <button class="btn secondary" onclick="importCSV('${t.id}')">Import CSV into this trip</button>
+    </div>
+    <div class="section-title">Danger zone</div>
+    <div class="card">
+      <button class="btn danger" onclick="deleteTrip('${t.id}')">Delete this trip</button>
+    </div>
+  `;
+}
+function deleteTrip(id){
+  if(!confirm('Delete this trip and all its data? This cannot be undone.')) return;
+  DATA.trips = DATA.trips.filter(t=>t.id!==id);
+  save(DATA); goHome();
+}
+
+/* CSV columns shared across row types.
+   endDate is only used by accommodation rows (check-out date) so it never
+   collides with endTime (an activity's end time or a stay's check-out time). */
+const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed'];
+function csvEscape(v){
+  v = (v===undefined||v===null) ? '' : String(v);
+  if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
+  return v;
+}
+function exportCSV(tripId){
+  const t=getTrip(tripId);
+  const rows=[CSV_COLS.join(',')];
+  (t.accommodations||[]).forEach(a=>{
+    rows.push([ 'accommodation', a.checkIn, a.checkInTime||'', a.checkOut, a.checkOutTime||'', '', a.name, a.address, '', '', '', '', a.confirmation||'', a.notes||'', '' ].map(csvEscape).join(','));
+  });
+  (t.agenda||[]).forEach(a=>{
+    rows.push([ a.type, a.date, a.time||'', '', a.endTime||'', a.mealSlot||'', a.name||'', a.location||'', a.origin||'', a.destination||'', a.duration||'', a.mode||'', '', a.notes||'', '' ].map(csvEscape).join(','));
+  });
+  (t.packing||[]).forEach(p=>{
+    rows.push([ 'packing','','','','','',p.name,'','','','','','','',p.packed?'true':'false' ].map(csvEscape).join(','));
+  });
+  const meta = `# trip:${csvEscape(t.name)} start:${t.startDate} end:${t.endDate}\n`;
+  const blob = new Blob([meta+rows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download = `${t.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('CSV exported');
+}
+/* Parses a full CSV file (not line-by-line) so quoted fields containing
+   embedded newlines — e.g. multi-line notes — are handled correctly. */
+function parseCSV(text){
+  const rows=[]; let row=[]; let field=''; let inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){
+        if(text[i+1]==='"'){ field+='"'; i++; }
+        else inQ=false;
+      } else field+=c;
+    } else {
+      if(c==='"') inQ=true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c==='\r'){ /* skip; \r\n handled via the \n branch */ }
+      else field+=c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function importCSV(tripId){
+  const f=document.getElementById('importFile').files[0];
+  if(!f){ toast('Choose a CSV file first'); return; }
+  const reader=new FileReader();
+  reader.onload = e=>{
+    const text=e.target.result;
+    const allRows=parseCSV(text).filter(r=>!(r.length===1 && r[0].startsWith('#')) && r.some(c=>c!==''));
+    if(!allRows.length){ toast('File looks empty'); return; }
+    const header=allRows[0];
+    const idx=c=>header.indexOf(c);
+    const t=getTrip(tripId);
+    t.accommodations=[]; t.agenda=[]; t.packing=[];
+    for(let i=1;i<allRows.length;i++){
+      const cols=allRows[i];
+      const get=c=> idx(c)>=0 ? (cols[idx(c)]||'') : '';
+      const type=get('type');
+      if(type==='accommodation'){
+        t.accommodations.push({ id:uid(), name:get('name'), address:get('location'),
+          checkIn:get('date'), checkInTime:get('time'), checkOut:get('endDate'), checkOutTime:get('endTime'),
+          confirmation:get('confirmation'), notes:get('notes') });
+      } else if(type==='packing'){
+        t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
+      } else if(['meal','activity','travel'].includes(type)){
+        t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
+          mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
+          destination:get('destination'), duration:get('duration'), mode:get('mode')||'driving', notes:get('notes') });
+      }
+    }
+    save(DATA); toast('Trip restored from CSV'); render();
+  };
+  reader.readAsText(f);
+}
+
+/* ---------- SHEETS (forms) ---------- */
+function closeSheet(){ document.getElementById('sheetHost').innerHTML=''; }
+function openSheet(kind, tripId, itemId){
+  const host=document.getElementById('sheetHost');
+  host.innerHTML = `<div class="sheet-backdrop" onclick="if(event.target===this) closeSheet()">
+    <div class="sheet sheet-wrap"><button class="close" onclick="closeSheet()">✕</button>${sheetBody(kind,tripId,itemId)}</div>
+  </div>`;
+}
+
+function sheetBody(kind, tripId, itemId){
+  if(kind==='addTrip') return `
+    <h3>New trip</h3>
+    <form onsubmit="return submitTrip(event)">
+      <label>Trip name</label><input type="text" id="f_name" required placeholder="e.g. Japan 2026">
+      <div class="row">
+        <div><label>Start date</label><input type="date" id="f_start" required></div>
+        <div><label>End date</label><input type="date" id="f_end" required></div>
+      </div>
+      <button class="btn" type="submit">Create trip</button>
+    </form>`;
+
+  const t = tripId ? getTrip(tripId) : null;
+
+  if(kind==='addStay' || kind==='editStay'){
+    const a = itemId ? t.accommodations.find(x=>x.id===itemId) : {};
+    return `
+    <h3>${itemId?'Edit stay':'Add accommodation'}</h3>
+    <form onsubmit="return submitStay(event,'${tripId}','${itemId||''}')">
+      <label>Name</label><input type="text" id="f_name" required value="${attr(a.name)}" placeholder="e.g. Park Hyatt Tokyo">
+      <label>Address</label><input type="text" id="f_address" value="${attr(a.address)}">
+      <div class="row">
+        <div><label>Check-in date</label><input type="date" id="f_in" required value="${attr(a.checkIn)}"></div>
+        <div><label>Check-in time</label><input type="time" id="f_intime" value="${attr(a.checkInTime)}"></div>
+      </div>
+      <div class="row">
+        <div><label>Check-out date</label><input type="date" id="f_out" required value="${attr(a.checkOut)}"></div>
+        <div><label>Check-out time</label><input type="time" id="f_outtime" value="${attr(a.checkOutTime)}"></div>
+      </div>
+      <label>Confirmation number</label><input type="text" id="f_conf" value="${attr(a.confirmation)}">
+      <label>Notes</label><textarea id="f_notes">${a.notes||''}</textarea>
+      <button class="btn" type="submit">${itemId?'Save changes':'Add stay'}</button>
+    </form>`;
+  }
+
+  if(kind==='addPack'){
+    return `
+    <h3>Add packing item</h3>
+    <form onsubmit="return submitPack(event,'${tripId}')">
+      <label>Item</label><input type="text" id="f_name" required placeholder="e.g. Passport" autofocus>
+      <button class="btn" type="submit">Add item</button>
+    </form>`;
+  }
+
+  if(kind==='addItem' || kind==='editItem'){
+    const a = itemId ? t.agenda.find(x=>x.id===itemId) : {};
+    const type = a.type || 'activity';
+    const days = daysBetween(t.startDate,t.endDate);
+    const dayOpts = days.map((d,i)=>`<option value="${d}" ${(a.date||STATE.day)===d?'selected':''}>Day ${i+1} · ${fmtDate(d)}</option>`).join('');
+    return `
+    <h3>${itemId?'Edit item':'Add to timetable'}</h3>
+    <div class="type-pick" id="typePick">
+      <button type="button" data-type="meal" class="${type==='meal'?'sel':''}" onclick="pickType('meal')">Meal</button>
+      <button type="button" data-type="activity" class="${type==='activity'?'sel':''}" onclick="pickType('activity')">Activity</button>
+      <button type="button" data-type="travel" class="${type==='travel'?'sel':''}" onclick="pickType('travel')">Travel</button>
+    </div>
+    <form onsubmit="return submitItem(event,'${tripId}','${itemId||''}')">
+      <input type="hidden" id="f_type" value="${type}">
+      <label>Day</label><select id="f_date">${dayOpts}</select>
+
+      <div id="mealFields" style="display:${type==='meal'?'block':'none'}">
+        <label>Meal</label>
+        <select id="f_mealslot">
+          <option value="breakfast" ${a.mealSlot==='breakfast'?'selected':''}>Breakfast</option>
+          <option value="lunch" ${a.mealSlot==='lunch'?'selected':''}>Lunch</option>
+          <option value="dinner" ${a.mealSlot==='dinner'?'selected':''}>Dinner</option>
+        </select>
+        <label>Time</label><input type="time" id="f_mealtime" value="${attr(a.time)}">
+        <label>Restaurant / place</label><input type="text" id="f_mealname" value="${attr(a.name)}">
+        <label>Location</label><input type="text" id="f_mealloc" value="${attr(a.location)}">
+        <label>Notes</label><textarea id="f_mealnotes">${a.notes||''}</textarea>
+      </div>
+
+      <div id="activityFields" style="display:${type==='activity'?'block':'none'}">
+        <label>Activity</label><input type="text" id="f_actname" value="${attr(a.name)}" placeholder="e.g. Fushimi Inari Shrine">
+        <div class="row">
+          <div><label>Time</label><input type="time" id="f_acttime" value="${attr(a.time)}"></div>
+          <div><label>End time (optional)</label><input type="time" id="f_actend" value="${attr(a.endTime)}"></div>
+        </div>
+        <label>Location</label><input type="text" id="f_actloc" value="${attr(a.location)}">
+        <label>Notes</label><textarea id="f_actnotes">${a.notes||''}</textarea>
+      </div>
+
+      <div id="travelFields" style="display:${type==='travel'?'block':'none'}">
+        <label>Time</label><input type="time" id="f_traveltime" value="${attr(a.time)}">
+        <label>From</label><input type="text" id="f_origin" value="${attr(a.origin)}" placeholder="Origin address">
+        <label>To</label><input type="text" id="f_destination" value="${attr(a.destination)}" placeholder="Destination address">
+        <div class="row">
+          <div><label>Duration (manual)</label><input type="text" id="f_duration" value="${attr(a.duration)}" placeholder="e.g. 40 min"></div>
+          <div><label>Mode</label>
+            <select id="f_mode">
+              <option value="driving" ${a.mode==='driving'?'selected':''}>Driving</option>
+              <option value="walking" ${a.mode==='walking'?'selected':''}>Walking</option>
+              <option value="transit" ${a.mode==='transit'?'selected':''}>Transit</option>
+              <option value="bicycling" ${a.mode==='bicycling'?'selected':''}>Cycling</option>
+            </select>
+          </div>
+        </div>
+        <div class="hint">Fill in From/To, save, then tap "Open in Maps" on the timetable to check live travel time in Google Maps.</div>
+        <label>Notes</label><textarea id="f_travelnotes">${a.notes||''}</textarea>
+      </div>
+
+      <button class="btn" type="submit">${itemId?'Save changes':'Add to timetable'}</button>
+    </form>`;
+  }
+  return '';
+}
+function attr(v){ return v ? String(v).replace(/"/g,'&quot;') : ''; }
+function pickType(type){
+  document.getElementById('f_type').value=type;
+  document.querySelectorAll('#typePick button').forEach(b=>b.classList.toggle('sel', b.dataset.type===type));
+  document.getElementById('mealFields').style.display = type==='meal'?'block':'none';
+  document.getElementById('activityFields').style.display = type==='activity'?'block':'none';
+  document.getElementById('travelFields').style.display = type==='travel'?'block':'none';
+}
+
+function submitTrip(e){
+  e.preventDefault();
+  const name=document.getElementById('f_name').value.trim();
+  const start=document.getElementById('f_start').value;
+  const end=document.getElementById('f_end').value;
+  if(!name||!start||!end) return false;
+  if(end<start){ toast('End date is before start date'); return false; }
+  const trip={ id:uid(), name, startDate:start, endDate:end, accommodations:[], agenda:[], packing:[] };
+  DATA.trips.push(trip); save(DATA); closeSheet();
+  openTrip(trip.id);
+  return false;
+}
+
+function submitStay(e,tripId,itemId){
+  e.preventDefault();
+  const t=getTrip(tripId);
+  const data={
+    name:document.getElementById('f_name').value.trim(),
+    address:document.getElementById('f_address').value.trim(),
+    checkIn:document.getElementById('f_in').value,
+    checkInTime:document.getElementById('f_intime').value,
+    checkOut:document.getElementById('f_out').value,
+    checkOutTime:document.getElementById('f_outtime').value,
+    confirmation:document.getElementById('f_conf').value.trim(),
+    notes:document.getElementById('f_notes').value.trim(),
+  };
+  if(itemId){
+    Object.assign(t.accommodations.find(a=>a.id===itemId), data);
+  } else {
+    t.accommodations.push({id:uid(), ...data});
+  }
+  save(DATA); closeSheet(); render();
+  return false;
+}
+
+function submitPack(e,tripId){
+  e.preventDefault();
+  const name=document.getElementById('f_name').value.trim();
+  if(!name) return false;
+  const t=getTrip(tripId);
+  t.packing.push({id:uid(), name, packed:false});
+  save(DATA); closeSheet(); render();
+  return false;
+}
+
+function submitItem(e,tripId,itemId){
+  e.preventDefault();
+  const type=document.getElementById('f_type').value;
+  const date=document.getElementById('f_date').value;
+  const t=getTrip(tripId);
+  let data={type,date};
+  if(type==='meal'){
+    data.mealSlot=document.getElementById('f_mealslot').value;
+    data.time=document.getElementById('f_mealtime').value;
+    data.name=document.getElementById('f_mealname').value.trim();
+    data.location=document.getElementById('f_mealloc').value.trim();
+    data.notes=document.getElementById('f_mealnotes').value.trim();
+  } else if(type==='activity'){
+    data.name=document.getElementById('f_actname').value.trim();
+    data.time=document.getElementById('f_acttime').value;
+    data.endTime=document.getElementById('f_actend').value;
+    data.location=document.getElementById('f_actloc').value.trim();
+    data.notes=document.getElementById('f_actnotes').value.trim();
+  } else if(type==='travel'){
+    data.time=document.getElementById('f_traveltime').value;
+    data.origin=document.getElementById('f_origin').value.trim();
+    data.destination=document.getElementById('f_destination').value.trim();
+    data.duration=document.getElementById('f_duration').value.trim();
+    data.mode=document.getElementById('f_mode').value;
+    data.name = `${data.origin||'Origin'} → ${data.destination||'Destination'}`;
+    data.notes=document.getElementById('f_travelnotes').value.trim();
+  }
+  if(itemId){
+    Object.assign(t.agenda.find(a=>a.id===itemId), data);
+  } else {
+    t.agenda.push({id:uid(), ...data});
+  }
+  save(DATA); closeSheet(); STATE.day=date; render();
+  return false;
+}
+
+function esc(s){
+  if(s===undefined||s===null) return '';
+  return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+function attachHomeHandlers(){}
+
+render();
+</script>
+</body>
+</html>
