@@ -21,6 +21,8 @@
     --activity-bg:#E9F4F1;
     --travel:#4A5FBF;
     --travel-bg:#EDEFFA;
+    --flight:#1E88C7;
+    --flight-bg:#E7F3FA;
     --accom:#8B5FA0;
     --accom-bg:#F4EDF7;
     --danger:#B3432B;
@@ -101,10 +103,12 @@
   .item .bar{width:3px;border-radius:2px;flex:0 0 3px;}
   .item.meal .bar{background:var(--meal);} .item.activity .bar{background:var(--activity);}
   .item.travel .bar{background:var(--travel);} .item.stay .bar{background:var(--accom);}
+  .item.flight .bar{background:var(--flight);}
   .item .body{flex:1;min-width:0;}
   .item .kicker{font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
   .item.meal .kicker{color:var(--meal);} .item.activity .kicker{color:var(--activity);}
   .item.travel .kicker{color:var(--travel);} .item.stay .kicker{color:var(--accom);}
+  .item.flight .kicker{color:var(--flight);}
   .item .iname{font-weight:600;color:var(--ink);font-size:15px;margin-top:2px;}
   .item .iloc{font-size:13px;color:var(--muted);margin-top:2px;}
   .item .inotes{font-size:13px;color:var(--body);margin-top:4px;}
@@ -151,6 +155,7 @@
   .type-pick button.sel[data-type=meal]{background:var(--meal);}
   .type-pick button.sel[data-type=activity]{background:var(--activity);}
   .type-pick button.sel[data-type=travel]{background:var(--travel);}
+  .type-pick button.sel[data-type=flight]{background:var(--flight);}
 
   .sheet-backdrop{
     position:fixed;inset:0;background:rgba(20,33,61,.4);z-index:30;
@@ -299,12 +304,19 @@ function renderTimetable(t){
   if(!STATE.day || !days.includes(STATE.day)) STATE.day = days[0];
   const chips = days.map((d,i)=>`<div class="daychip ${d===STATE.day?'active':''}" onclick="setDay('${d}')">Day ${i+1} · ${fmtDate(d)}</div>`).join('');
 
-  // gather items for this day
+  // gather items for this day (flights are excluded here since they use depDate/arrDate, not date)
   let rows = (t.agenda||[]).filter(a=>a.date===STATE.day).map(a=>({...a}));
   // add accommodation check-in/out pseudo rows
   (t.accommodations||[]).forEach(a=>{
     if(a.checkIn===STATE.day) rows.push({id:a.id+'-in',type:'stay',time:a.checkInTime||'15:00',name:a.name+' — check in',location:a.address,notes:a.notes,readonly:true,stayId:a.id});
     if(a.checkOut===STATE.day) rows.push({id:a.id+'-out',type:'stay',time:a.checkOutTime||'10:00',name:a.name+' — check out',location:a.address,notes:'',readonly:true,stayId:a.id});
+  });
+  // add flight departure/arrival rows — same flight id on both, so edit/delete act on the one record
+  (t.agenda||[]).filter(a=>a.type==='flight').forEach(f=>{
+    const route = `${f.depAirport||'?'} → ${f.arrAirport||'?'}`;
+    const meta = flightMeta(f);
+    if(f.depDate===STATE.day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
+    if(f.arrDate===STATE.day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
   });
   rows.sort(timeSort);
 
@@ -315,8 +327,21 @@ function renderTimetable(t){
 }
 function setDay(d){ STATE.day=d; render(); }
 
+function flightMeta(f){
+  const parts=[];
+  if(f.terminal) parts.push('Terminal '+f.terminal);
+  if(f.gate) parts.push('Gate '+f.gate);
+  if(f.seat) parts.push('Seat '+f.seat);
+  if(f.confirmation) parts.push('Conf '+f.confirmation);
+  return parts.join(' · ');
+}
+
 function renderItem(a,tripId){
-  const kicker = a.type==='meal' ? (a.mealSlot||'meal') : a.type==='travel' ? 'travel' : a.type==='stay' ? 'accommodation' : 'activity';
+  const kicker = a.type==='meal' ? (a.mealSlot||'meal')
+    : a.type==='travel' ? 'travel'
+    : a.type==='stay' ? 'accommodation'
+    : a.type==='flight' ? ('flight · '+(a.leg==='arrive'?'arrives':'departs'))
+    : 'activity';
   let loc = '', extraActions='';
   if(a.type==='travel'){
     loc = `${esc(a.origin||'')} → ${esc(a.destination||'')}`;
@@ -338,6 +363,7 @@ function renderItem(a,tripId){
         <div class="kicker">${esc(kicker)}</div>
         <div class="iname">${esc(a.name||'')}</div>
         ${loc?`<div class="iloc">${loc}</div>`:''}
+        ${a.meta?`<div class="iloc">${esc(a.meta)}</div>`:''}
         ${a.notes?`<div class="inotes">${esc(a.notes)}</div>`:''}
         <div class="actions">${extraActions}${editBtn}${delBtn}</div>
       </div>
@@ -419,23 +445,38 @@ function deleteTrip(id){
 /* CSV columns shared across row types.
    endDate is only used by accommodation rows (check-out date) so it never
    collides with endTime (an activity's end time or a stay's check-out time). */
-const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed'];
+const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','terminal','gate','seat'];
 function csvEscape(v){
   v = (v===undefined||v===null) ? '' : String(v);
   if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
   return v;
 }
+/* Builds one CSV row from a partial object, filling every column in CSV_COLS
+   order (blank where not applicable) — safer than positional arrays now that
+   there are several row shapes sharing one column set. */
+function csvRow(obj){
+  return CSV_COLS.map(c => csvEscape(obj[c] !== undefined ? obj[c] : '')).join(',');
+}
 function exportCSV(tripId){
   const t=getTrip(tripId);
   const rows=[CSV_COLS.join(',')];
   (t.accommodations||[]).forEach(a=>{
-    rows.push([ 'accommodation', a.checkIn, a.checkInTime||'', a.checkOut, a.checkOutTime||'', '', a.name, a.address, '', '', '', '', a.confirmation||'', a.notes||'', '' ].map(csvEscape).join(','));
+    rows.push(csvRow({ type:'accommodation', date:a.checkIn, time:a.checkInTime||'', endDate:a.checkOut, endTime:a.checkOutTime||'',
+      name:a.name, location:a.address, confirmation:a.confirmation||'', notes:a.notes||'' }));
   });
   (t.agenda||[]).forEach(a=>{
-    rows.push([ a.type, a.date, a.time||'', '', a.endTime||'', a.mealSlot||'', a.name||'', a.location||'', a.origin||'', a.destination||'', a.duration||'', a.mode||'', '', a.notes||'', '' ].map(csvEscape).join(','));
+    if(a.type==='flight'){
+      rows.push(csvRow({ type:'flight', date:a.depDate, time:a.depTime||'', endDate:a.arrDate, endTime:a.arrTime||'',
+        name:a.name||'', confirmation:a.confirmation||'', notes:a.notes||'', airline:a.airline||'', flightNumber:a.flightNumber||'',
+        depAirport:a.depAirport||'', arrAirport:a.arrAirport||'', terminal:a.terminal||'', gate:a.gate||'', seat:a.seat||'' }));
+    } else {
+      rows.push(csvRow({ type:a.type, date:a.date, time:a.time||'', endTime:a.endTime||'', mealSlot:a.mealSlot||'',
+        name:a.name||'', location:a.location||'', origin:a.origin||'', destination:a.destination||'', duration:a.duration||'',
+        mode:a.mode||'', notes:a.notes||'' }));
+    }
   });
   (t.packing||[]).forEach(p=>{
-    rows.push([ 'packing','','','','','',p.name,'','','','','','','',p.packed?'true':'false' ].map(csvEscape).join(','));
+    rows.push(csvRow({ type:'packing', name:p.name, packed:p.packed?'true':'false' }));
   });
   const meta = `# trip:${csvEscape(t.name)} start:${t.startDate} end:${t.endDate}\n`;
   const blob = new Blob([meta+rows.join('\n')], {type:'text/csv'});
@@ -490,6 +531,11 @@ function importCSV(tripId){
           confirmation:get('confirmation'), notes:get('notes') });
       } else if(type==='packing'){
         t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
+      } else if(type==='flight'){
+        t.agenda.push({ id:uid(), type:'flight', name:get('name'), depDate:get('date'), depTime:get('time'),
+          arrDate:get('endDate'), arrTime:get('endTime'), airline:get('airline'), flightNumber:get('flightNumber'),
+          depAirport:get('depAirport'), arrAirport:get('arrAirport'), terminal:get('terminal'), gate:get('gate'),
+          seat:get('seat'), confirmation:get('confirmation'), notes:get('notes') });
       } else if(['meal','activity','travel'].includes(type)){
         t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
           mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
@@ -565,10 +611,13 @@ function sheetBody(kind, tripId, itemId){
       <button type="button" data-type="meal" class="${type==='meal'?'sel':''}" onclick="pickType('meal')">Meal</button>
       <button type="button" data-type="activity" class="${type==='activity'?'sel':''}" onclick="pickType('activity')">Activity</button>
       <button type="button" data-type="travel" class="${type==='travel'?'sel':''}" onclick="pickType('travel')">Travel</button>
+      <button type="button" data-type="flight" class="${type==='flight'?'sel':''}" onclick="pickType('flight')">Flight</button>
     </div>
     <form onsubmit="return submitItem(event,'${tripId}','${itemId||''}')">
       <input type="hidden" id="f_type" value="${type}">
-      <label>Day</label><select id="f_date">${dayOpts}</select>
+      <div id="dayFieldWrap" style="display:${type==='flight'?'none':'block'}">
+        <label>Day</label><select id="f_date">${dayOpts}</select>
+      </div>
 
       <div id="mealFields" style="display:${type==='meal'?'block':'none'}">
         <label>Meal</label>
@@ -612,6 +661,33 @@ function sheetBody(kind, tripId, itemId){
         <label>Notes</label><textarea id="f_travelnotes">${a.notes||''}</textarea>
       </div>
 
+      <div id="flightFields" style="display:${type==='flight'?'block':'none'}">
+        <div class="row">
+          <div><label>Airline</label><input type="text" id="f_airline" value="${attr(a.airline)}" placeholder="e.g. Qantas"></div>
+          <div><label>Flight number</label><input type="text" id="f_flightnum" value="${attr(a.flightNumber)}" placeholder="e.g. QF1"></div>
+        </div>
+        <div class="row">
+          <div><label>Departure airport</label><input type="text" id="f_depairport" value="${attr(a.depAirport)}" placeholder="e.g. SYD"></div>
+          <div><label>Arrival airport</label><input type="text" id="f_arrairport" value="${attr(a.arrAirport)}" placeholder="e.g. LAX"></div>
+        </div>
+        <div class="row">
+          <div><label>Departure date</label><input type="date" id="f_depdate" value="${attr(a.depDate||STATE.day)}"></div>
+          <div><label>Departure time</label><input type="time" id="f_deptime" value="${attr(a.depTime)}"></div>
+        </div>
+        <div class="row">
+          <div><label>Arrival date</label><input type="date" id="f_arrdate" value="${attr(a.arrDate||a.depDate||STATE.day)}"></div>
+          <div><label>Arrival time</label><input type="time" id="f_arrtime" value="${attr(a.arrTime)}"></div>
+        </div>
+        <div class="row">
+          <div><label>Terminal</label><input type="text" id="f_terminal" value="${attr(a.terminal)}"></div>
+          <div><label>Gate</label><input type="text" id="f_gate" value="${attr(a.gate)}"></div>
+          <div><label>Seat</label><input type="text" id="f_seat" value="${attr(a.seat)}"></div>
+        </div>
+        <label>Confirmation / booking ref</label><input type="text" id="f_flightconf" value="${attr(a.confirmation)}">
+        <div class="hint">Long-haul or overnight flights will show a "Departs" entry on the departure day and an "Arrives" entry on the arrival day.</div>
+        <label>Notes</label><textarea id="f_flightnotes">${a.notes||''}</textarea>
+      </div>
+
       <button class="btn" type="submit">${itemId?'Save changes':'Add to timetable'}</button>
     </form>`;
   }
@@ -624,6 +700,8 @@ function pickType(type){
   document.getElementById('mealFields').style.display = type==='meal'?'block':'none';
   document.getElementById('activityFields').style.display = type==='activity'?'block':'none';
   document.getElementById('travelFields').style.display = type==='travel'?'block':'none';
+  document.getElementById('flightFields').style.display = type==='flight'?'block':'none';
+  document.getElementById('dayFieldWrap').style.display = type==='flight'?'none':'block';
 }
 
 function submitTrip(e){
@@ -676,7 +754,8 @@ function submitItem(e,tripId,itemId){
   const type=document.getElementById('f_type').value;
   const date=document.getElementById('f_date').value;
   const t=getTrip(tripId);
-  let data={type,date};
+  let data={type};
+  if(type!=='flight') data.date=date;
   if(type==='meal'){
     data.mealSlot=document.getElementById('f_mealslot').value;
     data.time=document.getElementById('f_mealtime').value;
@@ -697,13 +776,30 @@ function submitItem(e,tripId,itemId){
     data.mode=document.getElementById('f_mode').value;
     data.name = `${data.origin||'Origin'} → ${data.destination||'Destination'}`;
     data.notes=document.getElementById('f_travelnotes').value.trim();
+  } else if(type==='flight'){
+    data.airline=document.getElementById('f_airline').value.trim();
+    data.flightNumber=document.getElementById('f_flightnum').value.trim();
+    data.depAirport=document.getElementById('f_depairport').value.trim().toUpperCase();
+    data.arrAirport=document.getElementById('f_arrairport').value.trim().toUpperCase();
+    data.depDate=document.getElementById('f_depdate').value;
+    data.depTime=document.getElementById('f_deptime').value;
+    data.arrDate=document.getElementById('f_arrdate').value;
+    data.arrTime=document.getElementById('f_arrtime').value;
+    data.terminal=document.getElementById('f_terminal').value.trim();
+    data.gate=document.getElementById('f_gate').value.trim();
+    data.seat=document.getElementById('f_seat').value.trim();
+    data.confirmation=document.getElementById('f_flightconf').value.trim();
+    data.notes=document.getElementById('f_flightnotes').value.trim();
+    data.name = `${data.airline} ${data.flightNumber}`.trim() || 'Flight';
   }
   if(itemId){
     Object.assign(t.agenda.find(a=>a.id===itemId), data);
   } else {
     t.agenda.push({id:uid(), ...data});
   }
-  save(DATA); closeSheet(); STATE.day=date; render();
+  save(DATA); closeSheet();
+  STATE.day = type==='flight' ? (data.depDate||STATE.day) : date;
+  render();
   return false;
 }
 
