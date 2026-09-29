@@ -112,6 +112,10 @@
   }
   nav.tabbar button.active{color:var(--coral);background:var(--sun-bg);}
 
+  .timetable-sticky-bar{
+    position:sticky; top:var(--header-h, 100px); z-index:15;
+    background:var(--bg); padding-top:2px; margin-top:-2px;
+  }
   .daychips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;-webkit-overflow-scrolling:touch;}
   .daychip{
     flex:0 0 auto;background:var(--panel);border:1px solid var(--line);
@@ -349,6 +353,10 @@ function render(){
   if(STATE.view==='home') app.innerHTML = renderHome();
   else app.innerHTML = renderTrip(getTrip(STATE.tripId));
   attachHomeHandlers();
+  // keep the sticky day/view bar positioned right below the header, whatever
+  // height the header happens to be (trip name length, back-row, etc.)
+  const headerEl = document.querySelector('header.app-header');
+  if(headerEl){ document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight+'px'); }
 }
 
 /* ---------- HOME ---------- */
@@ -510,10 +518,16 @@ function renderTimetable(t){
     (rows.length ? rows.map(r=>renderItem(r,t.id)).join('') :
       `<div class="empty" style="padding:32px 10px;">Nothing planned yet for this day.</div>`);
 
-  return `<div class="daychips">${chips}</div>${toggle}${body}`;
+  return `<div class="timetable-sticky-bar"><div class="daychips">${chips}</div>${toggle}</div>${body}`;
 }
-function setDay(d){ STATE.day=d; render(); }
-function setCalView(on){ STATE.calView=on; render(); }
+/* Scrolls back to the top of the content whenever the person switches day or
+   view, so they're never left scrolled halfway down looking at what's now a
+   different day/view than they think they're on. */
+function scrollTimetableToTop(){
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+function setDay(d){ STATE.day=d; render(); scrollTimetableToTop(); }
+function setCalView(on){ STATE.calView=on; render(); scrollTimetableToTop(); }
 
 /* Assigns a side-by-side column (and the column count for its cluster) to
    each event whose time overlaps another's, so the calendar view never
@@ -545,6 +559,7 @@ function computeEventLayout(events){
 
 const CAL_PX_PER_MIN = 2; // 120px per hour — zoomed in so short blocks fit their text
 const CAL_MIN_BLOCK_MIN = 22; // shortest VISUAL block height (minutes-equivalent); never used for overlap detection
+const CAL_GAP_PX = 6; // smallest visually-guaranteed gap before a following item, so a real gap is never fully swallowed by the minimum-height padding
 const CAL_DEFAULT_DURATIONS = { meal:60, activity:60, travel:30, flight:30, stay:30 };
 
 function renderCalendarView(rows, tripId){
@@ -589,11 +604,23 @@ function renderCalendarView(rows, tripId){
   }).join('');
 
   const gutter = 46; // px reserved for hour labels
-  const blocks = events.map(e=>{
+  const gapBufferMin = CAL_GAP_PX / CAL_PX_PER_MIN;
+  const blocks = events.map((e, i) => {
     const top = e.startMin*CAL_PX_PER_MIN;
     // Visual-only minimum height so a very short block still fits its text —
-    // this never feeds back into layout/overlap detection above.
-    const visualEndMin = Math.max(e.endMin, e.startMin + CAL_MIN_BLOCK_MIN);
+    // this never feeds back into layout/overlap detection above. But when
+    // there's a genuine gap before the next item, that padding must never eat
+    // into it enough to imply the block ran right up to (or past) the next
+    // item's start — a small real gap always stays visible as a real gap.
+    let visualEndMin = Math.max(e.endMin, e.startMin + CAL_MIN_BLOCK_MIN);
+    const next = events[i+1];
+    if(next){
+      const trueGap = next.startMin - e.endMin;
+      if(trueGap > 0){
+        const maxAllowedEnd = Math.max(e.endMin, next.startMin - Math.min(gapBufferMin, trueGap));
+        if(visualEndMin > maxAllowedEnd) visualEndMin = maxAllowedEnd;
+      }
+    }
     const height = (visualEndMin - e.startMin) * CAL_PX_PER_MIN;
     const widthPct = 100/e._colCount;
     const leftPct = e._col*widthPct;
