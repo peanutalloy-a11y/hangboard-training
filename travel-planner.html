@@ -17,14 +17,22 @@
     --line:#E3E1D9;
     --meal:#C9862F;
     --meal-bg:#FBF1E3;
-    --activity:#2E7D6B;
-    --activity-bg:#E9F4F1;
-    --travel:#4A5FBF;
-    --travel-bg:#EDEFFA;
-    --flight:#1E88C7;
-    --flight-bg:#E7F3FA;
-    --accom:#8B5FA0;
-    --accom-bg:#F4EDF7;
+    --activity:#2E8B57;
+    --activity-bg:#E7F5EC;
+    --travel:#5A55C9;
+    --travel-bg:#ECEBFA;
+    --flight:#2F6FCC;
+    --flight-bg:#E8EFFC;
+    --accom:#8B3FA0;
+    --accom-bg:#F3E9F7;
+    --mode-driving:#5A55C9;
+    --mode-driving-bg:#ECEBFA;
+    --mode-walking:#7C8A1E;
+    --mode-walking-bg:#F4F5DE;
+    --mode-transit:#1B8A8A;
+    --mode-transit-bg:#E1F4F4;
+    --mode-bicycling:#C23B82;
+    --mode-bicycling-bg:#FBE8F1;
     --danger:#B3432B;
     --radius:10px;
   }
@@ -118,6 +126,10 @@
   .cal-event.meal{background:var(--meal-bg);border-color:var(--meal);}
   .cal-event.activity{background:var(--activity-bg);border-color:var(--activity);}
   .cal-event.travel{background:var(--travel-bg);border-color:var(--travel);}
+  .cal-event.travel.mode-driving{background:var(--mode-driving-bg);border-color:var(--mode-driving);}
+  .cal-event.travel.mode-walking{background:var(--mode-walking-bg);border-color:var(--mode-walking);}
+  .cal-event.travel.mode-transit{background:var(--mode-transit-bg);border-color:var(--mode-transit);}
+  .cal-event.travel.mode-bicycling{background:var(--mode-bicycling-bg);border-color:var(--mode-bicycling);}
   .cal-event.flight{background:var(--flight-bg);border-color:var(--flight);}
   .cal-event.stay{background:var(--accom-bg);border-color:var(--accom);cursor:default;}
   .cal-event-time{font-size:10px;font-weight:700;color:var(--ink);line-height:1.2;font-family:'Archivo';}
@@ -132,11 +144,19 @@
   .item.meal .bar{background:var(--meal);} .item.activity .bar{background:var(--activity);}
   .item.travel .bar{background:var(--travel);} .item.stay .bar{background:var(--accom);}
   .item.flight .bar{background:var(--flight);}
+  .item.travel.mode-driving .bar{background:var(--mode-driving);}
+  .item.travel.mode-walking .bar{background:var(--mode-walking);}
+  .item.travel.mode-transit .bar{background:var(--mode-transit);}
+  .item.travel.mode-bicycling .bar{background:var(--mode-bicycling);}
   .item .body{flex:1;min-width:0;}
   .item .kicker{font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
   .item.meal .kicker{color:var(--meal);} .item.activity .kicker{color:var(--activity);}
   .item.travel .kicker{color:var(--travel);} .item.stay .kicker{color:var(--accom);}
   .item.flight .kicker{color:var(--flight);}
+  .item.travel.mode-driving .kicker{color:var(--mode-driving);}
+  .item.travel.mode-walking .kicker{color:var(--mode-walking);}
+  .item.travel.mode-transit .kicker{color:var(--mode-transit);}
+  .item.travel.mode-bicycling .kicker{color:var(--mode-bicycling);}
   .item .iname{font-weight:600;color:var(--ink);font-size:15px;margin-top:2px;}
   .item .iloc{font-size:13px;color:var(--muted);margin-top:2px;}
   .item .inotes{font-size:13px;color:var(--body);margin-top:4px;}
@@ -443,8 +463,13 @@ function getDayRows(t, day){
   });
   (t.agenda||[]).filter(a=>a.type==='flight').forEach(f=>{
     const route = `${f.depAirport||'?'} → ${f.arrAirport||'?'}`;
-    if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
-    if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
+    if(f.depDate===f.arrDate){
+      // same-day flight: one card, not a separate "Departs"/"Arrives" pair
+      if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'full',time:f.depTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f,_calEnd:f.arrTime});
+    } else {
+      if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
+      if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
+    }
   });
   rows.sort(timeSort);
   return rows;
@@ -502,31 +527,11 @@ const CAL_MIN_BLOCK_MIN = 22; // shortest visual block, so point-in-time events 
 const CAL_DEFAULT_DURATIONS = { meal:60, activity:60, travel:30, flight:30, stay:30 };
 
 function renderCalendarView(rows, tripId){
-  // Merge same-day flight depart+arrive pseudo-rows into one continuous block;
-  // for overnight flights (different depDate/arrDate), keep them as two
-  // blocks but clip each to midnight so together they read as one bar "cut"
-  // at the day boundary, instead of two small disconnected markers.
-  const flightLegsById = {};
-  rows.forEach(r=>{
-    if(r.type==='flight'){ (flightLegsById[r.id] = flightLegsById[r.id] || []).push(r); }
-  });
-  const mergedFlightIds = new Set();
-  const mergedFlightRows = [];
-  Object.keys(flightLegsById).forEach(id=>{
-    const legs = flightLegsById[id];
-    const depart = legs.find(l=>l.leg==='depart');
-    const arrive = legs.find(l=>l.leg==='arrive');
-    if(depart && arrive){
-      // both legs fall on this same calendar day — one block, dep time to arr time
-      mergedFlightIds.add(id);
-      mergedFlightRows.push({...depart, leg:'full', _calEnd:arrive.time});
-    }
-  });
-  const workingRows = rows
-    .filter(r => !(r.type==='flight' && mergedFlightIds.has(r.id)))
-    .concat(mergedFlightRows);
-
-  const events = workingRows.map(r=>{
+  // Same-day flights already arrive here as a single 'full'-leg row (with
+  // _calEnd set) from getDayRows; overnight flights arrive as separate
+  // 'depart'/'arrive' rows on their respective days, clipped to midnight
+  // below so together they read as one bar "cut" at the day boundary.
+  const events = rows.map(r=>{
     const startMin = r.leg==='arrive' ? 0 : timeToMinutes(r.time);
     if(startMin===null) return null;
     let endMin;
@@ -565,11 +570,7 @@ function renderCalendarView(rows, tripId){
     const height = (e.endMin-e.startMin)*CAL_PX_PER_MIN;
     const widthPct = 100/e._colCount;
     const leftPct = e._col*widthPct;
-    const kicker = e.type==='meal' ? (e.mealSlot||'meal')
-      : e.type==='travel' ? 'travel'
-      : e.type==='stay' ? 'accommodation'
-      : e.type==='flight' ? (e.leg==='full' ? 'flight' : ('flight · '+(e.leg==='arrive'?'arrives':'departs')))
-      : 'activity';
+    const modeClass = e.type==='travel' ? ` mode-${e.mode||'driving'}` : '';
     const tapHandler = e.readonly ? '' : ` onclick="openSheet('editItem','${tripId}','${e.id}')"`;
     let displayTime;
     if(e.type==='flight'){
@@ -581,7 +582,7 @@ function renderCalendarView(rows, tripId){
     } else {
       displayTime = fmtTime(e.time);
     }
-    return `<div class="cal-event ${e.type}" style="top:${top}px;height:${height}px;left:calc(${gutter}px + ${leftPct}%);width:calc(${widthPct}% - 6px);"${tapHandler}>
+    return `<div class="cal-event ${e.type}${modeClass}" style="top:${top}px;height:${height}px;left:calc(${gutter}px + ${leftPct}%);width:calc(${widthPct}% - 6px);"${tapHandler}>
       <div class="cal-event-time">${displayTime}</div>
       <div class="cal-event-name">${esc(e.name||'')}</div>
     </div>`;
@@ -623,13 +624,16 @@ function flightMeta(f, leg){
   return parts.join(' · ');
 }
 
+const MODE_LABELS = { driving:'driving', walking:'walking', transit:'transit', bicycling:'cycling' };
+
 function renderItem(a,tripId){
   const kicker = a.type==='meal' ? (a.mealSlot||'meal')
-    : a.type==='travel' ? 'travel'
+    : a.type==='travel' ? (MODE_LABELS[a.mode] || 'travel')
     : a.type==='stay' ? 'accommodation'
-    : a.type==='flight' ? ('flight · '+(a.leg==='arrive'?'arrives':'departs'))
+    : a.type==='flight' ? (a.leg==='full' ? 'flight' : ('flight · '+(a.leg==='arrive'?'arrives':'departs')))
     : 'activity';
   let loc = '', extraActions='', meta = a.meta;
+  const modeClass = a.type==='travel' ? ` mode-${a.mode||'driving'}` : '';
   if(a.type==='travel'){
     loc = `${esc(a.origin||'')} → ${esc(a.destination||'')}`;
     if(a.origin && a.destination){
@@ -639,6 +643,7 @@ function renderItem(a,tripId){
     if(a.duration) loc += ` · ${esc(a.duration)}`;
   } else if(a.type==='flight'){
     loc = esc(a.location||'');
+    if(a.leg==='full' && a._flight && a._flight.arrTime) loc += ` · lands ${fmtTime(a._flight.arrTime)}`;
     if(a._flight) meta = flightMeta(a._flight, a.leg);
     if(a._flight && a._flight.bookingLink){
       extraActions = `<a href="${attr(a._flight.bookingLink)}" target="_blank" rel="noopener">Open booking</a>`;
@@ -649,7 +654,7 @@ function renderItem(a,tripId){
   const editBtn = a.readonly ? '' : `<button onclick="openSheet('editItem','${tripId}','${a.id}')">Edit</button>`;
   const delBtn = a.readonly ? '' : `<button class="del" onclick="deleteItem('${tripId}','${a.id}')">Delete</button>`;
   return `
-    <div class="item ${a.type}">
+    <div class="item ${a.type}${modeClass}">
       <div class="bar"></div>
       <div class="time num">${fmtTime(a.time)||'--:--'}</div>
       <div class="body">
