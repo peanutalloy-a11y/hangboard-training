@@ -243,7 +243,7 @@ function render(){
 function renderHome(){
   let body;
   if(DATA.trips.length===0){
-    body = `<div class="empty"><div class="big">No trips yet</div>Tap + to plan your first one.</div>`;
+    body = `<div class="empty"><div class="big">No trips yet</div>Tap + to plan your first one, or restore a trip from a CSV backup below.</div>`;
   } else {
     body = DATA.trips.slice().sort((a,b)=>a.startDate.localeCompare(b.startDate))
       .map(t=>`
@@ -260,9 +260,71 @@ function renderHome(){
       <div class="title">Waypoint</div>
       <div class="sub">Your trips</div>
     </header>
-    <main>${body}</main>
+    <main>
+      ${body}
+      <label class="btn secondary" style="display:block;text-align:center;cursor:pointer;margin-top:8px;">
+        Restore a trip from CSV
+        <input type="file" accept=".csv" style="display:none" onchange="importNewTripFromFile(this)">
+      </label>
+    </main>
     <button class="fab" onclick="openSheet('addTrip')">+</button>
   `;
+}
+
+/* Extracts the "# trip:NAME start:YYYY-MM-DD end:YYYY-MM-DD" comment line
+   written at the top of every export, if present. */
+function parseTripMeta(text){
+  const firstLine = (text.split(/\r?\n/)[0] || '');
+  const m = firstLine.match(/^#\s*trip:(.*?)\s+start:(\d{4}-\d{2}-\d{2})\s+end:(\d{4}-\d{2}-\d{2})\s*$/);
+  if(!m) return {};
+  return { name:m[1].trim(), start:m[2], end:m[3] };
+}
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+/* Expands (never shrinks) a trip's date range to cover every date actually
+   referenced by its data — protects against a trip being too narrow to show
+   all its own items. Only looks at real data dates, not the trip's current
+   start/end, so a missing/placeholder date never poisons the calculation. */
+function widenTripRangeToData(t){
+  const dataDates=[];
+  (t.accommodations||[]).forEach(a=>{ if(a.checkIn) dataDates.push(a.checkIn); if(a.checkOut) dataDates.push(a.checkOut); });
+  (t.agenda||[]).forEach(a=>{
+    if(a.date) dataDates.push(a.date);
+    if(a.depDate) dataDates.push(a.depDate);
+    if(a.arrDate) dataDates.push(a.arrDate);
+  });
+  if(!dataDates.length) return;
+  dataDates.sort();
+  const dataMin=dataDates[0], dataMax=dataDates[dataDates.length-1];
+  if(!t.startDate || dataMin < t.startDate) t.startDate = dataMin;
+  if(!t.endDate || dataMax > t.endDate) t.endDate = dataMax;
+}
+function importNewTripFromFile(inputEl){
+  const f=inputEl.files[0];
+  if(!f){ return; }
+  const reader=new FileReader();
+  reader.onerror=()=>toast('Could not read that file — please try again.');
+  reader.onload = e=>{
+    try{
+      const text=e.target.result;
+      const meta=parseTripMeta(text);
+      const trip={ id:uid(), name:meta.name||'Imported trip', startDate:meta.start||null,
+        endDate:meta.end||meta.start||null, accommodations:[], agenda:[], packing:[] };
+      applyCSVToTrip(trip, text);
+      widenTripRangeToData(trip);
+      if(!trip.startDate) trip.startDate = todayStr();
+      if(!trip.endDate) trip.endDate = trip.startDate;
+      DATA.trips.push(trip);
+      save(DATA);
+      toast('Trip imported');
+      openTrip(trip.id);
+    } catch(err){
+      toast(err.message || 'Could not import that file.');
+    }
+  };
+  reader.readAsText(f);
 }
 
 function openTrip(id){ STATE.view='trip'; STATE.tripId=id; STATE.tab='timetable';
@@ -426,7 +488,7 @@ function renderData(t){
     <div class="card">
       Importing will replace this trip's accommodation, timetable and packing data with the contents of the file.
       <div class="filerow" style="margin-top:12px;">
-        <input type="file" id="importFile" accept=".csv" style="flex:1;">
+        <input type="file" id="importFile" accept=".csv" style="flex:1;" onchange="importCSV('${t.id}')">
       </div>
       <button class="btn secondary" onclick="importCSV('${t.id}')">Import CSV into this trip</button>
     </div>
@@ -509,40 +571,53 @@ function parseCSV(text){
   if(field.length || row.length){ row.push(field); rows.push(row); }
   return rows;
 }
+/* Parses CSV text and loads it into an existing trip object (wiping that
+   trip's current accommodations/agenda/packing first). Throws a readable
+   Error on malformed input instead of failing silently. Shared by both
+   "import into this trip" and "restore as a new trip". */
+function applyCSVToTrip(t, text){
+  const allRows=parseCSV(text).filter(r=>!(r.length===1 && r[0].startsWith('#')) && r.some(c=>c!==''));
+  if(!allRows.length) throw new Error('That file has no data in it.');
+  const header=allRows[0];
+  if(header.indexOf('type')===-1) throw new Error("That doesn't look like a Waypoint CSV export (no \"type\" column found).");
+  const idx=c=>header.indexOf(c);
+  t.accommodations=[]; t.agenda=[]; t.packing=[];
+  for(let i=1;i<allRows.length;i++){
+    const cols=allRows[i];
+    const get=c=> idx(c)>=0 ? (cols[idx(c)]||'') : '';
+    const type=get('type');
+    if(type==='accommodation'){
+      t.accommodations.push({ id:uid(), name:get('name'), address:get('location'),
+        checkIn:get('date'), checkInTime:get('time'), checkOut:get('endDate'), checkOutTime:get('endTime'),
+        confirmation:get('confirmation'), notes:get('notes') });
+    } else if(type==='packing'){
+      t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
+    } else if(type==='flight'){
+      t.agenda.push({ id:uid(), type:'flight', name:get('name'), depDate:get('date'), depTime:get('time'),
+        arrDate:get('endDate'), arrTime:get('endTime'), airline:get('airline'), flightNumber:get('flightNumber'),
+        depAirport:get('depAirport'), arrAirport:get('arrAirport'), terminal:get('terminal'), gate:get('gate'),
+        seat:get('seat'), confirmation:get('confirmation'), notes:get('notes') });
+    } else if(['meal','activity','travel'].includes(type)){
+      t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
+        mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
+        destination:get('destination'), duration:get('duration'), mode:get('mode')||'driving', notes:get('notes') });
+    }
+  }
+}
 function importCSV(tripId){
   const f=document.getElementById('importFile').files[0];
   if(!f){ toast('Choose a CSV file first'); return; }
   const reader=new FileReader();
+  reader.onerror=()=>toast('Could not read that file — please try again.');
   reader.onload = e=>{
-    const text=e.target.result;
-    const allRows=parseCSV(text).filter(r=>!(r.length===1 && r[0].startsWith('#')) && r.some(c=>c!==''));
-    if(!allRows.length){ toast('File looks empty'); return; }
-    const header=allRows[0];
-    const idx=c=>header.indexOf(c);
-    const t=getTrip(tripId);
-    t.accommodations=[]; t.agenda=[]; t.packing=[];
-    for(let i=1;i<allRows.length;i++){
-      const cols=allRows[i];
-      const get=c=> idx(c)>=0 ? (cols[idx(c)]||'') : '';
-      const type=get('type');
-      if(type==='accommodation'){
-        t.accommodations.push({ id:uid(), name:get('name'), address:get('location'),
-          checkIn:get('date'), checkInTime:get('time'), checkOut:get('endDate'), checkOutTime:get('endTime'),
-          confirmation:get('confirmation'), notes:get('notes') });
-      } else if(type==='packing'){
-        t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
-      } else if(type==='flight'){
-        t.agenda.push({ id:uid(), type:'flight', name:get('name'), depDate:get('date'), depTime:get('time'),
-          arrDate:get('endDate'), arrTime:get('endTime'), airline:get('airline'), flightNumber:get('flightNumber'),
-          depAirport:get('depAirport'), arrAirport:get('arrAirport'), terminal:get('terminal'), gate:get('gate'),
-          seat:get('seat'), confirmation:get('confirmation'), notes:get('notes') });
-      } else if(['meal','activity','travel'].includes(type)){
-        t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
-          mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
-          destination:get('destination'), duration:get('duration'), mode:get('mode')||'driving', notes:get('notes') });
-      }
+    try{
+      const t=getTrip(tripId);
+      applyCSVToTrip(t, e.target.result);
+      widenTripRangeToData(t);
+      save(DATA); toast('Trip restored from CSV'); render();
+    } catch(err){
+      toast(err.message || 'Could not import that file.');
     }
-    save(DATA); toast('Trip restored from CSV'); render();
   };
   reader.readAsText(f);
 }
