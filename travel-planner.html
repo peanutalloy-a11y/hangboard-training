@@ -185,6 +185,14 @@
   .type-pick button.sel[data-type=travel]{background:var(--travel);}
   .type-pick button.sel[data-type=flight]{background:var(--flight);}
 
+  .traveller-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .traveller-row .trav-name{flex:1.3;}
+  .traveller-row .trav-seat{flex:1;}
+  .traveller-row .trav-remove{
+    flex:0 0 auto;background:none;border:none;color:var(--danger);font-size:15px;
+    cursor:pointer;padding:6px 4px;font-family:inherit;
+  }
+
   .sheet-backdrop{
     position:fixed;inset:0;background:rgba(20,33,61,.4);z-index:30;
     display:flex;align-items:flex-end;
@@ -435,9 +443,8 @@ function getDayRows(t, day){
   });
   (t.agenda||[]).filter(a=>a.type==='flight').forEach(f=>{
     const route = `${f.depAirport||'?'} → ${f.arrAirport||'?'}`;
-    const meta = flightMeta(f);
-    if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
-    if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
+    if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
+    if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
   });
   rows.sort(timeSort);
   return rows;
@@ -589,11 +596,29 @@ function renderCalendarView(rows, tripId){
   </div>`;
 }
 
-function flightMeta(f){
+/* Builds the secondary meta line for a flight, tailored to which leg is being
+   shown: departure-side details (check-in, boarding, departure terminal/gate)
+   on the depart leg, arrival-side details on the arrive leg, and both
+   (labelled) on a merged same-day 'full' block. */
+function flightMeta(f, leg){
   const parts=[];
-  if(f.terminal) parts.push('Terminal '+f.terminal);
-  if(f.gate) parts.push('Gate '+f.gate);
-  if(f.seat) parts.push('Seat '+f.seat);
+  const showDep = leg==='depart' || leg==='full';
+  const showArr = leg==='arrive' || leg==='full';
+  const tag = leg==='full' ? {dep:' (dep)', arr:' (arr)'} : {dep:'', arr:''};
+  if(showDep){
+    if(f.checkInTime) parts.push('Check-in '+fmtTime(f.checkInTime));
+    if(f.boardingTime) parts.push('Boarding '+fmtTime(f.boardingTime));
+    if(f.depTerminal) parts.push('Term '+f.depTerminal+tag.dep);
+    if(f.depGate) parts.push('Gate '+f.depGate+tag.dep);
+  }
+  if(showArr){
+    if(f.arrTerminal) parts.push('Term '+f.arrTerminal+tag.arr);
+    if(f.arrGate) parts.push('Gate '+f.arrGate+tag.arr);
+  }
+  if(f.travellers && f.travellers.length){
+    const travStr = f.travellers.map(tr => tr.name && tr.seat ? `${tr.name} ${tr.seat}` : (tr.name||tr.seat)).filter(Boolean).join(', ');
+    if(travStr) parts.push(travStr);
+  }
   if(f.confirmation) parts.push('Conf '+f.confirmation);
   return parts.join(' · ');
 }
@@ -604,7 +629,7 @@ function renderItem(a,tripId){
     : a.type==='stay' ? 'accommodation'
     : a.type==='flight' ? ('flight · '+(a.leg==='arrive'?'arrives':'departs'))
     : 'activity';
-  let loc = '', extraActions='';
+  let loc = '', extraActions='', meta = a.meta;
   if(a.type==='travel'){
     loc = `${esc(a.origin||'')} → ${esc(a.destination||'')}`;
     if(a.origin && a.destination){
@@ -612,6 +637,12 @@ function renderItem(a,tripId){
       extraActions = `<a href="${url}" target="_blank" rel="noopener">Open in Maps</a>`;
     }
     if(a.duration) loc += ` · ${esc(a.duration)}`;
+  } else if(a.type==='flight'){
+    loc = esc(a.location||'');
+    if(a._flight) meta = flightMeta(a._flight, a.leg);
+    if(a._flight && a._flight.bookingLink){
+      extraActions = `<a href="${attr(a._flight.bookingLink)}" target="_blank" rel="noopener">Open booking</a>`;
+    }
   } else {
     loc = esc(a.location||'');
   }
@@ -625,7 +656,7 @@ function renderItem(a,tripId){
         <div class="kicker">${esc(kicker)}</div>
         <div class="iname">${esc(a.name||'')}</div>
         ${loc?`<div class="iloc">${loc}</div>`:''}
-        ${a.meta?`<div class="iloc">${esc(a.meta)}</div>`:''}
+        ${meta?`<div class="iloc">${esc(meta)}</div>`:''}
         ${a.notes?`<div class="inotes">${esc(a.notes)}</div>`:''}
         <div class="actions">${extraActions}${editBtn}${delBtn}</div>
       </div>
@@ -706,12 +737,28 @@ function deleteTrip(id){
 
 /* CSV columns shared across row types.
    endDate is only used by accommodation rows (check-out date) so it never
-   collides with endTime (an activity's end time or a stay's check-out time). */
-const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','terminal','gate','seat'];
+   collides with endTime (an activity's end time or a stay's check-out time).
+   travellers is a serialized "Name:Seat|Name:Seat" list (see (de)serializeTravellers). */
+const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','checkInTime','boardingTime','depTerminal','arrTerminal','depGate','arrGate','travellers','bookingLink'];
 function csvEscape(v){
   v = (v===undefined||v===null) ? '' : String(v);
   if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
   return v;
+}
+/* Travellers round-trip through a single CSV cell as "Name:Seat|Name:Seat".
+   Colons/pipes inside a name or seat are stripped rather than escaped —
+   simpler, and those characters are never legitimate in either field. */
+function serializeTravellers(travellers){
+  if(!travellers || !travellers.length) return '';
+  return travellers.map(t => `${(t.name||'').replace(/[:|]/g,' ')}:${(t.seat||'').replace(/[:|]/g,' ')}`).join('|');
+}
+function parseTravellers(str){
+  if(!str) return [];
+  return str.split('|').map(chunk=>{
+    const i = chunk.indexOf(':');
+    if(i===-1) return {name:'', seat:chunk.trim()};
+    return {name:chunk.slice(0,i).trim(), seat:chunk.slice(i+1).trim()};
+  }).filter(t=>t.name||t.seat);
 }
 /* Builds one CSV row from a partial object, filling every column in CSV_COLS
    order (blank where not applicable) — safer than positional arrays now that
@@ -730,7 +777,9 @@ function exportCSV(tripId){
     if(a.type==='flight'){
       rows.push(csvRow({ type:'flight', date:a.depDate, time:a.depTime||'', endDate:a.arrDate, endTime:a.arrTime||'',
         name:a.name||'', confirmation:a.confirmation||'', notes:a.notes||'', airline:a.airline||'', flightNumber:a.flightNumber||'',
-        depAirport:a.depAirport||'', arrAirport:a.arrAirport||'', terminal:a.terminal||'', gate:a.gate||'', seat:a.seat||'' }));
+        depAirport:a.depAirport||'', arrAirport:a.arrAirport||'', checkInTime:a.checkInTime||'', boardingTime:a.boardingTime||'',
+        depTerminal:a.depTerminal||'', arrTerminal:a.arrTerminal||'', depGate:a.depGate||'', arrGate:a.arrGate||'',
+        travellers:serializeTravellers(a.travellers), bookingLink:a.bookingLink||'' }));
     } else {
       rows.push(csvRow({ type:a.type, date:a.date, time:a.time||'', endTime:a.endTime||'', mealSlot:a.mealSlot||'',
         name:a.name||'', location:a.location||'', origin:a.origin||'', destination:a.destination||'', duration:a.duration||'',
@@ -793,10 +842,19 @@ function applyCSVToTrip(t, text){
     } else if(type==='packing'){
       t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
     } else if(type==='flight'){
+      // depTerminal/depGate fall back to the old single terminal/gate columns,
+      // and travellers falls back to the old single seat column, so a CSV
+      // exported before these fields existed still imports cleanly.
+      const travellers = get('travellers') ? parseTravellers(get('travellers'))
+        : (get('seat') ? [{name:'', seat:get('seat')}] : []);
       t.agenda.push({ id:uid(), type:'flight', name:get('name'), depDate:get('date'), depTime:get('time'),
         arrDate:get('endDate'), arrTime:get('endTime'), airline:get('airline'), flightNumber:get('flightNumber'),
-        depAirport:get('depAirport'), arrAirport:get('arrAirport'), terminal:get('terminal'), gate:get('gate'),
-        seat:get('seat'), confirmation:get('confirmation'), notes:get('notes') });
+        depAirport:get('depAirport'), arrAirport:get('arrAirport'),
+        checkInTime:get('checkInTime'), boardingTime:get('boardingTime'),
+        depTerminal:get('depTerminal')||get('terminal'), arrTerminal:get('arrTerminal'),
+        depGate:get('depGate')||get('gate'), arrGate:get('arrGate'),
+        travellers, bookingLink:get('bookingLink'),
+        confirmation:get('confirmation'), notes:get('notes') });
     } else if(['meal','activity','travel'].includes(type)){
       t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
         mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
@@ -954,10 +1012,21 @@ function sheetBody(kind, tripId, itemId){
           <div><label>Arrival time</label><input type="time" id="f_arrtime" value="${attr(a.arrTime)}"></div>
         </div>
         <div class="row">
-          <div><label>Terminal</label><input type="text" id="f_terminal" value="${attr(a.terminal)}"></div>
-          <div><label>Gate</label><input type="text" id="f_gate" value="${attr(a.gate)}"></div>
-          <div><label>Seat</label><input type="text" id="f_seat" value="${attr(a.seat)}"></div>
+          <div><label>Check-in time</label><input type="time" id="f_checkintime" value="${attr(a.checkInTime)}"></div>
+          <div><label>Boarding time</label><input type="time" id="f_boardingtime" value="${attr(a.boardingTime)}"></div>
         </div>
+        <div class="row">
+          <div><label>Departure terminal</label><input type="text" id="f_depterminal" value="${attr(a.depTerminal||a.terminal)}"></div>
+          <div><label>Arrival terminal</label><input type="text" id="f_arrterminal" value="${attr(a.arrTerminal)}"></div>
+        </div>
+        <div class="row">
+          <div><label>Departure gate</label><input type="text" id="f_depgate" value="${attr(a.depGate||a.gate)}"></div>
+          <div><label>Arrival gate</label><input type="text" id="f_arrgate" value="${attr(a.arrGate)}"></div>
+        </div>
+        <label>Travellers</label>
+        <div id="travellerRows">${travellerRowsHtml(a)}</div>
+        <button type="button" class="btn secondary" style="margin-top:0;" onclick="addTravellerRow()">+ Add another traveller</button>
+        <label>Booking link</label><input type="text" id="f_bookinglink" value="${attr(a.bookingLink)}" placeholder="Link to airline app/booking page">
         <label>Confirmation / booking ref</label><input type="text" id="f_flightconf" value="${attr(a.confirmation)}">
         <div class="hint">Long-haul or overnight flights will show a "Departs" entry on the departure day and an "Arrives" entry on the arrival day.</div>
         <label>Notes</label><textarea id="f_flightnotes">${a.notes||''}</textarea>
@@ -969,6 +1038,24 @@ function sheetBody(kind, tripId, itemId){
   return '';
 }
 function attr(v){ return v ? String(v).replace(/"/g,'&quot;') : ''; }
+/* One traveller name+seat row for the flight form. Used both for the initial
+   render (from saved data, or migrated from the old single-seat field) and
+   for rows added dynamically via "+ Add another traveller". */
+function travellerRowHtml(name, seat){
+  return `<div class="traveller-row">
+    <input type="text" class="trav-name" placeholder="Traveller name" value="${attr(name)}">
+    <input type="text" class="trav-seat" placeholder="Seat e.g. 14A" value="${attr(seat)}">
+    <button type="button" class="trav-remove" onclick="this.parentElement.remove()">✕</button>
+  </div>`;
+}
+function travellerRowsHtml(a){
+  if(a.travellers && a.travellers.length) return a.travellers.map(t=>travellerRowHtml(t.name,t.seat)).join('');
+  if(a.seat) return travellerRowHtml('', a.seat); // migrating an older single-seat flight
+  return travellerRowHtml('','');
+}
+function addTravellerRow(){
+  document.getElementById('travellerRows').insertAdjacentHTML('beforeend', travellerRowHtml('',''));
+}
 function pickType(type){
   document.getElementById('f_type').value=type;
   document.querySelectorAll('#typePick button').forEach(b=>b.classList.toggle('sel', b.dataset.type===type));
@@ -1060,9 +1147,17 @@ function submitItem(e,tripId,itemId){
     data.depTime=document.getElementById('f_deptime').value;
     data.arrDate=document.getElementById('f_arrdate').value;
     data.arrTime=document.getElementById('f_arrtime').value;
-    data.terminal=document.getElementById('f_terminal').value.trim();
-    data.gate=document.getElementById('f_gate').value.trim();
-    data.seat=document.getElementById('f_seat').value.trim();
+    data.checkInTime=document.getElementById('f_checkintime').value;
+    data.boardingTime=document.getElementById('f_boardingtime').value;
+    data.depTerminal=document.getElementById('f_depterminal').value.trim();
+    data.arrTerminal=document.getElementById('f_arrterminal').value.trim();
+    data.depGate=document.getElementById('f_depgate').value.trim();
+    data.arrGate=document.getElementById('f_arrgate').value.trim();
+    data.travellers = [...document.querySelectorAll('#travellerRows .traveller-row')].map(row=>({
+      name: row.querySelector('.trav-name').value.trim(),
+      seat: row.querySelector('.trav-seat').value.trim()
+    })).filter(tr=>tr.name || tr.seat);
+    data.bookingLink=document.getElementById('f_bookinglink').value.trim();
     data.confirmation=document.getElementById('f_flightconf').value.trim();
     data.notes=document.getElementById('f_flightnotes').value.trim();
     data.name = `${data.airline} ${data.flightNumber}`.trim() || 'Flight';
