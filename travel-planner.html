@@ -95,6 +95,34 @@
   }
   .daychip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
 
+  .cal-toggle{display:flex;gap:6px;margin-bottom:14px;}
+  .cal-toggle button{
+    flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:8px 4px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;
+  }
+  .cal-toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .cal-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:24px;overflow:hidden;}
+  .cal-gutter-line{position:absolute;top:0;bottom:0;width:1px;background:var(--line);}
+  .cal-hour-row{position:absolute;left:0;right:0;border-top:1px solid var(--line);}
+  .cal-hour-row:first-child{border-top:none;}
+  .cal-hour-label{
+    position:absolute;top:-7px;left:6px;width:38px;font-size:10.5px;color:var(--muted);
+    background:var(--panel);padding-right:2px;font-family:'Inter';
+  }
+  .cal-event{
+    position:absolute;border-radius:6px;padding:4px 7px;overflow:hidden;box-sizing:border-box;
+    border-left:3px solid; cursor:pointer;
+  }
+  .cal-event.meal{background:var(--meal-bg);border-color:var(--meal);}
+  .cal-event.activity{background:var(--activity-bg);border-color:var(--activity);}
+  .cal-event.travel{background:var(--travel-bg);border-color:var(--travel);}
+  .cal-event.flight{background:var(--flight-bg);border-color:var(--flight);}
+  .cal-event.stay{background:var(--accom-bg);border-color:var(--accom);cursor:default;}
+  .cal-event-time{font-size:10px;font-weight:700;color:var(--ink);line-height:1.2;font-family:'Archivo';}
+  .cal-event-name{font-size:11.5px;color:var(--body);line-height:1.25;font-weight:500;}
+
   .item{
     display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);
     border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;
@@ -196,7 +224,7 @@ function load(){
 }
 function save(data){ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
 let DATA = load();
-let STATE = { view:'home', tripId:null, tab:'timetable', day:null };
+let STATE = { view:'home', tripId:null, tab:'timetable', day:null, calView:false };
 
 function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
 function toast(msg){
@@ -228,7 +256,42 @@ function daysBetween(start,end){
   }
   return days;
 }
-function fmtTime(t){ if(!t) return ''; return t; }
+function fmtTime(t){
+  if(!t) return '';
+  const parts = t.split(':');
+  if(parts.length<2) return t;
+  let h = parseInt(parts[0],10);
+  const m = parts[1];
+  if(isNaN(h)) return t;
+  const period = h>=12 ? 'PM' : 'AM';
+  let h12 = h % 12; if(h12===0) h12=12;
+  return `${h12}:${m} ${period}`;
+}
+function timeToMinutes(t){
+  if(!t) return null;
+  const parts=t.split(':');
+  const h=parseInt(parts[0],10), m=parseInt(parts[1],10);
+  if(isNaN(h)||isNaN(m)) return null;
+  return h*60+m;
+}
+/* Best-effort parse of the free-text travel "duration" field (e.g. "40 min",
+   "1h 30m", "1:30", "90") into minutes, for sizing the calendar-view block.
+   Falls back to null (caller applies a default) if it can't be read. */
+function parseDurationToMinutes(str){
+  if(!str) return null;
+  const s=str.toLowerCase().trim();
+  let m=s.match(/^(\d+):(\d{2})$/);
+  if(m) return parseInt(m[1],10)*60+parseInt(m[2],10);
+  let hours=0, mins=0, found=false;
+  const hm=s.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/);
+  if(hm){ hours=parseFloat(hm[1]); found=true; }
+  const mm=s.match(/(\d+)\s*(?:m|min|mins|minute|minutes)\b/);
+  if(mm){ mins=parseInt(mm[1],10); found=true; }
+  if(found) return Math.round(hours*60+mins);
+  const plain=s.match(/^(\d+)$/);
+  if(plain) return parseInt(plain[1],10);
+  return null;
+}
 function timeSort(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); }
 
 /* ---------- render root ---------- */
@@ -361,33 +424,170 @@ function renderTrip(t){
 function setTab(tab){ STATE.tab=tab; render(); }
 
 /* ---- Timetable ---- */
+/* Gathers every row that belongs on a given day: normal agenda items, plus
+   accommodation check-in/out and flight departure/arrival pseudo-rows. Shared
+   by both the list view and the calendar view so they never drift apart. */
+function getDayRows(t, day){
+  let rows = (t.agenda||[]).filter(a=>a.date===day).map(a=>({...a}));
+  (t.accommodations||[]).forEach(a=>{
+    if(a.checkIn===day) rows.push({id:a.id+'-in',type:'stay',time:a.checkInTime||'15:00',name:a.name+' — check in',location:a.address,notes:a.notes,readonly:true,stayId:a.id});
+    if(a.checkOut===day) rows.push({id:a.id+'-out',type:'stay',time:a.checkOutTime||'10:00',name:a.name+' — check out',location:a.address,notes:'',readonly:true,stayId:a.id});
+  });
+  (t.agenda||[]).filter(a=>a.type==='flight').forEach(f=>{
+    const route = `${f.depAirport||'?'} → ${f.arrAirport||'?'}`;
+    const meta = flightMeta(f);
+    if(f.depDate===day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
+    if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
+  });
+  rows.sort(timeSort);
+  return rows;
+}
+
 function renderTimetable(t){
   const days = daysBetween(t.startDate,t.endDate);
   if(!STATE.day || !days.includes(STATE.day)) STATE.day = days[0];
   const chips = days.map((d,i)=>`<div class="daychip ${d===STATE.day?'active':''}" onclick="setDay('${d}')">Day ${i+1} · ${fmtDate(d)}</div>`).join('');
+  const toggle = `<div class="cal-toggle">
+    <button class="${STATE.calView?'':'active'}" onclick="setCalView(false)">List</button>
+    <button class="${STATE.calView?'active':''}" onclick="setCalView(true)">Calendar</button>
+  </div>`;
 
-  // gather items for this day (flights are excluded here since they use depDate/arrDate, not date)
-  let rows = (t.agenda||[]).filter(a=>a.date===STATE.day).map(a=>({...a}));
-  // add accommodation check-in/out pseudo rows
-  (t.accommodations||[]).forEach(a=>{
-    if(a.checkIn===STATE.day) rows.push({id:a.id+'-in',type:'stay',time:a.checkInTime||'15:00',name:a.name+' — check in',location:a.address,notes:a.notes,readonly:true,stayId:a.id});
-    if(a.checkOut===STATE.day) rows.push({id:a.id+'-out',type:'stay',time:a.checkOutTime||'10:00',name:a.name+' — check out',location:a.address,notes:'',readonly:true,stayId:a.id});
-  });
-  // add flight departure/arrival rows — same flight id on both, so edit/delete act on the one record
-  (t.agenda||[]).filter(a=>a.type==='flight').forEach(f=>{
-    const route = `${f.depAirport||'?'} → ${f.arrAirport||'?'}`;
-    const meta = flightMeta(f);
-    if(f.depDate===STATE.day) rows.push({id:f.id,type:'flight',leg:'depart',time:f.depTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
-    if(f.arrDate===STATE.day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,meta,notes:f.notes});
-  });
-  rows.sort(timeSort);
+  const rows = getDayRows(t, STATE.day);
+  const body = STATE.calView ? renderCalendarView(rows, t.id) :
+    (rows.length ? rows.map(r=>renderItem(r,t.id)).join('') :
+      `<div class="empty" style="padding:32px 10px;">Nothing planned yet for this day.</div>`);
 
-  const list = rows.length ? rows.map(r=>renderItem(r,t.id)).join('') :
-    `<div class="empty" style="padding:32px 10px;">Nothing planned yet for this day.</div>`;
-
-  return `<div class="daychips">${chips}</div>${list}`;
+  return `<div class="daychips">${chips}</div>${toggle}${body}`;
 }
 function setDay(d){ STATE.day=d; render(); }
+function setCalView(on){ STATE.calView=on; render(); }
+
+/* Assigns a side-by-side column (and the column count for its cluster) to
+   each event whose time overlaps another's, so the calendar view never
+   stacks unreadable text on top of itself. Standard interval-clustering +
+   greedy-column approach used by most calendar UIs. */
+function computeEventLayout(events){
+  events.sort((a,b)=> a.startMin-b.startMin || a.endMin-b.endMin);
+  let clusters=[], current=[], currentEnd=-1;
+  events.forEach(e=>{
+    if(current.length===0 || e.startMin < currentEnd){
+      current.push(e); currentEnd=Math.max(currentEnd, e.endMin);
+    } else {
+      clusters.push(current); current=[e]; currentEnd=e.endMin;
+    }
+  });
+  if(current.length) clusters.push(current);
+  clusters.forEach(cluster=>{
+    const colEnds=[];
+    cluster.forEach(e=>{
+      let col=-1;
+      for(let i=0;i<colEnds.length;i++){ if(colEnds[i]<=e.startMin){ col=i; break; } }
+      if(col===-1){ col=colEnds.length; colEnds.push(e.endMin); } else { colEnds[col]=e.endMin; }
+      e._col=col;
+    });
+    cluster.forEach(e=>{ e._colCount=colEnds.length; });
+  });
+  return events;
+}
+
+const CAL_PX_PER_MIN = 1; // 60px per hour
+const CAL_MIN_BLOCK_MIN = 22; // shortest visual block, so point-in-time events stay tappable/readable
+const CAL_DEFAULT_DURATIONS = { meal:60, activity:60, travel:30, flight:30, stay:30 };
+
+function renderCalendarView(rows, tripId){
+  // Merge same-day flight depart+arrive pseudo-rows into one continuous block;
+  // for overnight flights (different depDate/arrDate), keep them as two
+  // blocks but clip each to midnight so together they read as one bar "cut"
+  // at the day boundary, instead of two small disconnected markers.
+  const flightLegsById = {};
+  rows.forEach(r=>{
+    if(r.type==='flight'){ (flightLegsById[r.id] = flightLegsById[r.id] || []).push(r); }
+  });
+  const mergedFlightIds = new Set();
+  const mergedFlightRows = [];
+  Object.keys(flightLegsById).forEach(id=>{
+    const legs = flightLegsById[id];
+    const depart = legs.find(l=>l.leg==='depart');
+    const arrive = legs.find(l=>l.leg==='arrive');
+    if(depart && arrive){
+      // both legs fall on this same calendar day — one block, dep time to arr time
+      mergedFlightIds.add(id);
+      mergedFlightRows.push({...depart, leg:'full', _calEnd:arrive.time});
+    }
+  });
+  const workingRows = rows
+    .filter(r => !(r.type==='flight' && mergedFlightIds.has(r.id)))
+    .concat(mergedFlightRows);
+
+  const events = workingRows.map(r=>{
+    const startMin = r.leg==='arrive' ? 0 : timeToMinutes(r.time);
+    if(startMin===null) return null;
+    let endMin;
+    if(r.type==='flight'){
+      if(r.leg==='full') endMin = timeToMinutes(r._calEnd);
+      else if(r.leg==='depart') endMin = 1440; // overnight: runs to midnight, continues on the arrival day
+      else endMin = timeToMinutes(r.time); // 'arrive' leg: runs from midnight to arrival time
+    } else if(r.type==='activity' && r.endTime){
+      const e = timeToMinutes(r.endTime);
+      endMin = (e!==null && e>startMin) ? e : startMin + CAL_DEFAULT_DURATIONS.activity;
+    } else if(r.type==='travel'){
+      const parsed = parseDurationToMinutes(r.duration);
+      endMin = startMin + (parsed && parsed>0 ? parsed : CAL_DEFAULT_DURATIONS.travel);
+    } else {
+      endMin = startMin + (CAL_DEFAULT_DURATIONS[r.type] || 45);
+    }
+    if(endMin===null || isNaN(endMin)) endMin = startMin + CAL_DEFAULT_DURATIONS.flight;
+    if(endMin - startMin < CAL_MIN_BLOCK_MIN) endMin = startMin + CAL_MIN_BLOCK_MIN;
+    if(endMin > 1440) endMin = 1440;
+    return {...r, startMin, endMin};
+  }).filter(Boolean);
+
+  const untimed = rows.filter(r=>r.type!=='flight' && timeToMinutes(r.time)===null);
+
+  computeEventLayout(events);
+
+  const hourLabels = Array.from({length:24}, (_,h)=>{
+    const period = h>=12 ? 'PM':'AM';
+    let h12 = h%12; if(h12===0) h12=12;
+    return `<div class="cal-hour-row" style="top:${h*60*CAL_PX_PER_MIN}px"><span class="cal-hour-label">${h12} ${period}</span></div>`;
+  }).join('');
+
+  const gutter = 46; // px reserved for hour labels
+  const blocks = events.map(e=>{
+    const top = e.startMin*CAL_PX_PER_MIN;
+    const height = (e.endMin-e.startMin)*CAL_PX_PER_MIN;
+    const widthPct = 100/e._colCount;
+    const leftPct = e._col*widthPct;
+    const kicker = e.type==='meal' ? (e.mealSlot||'meal')
+      : e.type==='travel' ? 'travel'
+      : e.type==='stay' ? 'accommodation'
+      : e.type==='flight' ? (e.leg==='full' ? 'flight' : ('flight · '+(e.leg==='arrive'?'arrives':'departs')))
+      : 'activity';
+    const tapHandler = e.readonly ? '' : ` onclick="openSheet('editItem','${tripId}','${e.id}')"`;
+    let displayTime;
+    if(e.type==='flight'){
+      const startStr = e.leg==='arrive' ? '12:00 AM' : fmtTime(e.time);
+      const endStr = e.leg==='depart' ? '12:00 AM' : fmtTime(e.leg==='full' ? e._calEnd : e.time);
+      displayTime = `${startStr} – ${endStr}`;
+    } else if(e.type==='activity' && e.endTime){
+      displayTime = `${fmtTime(e.time)} – ${fmtTime(e.endTime)}`;
+    } else {
+      displayTime = fmtTime(e.time);
+    }
+    return `<div class="cal-event ${e.type}" style="top:${top}px;height:${height}px;left:calc(${gutter}px + ${leftPct}%);width:calc(${widthPct}% - 6px);"${tapHandler}>
+      <div class="cal-event-time">${displayTime}</div>
+      <div class="cal-event-name">${esc(e.name||'')}</div>
+    </div>`;
+  }).join('');
+
+  const untimedList = untimed.length ? `<div class="hint" style="margin:0 0 10px;">No time set: ${untimed.map(r=>esc(r.name||'')).join(', ')} — edit from List view to add a time.</div>` : '';
+
+  return `${untimedList}<div class="cal-wrap" style="height:${1440*CAL_PX_PER_MIN}px;">
+    <div class="cal-gutter-line" style="left:${gutter}px;"></div>
+    ${hourLabels}
+    ${blocks}
+  </div>`;
+}
 
 function flightMeta(f){
   const parts=[];
