@@ -92,8 +92,7 @@
   /* Main / views */
   main { flex: 1; padding: 6px 18px 108px; }
   section.view { display: none; }
-  section.view.active { display: block; animation: fade .2s ease; }
-  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  section.view.active { display: block; }
 
   .section-title {
     font-family: "Fredoka", sans-serif; font-size: 15px; font-weight: 600;
@@ -116,21 +115,27 @@
   .balance-card::before, .balance-card::after {
     content: ''; position: absolute; border-radius: 50%; opacity: 0.55; pointer-events: none;
   }
-  .balance-card::before { width: 70px; height: 70px; background: var(--lilac-soft); top: -20px; right: -10px; }
-  .balance-card::after { width: 46px; height: 46px; background: var(--sky-soft); bottom: -14px; right: 60px; }
-  .coin-dot { position: absolute; border-radius: 50%; opacity: 0.7; pointer-events: none; }
+  .balance-card::before { width: 70px; height: 70px; background: var(--lilac-soft); top: -20px; right: -10px; animation: coinDrift1 5.5s ease-in-out infinite; }
+  .balance-card::after { width: 46px; height: 46px; background: var(--sky-soft); bottom: -14px; right: 60px; animation: coinDrift2 6.5s ease-in-out infinite; }
+  .coin-dot { position: absolute; border-radius: 50%; opacity: 0.7; pointer-events: none; animation: coinDrift3 4.4s ease-in-out infinite; }
   .balance-label { color: var(--ink-soft); font-size: 13px; font-weight: 700; position: relative; }
   .balance-amount { font-family: "Fredoka", serif; font-size: 44px; font-weight: 700; margin-top: 2px; position: relative; }
   .balance-amount.negative { color: var(--rust); }
   .balance-empty-note { font-size: 13px; color: var(--ink-soft); margin-top: 10px; position: relative; font-weight: 600; }
   .balance-empty-note button { color: var(--brass); background: none; border: none; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; padding: 0; }
 
-  .horizon-tabs { display: flex; gap: 8px; margin: 18px 0 12px; }
-  .horizon-tabs button {
-    flex: 1; padding: 9px 0; border-radius: 20px; border: none;
-    background: var(--paper-raised); color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer;
+  .horizon-tabs { display: flex; gap: 4px; margin: 18px 0 12px; position: relative; background: var(--paper-raised); border-radius: 20px; padding: 4px; }
+  .horizon-pill {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; border-radius: 16px; background: var(--brass);
+    transition: transform .32s cubic-bezier(.22,.61,.36,1), width .32s cubic-bezier(.22,.61,.36,1);
+    z-index: 0; pointer-events: none;
   }
-  .horizon-tabs button.active { color: #fff; background: var(--brass); }
+  .horizon-tabs button {
+    flex: 1; padding: 9px 0; border-radius: 20px; border: none; position: relative; z-index: 1;
+    background: transparent; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer;
+    transition: color .2s ease;
+  }
+  .horizon-tabs button.active { color: #fff; }
 
   canvas#forecast-canvas { width: 100%; display: block; }
 
@@ -139,6 +144,7 @@
   .warning-banner {
     background: var(--rust-soft); border: none; color: var(--rust);
     padding: 12px 14px; border-radius: 14px; font-size: 13px; font-weight: 700; margin: 10px 0;
+    animation: bannerPulse .5s cubic-bezier(.34,1.56,.64,1) both;
   }
 
   /* Rows / lists */
@@ -146,6 +152,12 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 13px 14px; border-bottom: none; gap: 10px;
     background: var(--paper-raised); border-radius: 14px; margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .row.row-enter { animation: rowFadeSlideIn .32s cubic-bezier(.22,.61,.36,1) both; }
+  .row.row-exiting {
+    transition: opacity .22s ease, max-height .28s ease, margin-bottom .28s ease, padding .28s ease, transform .22s ease;
+    opacity: 0; transform: scale(.97); padding-top: 0; padding-bottom: 0; margin-bottom: 0;
   }
   .row-main { flex: 1; min-width: 0; }
   .row-name { font-size: 14.5px; font-weight: 700; }
@@ -191,16 +203,23 @@
   .field input:focus, .field select:focus { outline: none; border-color: var(--brass); }
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; }
-  .segmented { display: flex; background: var(--paper); border-radius: 20px; overflow: hidden; padding: 4px; }
+  .segmented { display: flex; background: var(--paper); border-radius: 20px; overflow: hidden; padding: 4px; position: relative; }
+  .segment-pill {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; border-radius: 16px; background: var(--brass);
+    transition: transform .3s cubic-bezier(.22,.61,.36,1), width .3s cubic-bezier(.22,.61,.36,1);
+    z-index: 0; pointer-events: none;
+  }
   .segmented button {
     flex: 1; padding: 9px 0; border: none; background: transparent; color: var(--ink-soft); font: inherit; font-weight: 700; cursor: pointer; font-size: 13.5px; border-radius: 16px;
+    position: relative; z-index: 1; transition: color .2s ease;
   }
-  .segmented button.active { background: var(--brass); color: #fff; }
+  .segmented button.active { color: #fff; }
 
   /* Progress bars */
   .progress-track { height: 10px; background: var(--paper); border-radius: 20px; overflow: hidden; margin-top: 8px; }
-  .progress-fill { height: 100%; background: var(--green); border-radius: 20px; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 20px; width: 0; transition: width .7s cubic-bezier(.22,.61,.36,1), background-color .4s ease; }
   .progress-fill.over { background: var(--rust); }
+  .progress-fill.bar-pulse { animation: barPulse .6s ease-out; }
 
   /* Modal */
   .overlay {
@@ -211,6 +230,7 @@
   .modal {
     background: var(--paper); width: 100%; max-width: 480px; border-radius: 26px 26px 0 0;
     max-height: 88vh; overflow-y: auto; padding: 6px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    transition: transform .4s cubic-bezier(.34,1.56,.64,1), opacity .3s ease;
   }
   .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 12px; position: sticky; top: 0; background: var(--paper); }
   .modal-head h3 { font-size: 19px; }
@@ -224,20 +244,87 @@
     display: flex; justify-content: center;
     box-shadow: 0 -2px 10px rgba(43,36,64,0.06);
   }
-  .tabbar-inner { display: flex; width: 100%; max-width: 480px; gap: 4px; }
+  .tabbar-inner { display: flex; width: 100%; max-width: 480px; gap: 4px; position: relative; }
+  .tab-pill {
+    position: absolute; top: 4px; bottom: 4px; left: 0; border-radius: 16px; background: var(--brass-soft);
+    transition: transform .38s cubic-bezier(.22,.61,.36,1), width .38s cubic-bezier(.22,.61,.36,1);
+    z-index: 0; pointer-events: none;
+  }
   .tab-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
     background: none; border: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 10.5px; padding: 7px 0; cursor: pointer;
-    border-radius: 16px;
+    border-radius: 16px; position: relative; z-index: 1; transition: color .2s ease;
   }
   .tab-btn svg { width: 21px; height: 21px; }
-  .tab-btn.active { color: var(--brass); background: var(--brass-soft); }
+  .tab-btn.active { color: var(--brass); }
 
   a { color: var(--brass); }
   ::selection { background: var(--brass-soft); }
+
+  /* ---- Dark mode crossfade ---- */
+  body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
+  .field input, .field select, .modal, nav.tabbar, header.topbar,
+  .progress-track, .segmented, .horizon-tabs, .tab-pill, .horizon-pill, .segment-pill {
+    transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease;
+  }
+
+  /* ---- View switching ---- */
+  @keyframes viewSlideInRight { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
+  @keyframes viewSlideInLeft { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+  @keyframes viewFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---- Rows ---- */
+  @keyframes rowFadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ---- Warning banner ---- */
+  @keyframes bannerPulse { 0% { opacity: 0; transform: scale(.96); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
+
+  /* ---- Progress bar pulse (goal top-up) ---- */
+  @keyframes barPulse {
+    0% { box-shadow: 0 0 0 0 rgba(245,169,62,0.55); }
+    70% { box-shadow: 0 0 0 9px rgba(245,169,62,0); }
+    100% { box-shadow: 0 0 0 0 rgba(245,169,62,0); }
+  }
+
+  /* ---- Ambient coin drift on the hero ---- */
+  @keyframes coinDrift1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  @keyframes coinDrift2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+  @keyframes coinDrift3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+  /* ---- Coin-drop flourish (goal top-up) ---- */
+  .coin-flourish {
+    position: fixed; width: 16px; height: 16px; border-radius: 50%; background: var(--brass);
+    z-index: 60; pointer-events: none;
+    animation: coinFlourish .6s cubic-bezier(.4,0,.6,1) both;
+  }
+  @keyframes coinFlourish {
+    0% { opacity: 1; transform: translate(0,0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--fx,0px), var(--fy,40px)) scale(.4); }
+  }
+
+  /* ---- Launch splash ---- */
+  #splash {
+    position: fixed; inset: 0; z-index: 100; background: var(--brass);
+    display: flex; align-items: center; justify-content: center; opacity: 1;
+  }
+  #splash svg { width: 40vw; max-width: 160px; height: auto; overflow: visible; }
+  #splash-coin { transform-box: fill-box; transform-origin: center; animation: splashCoinDrop 900ms cubic-bezier(.34,1.56,.64,1) 150ms both; }
+  @keyframes splashCoinDrop {
+    0% { transform: translateY(-170px) scale(.6); opacity: 0; }
+    55% { transform: translateY(0) scale(1); opacity: 1; }
+    72% { transform: translateY(-12px) scale(1); }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
 </style>
 </head>
 <body>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 200 200">
+    <path d="M46 76h108l-9 96a18 18 0 0 1-18 16H73a18 18 0 0 1-18-16L46 76z" fill="var(--paper)"/>
+    <path d="M70 76V56a30 30 0 0 1 60 0v20" fill="none" stroke="var(--paper)" stroke-width="14" stroke-linecap="round"/>
+    <circle id="splash-coin" cx="100" cy="122" r="16" fill="var(--brass-soft)"/>
+  </svg>
+</div>
 <div id="app">
 
   <header class="topbar">
@@ -273,7 +360,8 @@
       </div>
 
       <div id="forecast-block">
-        <div class="horizon-tabs">
+        <div class="horizon-tabs" id="horizon-tabs">
+          <div class="horizon-pill" id="horizon-pill"></div>
           <button data-horizon="30" class="active">30 days</button>
           <button data-horizon="60">60 days</button>
           <button data-horizon="90">90 days</button>
@@ -313,6 +401,7 @@
       <div class="section-title">Quick add</div>
       <form id="quickadd-form">
         <div class="segmented" id="quickadd-type">
+          <div class="segment-pill" id="segment-pill"></div>
           <button type="button" data-type="expense" class="active">Expense</button>
           <button type="button" data-type="income">Income</button>
         </div>
@@ -370,6 +459,7 @@
 
   <nav class="tabbar">
     <div class="tabbar-inner">
+      <div class="tab-pill" id="tab-pill"></div>
       <button class="tab-btn active" data-view="dashboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V10M11 19V5M18 19v-7"/></svg>
         Dashboard
@@ -394,7 +484,7 @@
   </nav>
 
   <div class="overlay hidden" id="overlay">
-    <div class="modal">
+    <div class="modal" id="modal">
       <div class="modal-head">
         <h3 id="modal-title"></h3>
         <button id="modal-close" aria-label="Close">✕</button>
@@ -623,7 +713,7 @@
   }
 
   /* ---------- Forecast ---------- */
-  function buildForecast(days){
+  function collectForecastEvents(days){
     var today = startOfDay(new Date());
     var rangeEnd = addDays(today, days);
     var events = [];
@@ -642,6 +732,12 @@
       if(d >= today && d <= rangeEnd) events.push({date:d, amount:Number(t.amount)||0, label:t.name, type:'transaction'});
     });
     events.sort(function(a,b){ return a.date - b.date; });
+    return events;
+  }
+
+  function buildForecast(days){
+    var today = startOfDay(new Date());
+    var events = collectForecastEvents(days);
     var balance = Number(state.settings.startingBalance) || 0;
     var points = [{date:today, balance:balance}];
     events.forEach(function(e){
@@ -649,6 +745,26 @@
       points.push({date:e.date, balance:balance, event:e});
     });
     return {events:events, points:points, endBalance:balance};
+  }
+
+  // Resamples the forecast onto `count` evenly-spaced points across the
+  // full horizon (by elapsed time, not by event index) so the chart can be
+  // smoothly morphed between two different horizons.
+  function computeSamples(days, count){
+    var today = startOfDay(new Date());
+    var events = collectForecastEvents(days);
+    var startBal = Number(state.settings.startingBalance) || 0;
+    var samples = [];
+    for(var i=0;i<count;i++){
+      var t = i/(count-1);
+      var targetDate = addDays(today, Math.round(t*days));
+      var bal = startBal;
+      for(var j=0;j<events.length;j++){
+        if(events[j].date <= targetDate) bal += events[j].amount; else break;
+      }
+      samples.push({t:t, balance:bal});
+    }
+    return samples;
   }
 
   function getUpcomingEvents(days){
@@ -692,9 +808,16 @@
   }
 
   /* ---------- Chart ---------- */
+  var SAMPLE_COUNT = 48;
   function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-  function drawForecastChart(points){
+
+  // Draws from an array of {t, balance} samples (t in 0..1 across the shown
+  // horizon) plus the calendar dates that t=0 and t=1 correspond to, so the
+  // same drawing routine works for a static render and for each frame of an
+  // in-flight morph between two horizons.
+  function drawForecastChart(samples, startDate, endDate){
     var canvas = document.getElementById('forecast-canvas');
+    if(!canvas) return;
     var ctx = canvas.getContext('2d');
     var dpr = window.devicePixelRatio || 1;
     var cssWidth = canvas.clientWidth || 300;
@@ -707,12 +830,12 @@
     ctx.clearRect(0,0,cssWidth,cssHeight);
 
     var padL = 54, padR = 10, padT = 14, padB = 22;
-    var values = points.map(function(p){ return p.balance; });
+    var values = samples.map(function(p){ return p.balance; });
     var minV = Math.min.apply(null, values.concat([0]));
     var maxV = Math.max.apply(null, values.concat([minV+1]));
     if(maxV === minV) maxV = minV + 1;
 
-    function xFor(i){ return padL + (i/(Math.max(1,points.length-1))) * (cssWidth-padL-padR); }
+    function xFor(t){ return padL + t * (cssWidth-padL-padR); }
     function yFor(v){ return cssHeight - padB - ((v-minV)/(maxV-minV)) * (cssHeight-padT-padB); }
 
     // zero line
@@ -725,10 +848,10 @@
 
     // area fill
     ctx.beginPath();
-    ctx.moveTo(xFor(0), yFor(points[0].balance));
-    points.forEach(function(p,i){ ctx.lineTo(xFor(i), yFor(p.balance)); });
-    ctx.lineTo(xFor(points.length-1), yFor(minV));
-    ctx.lineTo(xFor(0), yFor(minV));
+    ctx.moveTo(xFor(samples[0].t), yFor(samples[0].balance));
+    samples.forEach(function(p){ ctx.lineTo(xFor(p.t), yFor(p.balance)); });
+    ctx.lineTo(xFor(samples[samples.length-1].t), yFor(minV));
+    ctx.lineTo(xFor(samples[0].t), yFor(minV));
     ctx.closePath();
     ctx.fillStyle = cssVar('--brass-soft');
     ctx.globalAlpha = 0.35;
@@ -739,8 +862,8 @@
     ctx.strokeStyle = cssVar('--brass');
     ctx.lineWidth = 2;
     ctx.beginPath();
-    points.forEach(function(p,i){
-      var x = xFor(i), y = yFor(p.balance);
+    samples.forEach(function(p,i){
+      var x = xFor(p.t), y = yFor(p.balance);
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
@@ -750,9 +873,42 @@
     ctx.font = '11px "Public Sans", sans-serif';
     ctx.fillText(formatCurrency(maxV), 2, yFor(maxV)+4);
     ctx.fillText(formatCurrency(minV), 2, yFor(minV)+4);
-    ctx.fillText(formatShortDate(points[0].date), padL, cssHeight-6);
-    var lastLabel = formatShortDate(points[points.length-1].date);
+    ctx.fillText(formatShortDate(startDate), padL, cssHeight-6);
+    var lastLabel = formatShortDate(endDate);
     ctx.fillText(lastLabel, cssWidth-padR-ctx.measureText(lastLabel).width, cssHeight-6);
+  }
+
+  // Animates the chart from its current horizon to a new one by blending
+  // the two sample sets frame-by-frame, rather than snapping instantly.
+  var forecastAnimFrame = null;
+  function animateForecastTo(newHorizon){
+    if(newHorizon === currentHorizon) return;
+    var today = startOfDay(new Date());
+    var oldHorizon = currentHorizon;
+    var oldSamples = computeSamples(oldHorizon, SAMPLE_COUNT);
+    var newSamples = computeSamples(newHorizon, SAMPLE_COUNT);
+    if(forecastAnimFrame) cancelAnimationFrame(forecastAnimFrame);
+    var duration = 420;
+    var start = null;
+    function step(ts){
+      if(start === null) start = ts;
+      var p = Math.min(1, (ts - start) / duration);
+      var eased = 1 - Math.pow(1 - p, 3);
+      var blended = [];
+      for(var i=0;i<SAMPLE_COUNT;i++){
+        blended.push({ t: i/(SAMPLE_COUNT-1), balance: oldSamples[i].balance + (newSamples[i].balance - oldSamples[i].balance) * eased });
+      }
+      var blendedDays = oldHorizon + (newHorizon - oldHorizon) * eased;
+      drawForecastChart(blended, today, addDays(today, Math.round(blendedDays)));
+      if(p < 1){
+        forecastAnimFrame = requestAnimationFrame(step);
+      } else {
+        forecastAnimFrame = null;
+        currentHorizon = newHorizon;
+        renderDashboard();
+      }
+    }
+    forecastAnimFrame = requestAnimationFrame(step);
   }
 
   /* ---------- Rendering ---------- */
@@ -760,6 +916,7 @@
 
   function iconEdit(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5.5 16.5 4 20z"/></svg>'; }
   function iconTrash(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0-.7 12.1a2 2 0 0 1-2 1.9H8.7a2 2 0 0 1-2-1.9L6 7"/></svg>'; }
+
 
   function renderDashboard(){
     var bal = state.settings.startingBalance;
@@ -778,7 +935,9 @@
       forecastBlock.style.display = 'block';
 
       var forecast = buildForecast(currentHorizon);
-      drawForecastChart(forecast.points);
+      var today = startOfDay(new Date());
+      drawForecastChart(computeSamples(currentHorizon, SAMPLE_COUNT), today, addDays(today, currentHorizon));
+      updateHorizonPill();
       var minPoint = forecast.points.reduce(function(min,p){ return p.balance < min.balance ? p : min; }, forecast.points[0]);
       document.getElementById('forecast-summary').innerHTML =
         'Projected in ' + currentHorizon + ' days: <span class="num">' + formatCurrency(forecast.endBalance) + '</span>';
@@ -810,6 +969,84 @@
     });
   }
 
+  /* ---------- Small animation helpers ---------- */
+  // Plays a one-off entrance animation on an element, restarting cleanly
+  // even if the same animation is already mid-flight, and always cleaning
+  // up the inline style afterward so nothing is left with a lingering
+  // transform (which would otherwise create a stray containing block).
+  function playEntrance(el, animName, durationMs){
+    if(!el) return;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = animName + ' ' + durationMs + 'ms cubic-bezier(.22,.61,.36,1) both';
+    var cleanup = function(){ el.style.animation = ''; el.removeEventListener('animationend', cleanup); };
+    el.addEventListener('animationend', cleanup);
+    setTimeout(cleanup, durationMs + 80);
+  }
+
+  // Collapses a row (measuring its real height first so max-height has a
+  // concrete number to transition from) then runs `callback` once the
+  // collapse finishes, so state is only mutated after the row is gone.
+  function playRowExit(el, callback){
+    if(!el){ callback(); return; }
+    var rect = el.getBoundingClientRect();
+    el.style.maxHeight = rect.height + 'px';
+    void el.offsetWidth;
+    el.classList.add('row-exiting');
+    el.style.maxHeight = '0px';
+    var done = false;
+    function finish(){ if(done) return; done = true; el.removeEventListener('transitionend', finish); callback(); }
+    el.addEventListener('transitionend', finish);
+    setTimeout(finish, 420);
+  }
+
+  // Tracks the id of a row that was just added, so the next render of its
+  // list can play an entrance animation on that one row only.
+  var pendingEnterId = null;
+  function applyPendingEnter(){
+    if(!pendingEnterId) return;
+    var id = pendingEnterId; pendingEnterId = null;
+    var el = document.querySelector('[data-id="' + id + '"]');
+    if(el) playEntrance(el, 'rowFadeSlideIn', 340);
+  }
+
+  // Progress bars render at width:0 so this can animate them up to their
+  // real value, rather than appearing already full.
+  function animateProgressBars(containerEl){
+    var bars = containerEl.querySelectorAll('.progress-fill[data-target]');
+    bars.forEach(function(bar){
+      var target = bar.getAttribute('data-target');
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){ bar.style.width = target + '%'; });
+      });
+    });
+  }
+
+  function spawnCoinFlourish(buttonEl){
+    if(!buttonEl) return;
+    var rect = buttonEl.getBoundingClientRect();
+    var coin = document.createElement('div');
+    coin.className = 'coin-flourish';
+    coin.style.left = (rect.left + rect.width/2 - 8) + 'px';
+    coin.style.top = (rect.top + rect.height/2 - 8) + 'px';
+    coin.style.setProperty('--fx', '-6px');
+    coin.style.setProperty('--fy', '44px');
+    document.body.appendChild(coin);
+    var removed = false;
+    function remove(){ if(removed) return; removed = true; if(coin.parentNode) coin.parentNode.removeChild(coin); }
+    coin.addEventListener('animationend', remove);
+    setTimeout(remove, 800);
+  }
+
+  function pulseBar(rowId){
+    var bar = document.querySelector('[data-id="' + rowId + '"] .progress-fill');
+    if(!bar) return;
+    bar.classList.add('bar-pulse');
+    var cleanup = function(){ bar.classList.remove('bar-pulse'); bar.removeEventListener('animationend', cleanup); };
+    bar.addEventListener('animationend', cleanup);
+    setTimeout(cleanup, 700);
+  }
+
   function renderPlan(){
     var incomeList = document.getElementById('income-list');
     if(!state.incomes.length){
@@ -818,7 +1055,7 @@
       incomeList.innerHTML = state.incomes.map(function(inc){
         var next = nextOccurrence(inc.anchorDate, inc.frequency, null);
         var freqLabel = inc.frequency === 'monthly' ? 'Monthly' : 'Fortnightly';
-        return '<div class="row"><div class="row-main"><div class="row-name">' + escapeHTML(inc.name) + '</div>' +
+        return '<div class="row" data-id="' + inc.id + '"><div class="row-main"><div class="row-name">' + escapeHTML(inc.name) + '</div>' +
           '<div class="row-sub"><span class="chip">' + freqLabel + '</span>Next: ' + (next?formatShortDate(next):'—') + '</div></div>' +
           '<div class="row-amount income num">+' + formatCurrency(inc.amount) + '</div>' +
           '<div class="row-actions"><button data-edit-income="' + inc.id + '">' + iconEdit() + '</button><button data-del-income="' + inc.id + '">' + iconTrash() + '</button></div></div>';
@@ -832,12 +1069,13 @@
       billsList.innerHTML = state.bills.map(function(b){
         var next = nextOccurrence(b.anchorDate, b.frequency, b.intervalDays);
         var freqLabel = {weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', custom:'Every ' + (b.intervalDays||'?') + ' days'}[b.frequency] || b.frequency;
-        return '<div class="row"><div class="row-main"><div class="row-name">' + escapeHTML(b.name) + '</div>' +
+        return '<div class="row" data-id="' + b.id + '"><div class="row-main"><div class="row-name">' + escapeHTML(b.name) + '</div>' +
           '<div class="row-sub"><span class="chip">' + freqLabel + '</span>' + (b.category?('<span class="chip">'+escapeHTML(b.category)+'</span>'):'') + 'Next: ' + (next?formatShortDate(next):'—') + '</div></div>' +
           '<div class="row-amount expense num">-' + formatCurrency(b.amount) + '</div>' +
           '<div class="row-actions"><button data-edit-bill="' + b.id + '">' + iconEdit() + '</button><button data-del-bill="' + b.id + '">' + iconTrash() + '</button></div></div>';
       }).join('');
     }
+    applyPendingEnter();
   }
 
   function renderBudgets(){
@@ -850,15 +1088,17 @@
       var spent = categorySpend(c.name);
       var pct = c.budget > 0 ? Math.min(100, (spent / c.budget) * 100) : (spent > 0 ? 100 : 0);
       var over = c.budget > 0 && spent > c.budget;
-      return '<div class="row" style="display:block;">' +
+      return '<div class="row" data-id="' + c.id + '" style="display:block;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
         '<div class="row-main"><div class="row-name">' + escapeHTML(c.name) + '</div></div>' +
         '<div class="row-amount num" style="' + (over?'color:var(--rust);':'') + '">' + formatCurrency(spent) + (c.budget>0?(' / ' + formatCurrency(c.budget)):'') + '</div>' +
         '<div class="row-actions"><button data-edit-category="' + c.id + '">' + iconEdit() + '</button><button data-del-category="' + c.id + '">' + iconTrash() + '</button></div>' +
         '</div>' +
-        '<div class="progress-track"><div class="progress-fill' + (over?' over':'') + '" style="width:' + pct + '%;"></div></div>' +
+        '<div class="progress-track"><div class="progress-fill' + (over?' over':'') + '" data-target="' + pct + '"></div></div>' +
         '</div>';
     }).join('');
+    animateProgressBars(list);
+    applyPendingEnter();
   }
 
   function renderGoals(){
@@ -870,17 +1110,19 @@
     list.innerHTML = state.goals.map(function(g){
       var pct = g.targetAmount > 0 ? Math.min(100, ((g.currentSaved||0) / g.targetAmount) * 100) : 0;
       var c = goalContribution(g);
-      return '<div class="row" style="display:block;">' +
+      return '<div class="row" data-id="' + g.id + '" style="display:block;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
         '<div class="row-main"><div class="row-name">' + escapeHTML(g.name) + '</div>' +
         '<div class="row-sub">Target ' + formatFullDate(parseISODate(g.targetDate)) + ' · ' + formatCurrency(c.remaining) + ' to go</div></div>' +
         '<div class="row-actions"><button data-save-goal="' + g.id + '" title="Add to savings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg></button>' +
         '<button data-edit-goal="' + g.id + '">' + iconEdit() + '</button><button data-del-goal="' + g.id + '">' + iconTrash() + '</button></div>' +
         '</div>' +
-        '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%;"></div></div>' +
+        '<div class="progress-track"><div class="progress-fill" data-target="' + pct + '"></div></div>' +
         '<div class="row-sub" style="margin-top:6px;">' + formatCurrency(g.currentSaved||0) + ' of ' + formatCurrency(g.targetAmount) + ' saved · need ' + formatCurrency(c.perFortnight) + '/fortnight or ' + formatCurrency(c.perMonth) + '/month</div>' +
         '</div>';
     }).join('');
+    animateProgressBars(list);
+    applyPendingEnter();
   }
 
   function populateQuickAddCategories(){
@@ -897,11 +1139,12 @@
     }
     list.innerHTML = recent.map(function(t){
       var cls = t.amount >= 0 ? 'income' : 'expense';
-      return '<div class="row"><div class="row-main"><div class="row-name">' + escapeHTML(t.name) + '</div>' +
+      return '<div class="row" data-id="' + t.id + '"><div class="row-main"><div class="row-name">' + escapeHTML(t.name) + '</div>' +
         '<div class="row-sub">' + formatShortDate(parseISODate(t.date)) + (t.category?(' · '+escapeHTML(t.category)):'') + '</div></div>' +
         '<div class="row-amount ' + cls + ' num">' + (t.amount>=0?'+':'') + formatCurrency(t.amount) + '</div>' +
         '<div class="row-actions"><button data-del-transaction="' + t.id + '">' + iconTrash() + '</button></div></div>';
     }).join('');
+    applyPendingEnter();
   }
 
   function renderSettings(){
@@ -921,7 +1164,20 @@
 
   /* ---------- Tab navigation ---------- */
   var views = ['dashboard','plan','add','budgets','goals'];
+  var currentViewIndex = 0;
+  var firstShow = true;
+
+  function updateTabPill(){
+    var pill = document.getElementById('tab-pill');
+    var active = document.querySelector('.tab-btn.active');
+    if(!pill || !active) return;
+    pill.style.width = active.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + active.offsetLeft + 'px)';
+  }
+
   function showView(name){
+    var newIndex = views.indexOf(name);
+    var direction = newIndex > currentViewIndex ? 1 : (newIndex < currentViewIndex ? -1 : 0);
     views.forEach(function(v){
       document.getElementById('view-' + v).classList.toggle('active', v === name);
     });
@@ -929,6 +1185,13 @@
       btn.classList.toggle('active', btn.getAttribute('data-view') === name);
     });
     document.getElementById('view-settings').classList.remove('active');
+    updateTabPill();
+    if(!firstShow && newIndex !== -1){
+      var el = document.getElementById('view-' + name);
+      playEntrance(el, direction >= 0 ? 'viewSlideInRight' : 'viewSlideInLeft', 260);
+    }
+    firstShow = false;
+    if(newIndex !== -1) currentViewIndex = newIndex;
     if(name === 'dashboard') renderDashboard();
     if(name === 'add'){ populateQuickAddCategories(); renderRecent(); }
   }
@@ -939,24 +1202,65 @@
     views.forEach(function(v){ document.getElementById('view-' + v).classList.remove('active'); });
     document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
     renderSettings();
-    document.getElementById('view-settings').classList.add('active');
+    var settingsEl = document.getElementById('view-settings');
+    settingsEl.classList.add('active');
+    playEntrance(settingsEl, 'viewFadeIn', 220);
   });
 
   /* ---------- Modal helpers ---------- */
   var overlay = document.getElementById('overlay');
+  var modalEl = document.getElementById('modal');
   var modalTitle = document.getElementById('modal-title');
   var modalBody = document.getElementById('modal-body');
-  function openModal(title, html){
+  var lastModalTrigger = null;
+
+  // Positions the modal so it visually "grows" out of whichever button
+  // opened it, rather than sliding up as an unrelated sheet.
+  function modalOpenTransform(triggerEl){
+    if(!triggerEl) return null;
+    var t = triggerEl.getBoundingClientRect();
+    var m = modalEl.getBoundingClientRect();
+    var tx = (t.left + t.width/2) - (m.left + m.width/2);
+    var ty = (t.top + t.height/2) - (m.top + m.height*0.85);
+    return 'translate(' + tx + 'px,' + ty + 'px) scale(0.15)';
+  }
+
+  function openModal(title, html, triggerEl){
     modalTitle.textContent = title;
     modalBody.innerHTML = html;
     overlay.classList.remove('hidden');
+    lastModalTrigger = triggerEl || null;
+    modalEl.style.transition = 'none';
+    modalEl.style.opacity = '0';
+    var fromTransform = modalOpenTransform(triggerEl);
+    modalEl.style.transform = fromTransform || 'translateY(24px) scale(0.96)';
+    void modalEl.offsetWidth;
+    modalEl.style.transition = '';
+    modalEl.style.transform = 'translate(0,0) scale(1)';
+    modalEl.style.opacity = '1';
   }
-  function closeModal(){ overlay.classList.add('hidden'); modalBody.innerHTML=''; }
+  function closeModal(){
+    var toTransform = modalOpenTransform(lastModalTrigger);
+    modalEl.style.transform = toTransform || 'translateY(24px) scale(0.96)';
+    modalEl.style.opacity = '0';
+    var done = false;
+    function finish(){
+      if(done) return; done = true;
+      modalEl.removeEventListener('transitionend', finish);
+      overlay.classList.add('hidden');
+      modalBody.innerHTML = '';
+      modalEl.style.transform = '';
+      modalEl.style.opacity = '';
+    }
+    modalEl.addEventListener('transitionend', finish);
+    setTimeout(finish, 420);
+  }
   document.getElementById('modal-close').addEventListener('click', closeModal);
   overlay.addEventListener('click', function(e){ if(e.target === overlay) closeModal(); });
 
+
   /* ---------- Income form ---------- */
-  function openIncomeForm(existing){
+  function openIncomeForm(existing, triggerEl){
     var isEdit = !!existing;
     var html =
       '<form id="income-form">' +
@@ -969,7 +1273,7 @@
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add income') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="income-delete">Delete</button>':'') +
       '</form>';
-    openModal(isEdit?'Edit income':'Add income', html);
+    openModal(isEdit?'Edit income':'Add income', html, triggerEl);
     document.getElementById('income-form').addEventListener('submit', function(e){
       e.preventDefault();
       var data = {
@@ -984,6 +1288,7 @@
         state.incomes[idx] = data;
       } else {
         state.incomes.push(data);
+        pendingEnterId = data.id;
       }
       saveState(); closeModal(); renderPlan(); renderDashboard();
     });
@@ -996,13 +1301,13 @@
       });
     }
   }
-  document.getElementById('add-income').addEventListener('click', function(){ openIncomeForm(null); });
+  document.getElementById('add-income').addEventListener('click', function(e){ openIncomeForm(null, e.currentTarget); });
 
   /* ---------- Bill form ---------- */
   function categoryOptions(selected){
     return state.categories.map(function(c){ return '<option value="'+escapeHTML(c.name)+'"'+(c.name===selected?' selected':'')+'>'+escapeHTML(c.name)+'</option>'; }).join('');
   }
-  function openBillForm(existing){
+  function openBillForm(existing, triggerEl){
     var isEdit = !!existing;
     var freq = existing ? existing.frequency : 'monthly';
     var html =
@@ -1022,7 +1327,7 @@
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add bill') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="bill-delete">Delete</button>':'') +
       '</form>';
-    openModal(isEdit?'Edit bill':'Add bill', html);
+    openModal(isEdit?'Edit bill':'Add bill', html, triggerEl);
     document.getElementById('bill-freq').addEventListener('change', function(){
       document.getElementById('bill-interval-field').style.display = this.value === 'custom' ? 'block' : 'none';
     });
@@ -1043,6 +1348,7 @@
         state.bills[idx] = data;
       } else {
         state.bills.push(data);
+        pendingEnterId = data.id;
       }
       saveState(); closeModal(); renderPlan(); renderDashboard(); renderBudgets();
     });
@@ -1055,10 +1361,10 @@
       });
     }
   }
-  document.getElementById('add-bill').addEventListener('click', function(){ openBillForm(null); });
+  document.getElementById('add-bill').addEventListener('click', function(e){ openBillForm(null, e.currentTarget); });
 
   /* ---------- Category form ---------- */
-  function openCategoryForm(existing){
+  function openCategoryForm(existing, triggerEl){
     var isEdit = !!existing;
     var html =
       '<form id="category-form">' +
@@ -1067,7 +1373,7 @@
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add category') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="category-delete">Delete</button>':'') +
       '</form>';
-    openModal(isEdit?'Edit category':'Add category', html);
+    openModal(isEdit?'Edit category':'Add category', html, triggerEl);
     document.getElementById('category-form').addEventListener('submit', function(e){
       e.preventDefault();
       var data = {
@@ -1080,6 +1386,7 @@
         state.categories[idx] = data;
       } else {
         state.categories.push(data);
+        pendingEnterId = data.id;
       }
       saveState(); closeModal(); renderBudgets(); populateQuickAddCategories();
     });
@@ -1092,10 +1399,10 @@
       });
     }
   }
-  document.getElementById('add-category').addEventListener('click', function(){ openCategoryForm(null); });
+  document.getElementById('add-category').addEventListener('click', function(e){ openCategoryForm(null, e.currentTarget); });
 
   /* ---------- Goal form ---------- */
-  function openGoalForm(existing){
+  function openGoalForm(existing, triggerEl){
     var isEdit = !!existing;
     var html =
       '<form id="goal-form">' +
@@ -1108,7 +1415,7 @@
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add goal') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="goal-delete">Delete</button>':'') +
       '</form>';
-    openModal(isEdit?'Edit goal':'Add goal', html);
+    openModal(isEdit?'Edit goal':'Add goal', html, triggerEl);
     document.getElementById('goal-form').addEventListener('submit', function(e){
       e.preventDefault();
       var data = {
@@ -1123,6 +1430,7 @@
         state.goals[idx] = data;
       } else {
         state.goals.push(data);
+        pendingEnterId = data.id;
       }
       saveState(); closeModal(); renderGoals();
     });
@@ -1135,58 +1443,99 @@
       });
     }
   }
-  document.getElementById('add-goal').addEventListener('click', function(){ openGoalForm(null); });
+  document.getElementById('add-goal').addEventListener('click', function(e){ openGoalForm(null, e.currentTarget); });
 
   /* ---------- List action delegation (edit/delete/save-to-goal) ---------- */
   document.addEventListener('click', function(e){
     var t = e.target.closest('button');
     if(!t) return;
     var id;
-    if((id = t.getAttribute('data-edit-income'))) openIncomeForm(state.incomes.find(function(i){return i.id===id;}));
+    if((id = t.getAttribute('data-edit-income'))) openIncomeForm(state.incomes.find(function(i){return i.id===id;}), t);
     else if((id = t.getAttribute('data-del-income'))){
-      if(confirm('Delete this income source?')){ state.incomes = state.incomes.filter(function(i){return i.id!==id;}); saveState(); renderPlan(); renderDashboard(); }
+      if(confirm('Delete this income source?')){
+        playRowExit(t.closest('.row'), function(){
+          state.incomes = state.incomes.filter(function(i){return i.id!==id;}); saveState(); renderPlan(); renderDashboard();
+        });
+      }
     }
-    else if((id = t.getAttribute('data-edit-bill'))) openBillForm(state.bills.find(function(b){return b.id===id;}));
+    else if((id = t.getAttribute('data-edit-bill'))) openBillForm(state.bills.find(function(b){return b.id===id;}), t);
     else if((id = t.getAttribute('data-del-bill'))){
-      if(confirm('Delete this bill?')){ state.bills = state.bills.filter(function(b){return b.id!==id;}); saveState(); renderPlan(); renderDashboard(); }
+      if(confirm('Delete this bill?')){
+        playRowExit(t.closest('.row'), function(){
+          state.bills = state.bills.filter(function(b){return b.id!==id;}); saveState(); renderPlan(); renderDashboard();
+        });
+      }
     }
-    else if((id = t.getAttribute('data-edit-category'))) openCategoryForm(state.categories.find(function(c){return c.id===id;}));
+    else if((id = t.getAttribute('data-edit-category'))) openCategoryForm(state.categories.find(function(c){return c.id===id;}), t);
     else if((id = t.getAttribute('data-del-category'))){
-      if(confirm('Delete this category?')){ state.categories = state.categories.filter(function(c){return c.id!==id;}); saveState(); renderBudgets(); populateQuickAddCategories(); }
+      if(confirm('Delete this category?')){
+        playRowExit(t.closest('.row'), function(){
+          state.categories = state.categories.filter(function(c){return c.id!==id;}); saveState(); renderBudgets(); populateQuickAddCategories();
+        });
+      }
     }
-    else if((id = t.getAttribute('data-edit-goal'))) openGoalForm(state.goals.find(function(g){return g.id===id;}));
+    else if((id = t.getAttribute('data-edit-goal'))) openGoalForm(state.goals.find(function(g){return g.id===id;}), t);
     else if((id = t.getAttribute('data-del-goal'))){
-      if(confirm('Delete this savings goal?')){ state.goals = state.goals.filter(function(g){return g.id!==id;}); saveState(); renderGoals(); }
+      if(confirm('Delete this savings goal?')){
+        playRowExit(t.closest('.row'), function(){
+          state.goals = state.goals.filter(function(g){return g.id!==id;}); saveState(); renderGoals();
+        });
+      }
     }
     else if((id = t.getAttribute('data-save-goal'))){
       var g = state.goals.find(function(g){return g.id===id;});
       var amt = prompt('Add how much to "' + g.name + '"?');
       if(amt !== null){
         var n = parseFloat(amt);
-        if(!isNaN(n)){ g.currentSaved = (g.currentSaved||0) + n; saveState(); renderGoals(); }
+        if(!isNaN(n)){
+          spawnCoinFlourish(t);
+          g.currentSaved = (g.currentSaved||0) + n;
+          saveState();
+          renderGoals();
+          pulseBar(id);
+        }
       }
     }
     else if((id = t.getAttribute('data-del-transaction'))){
-      if(confirm('Delete this entry?')){ state.transactions = state.transactions.filter(function(x){return x.id!==id;}); saveState(); renderRecent(); renderBudgets(); renderDashboard(); }
+      if(confirm('Delete this entry?')){
+        playRowExit(t.closest('.row'), function(){
+          state.transactions = state.transactions.filter(function(x){return x.id!==id;}); saveState(); renderRecent(); renderBudgets(); renderDashboard();
+        });
+      }
     }
   });
 
   /* ---------- Horizon tabs ---------- */
+  function updateHorizonPill(){
+    var pill = document.getElementById('horizon-pill');
+    var active = document.querySelector('.horizon-tabs button.active');
+    if(!pill || !active) return;
+    pill.style.width = active.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + (active.offsetLeft - 4) + 'px)';
+  }
   document.querySelectorAll('.horizon-tabs button').forEach(function(btn){
     btn.addEventListener('click', function(){
       document.querySelectorAll('.horizon-tabs button').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
-      currentHorizon = parseInt(btn.getAttribute('data-horizon'), 10);
-      renderDashboard();
+      updateHorizonPill();
+      animateForecastTo(parseInt(btn.getAttribute('data-horizon'), 10));
     });
   });
 
   /* ---------- Quick add ---------- */
   var quickAddType = 'expense';
+  function updateSegmentPill(){
+    var pill = document.getElementById('segment-pill');
+    var active = document.querySelector('#quickadd-type button.active');
+    if(!pill || !active) return;
+    pill.style.width = active.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + (active.offsetLeft - 4) + 'px)';
+  }
   document.querySelectorAll('#quickadd-type button').forEach(function(btn){
     btn.addEventListener('click', function(){
       document.querySelectorAll('#quickadd-type button').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
+      updateSegmentPill();
       quickAddType = btn.getAttribute('data-type');
       document.getElementById('qa-category-field').style.display = quickAddType === 'expense' ? 'block' : 'none';
     });
@@ -1204,15 +1553,18 @@
       date: document.getElementById('qa-date').value || toISODate(new Date())
     };
     state.transactions.push(t);
+    pendingEnterId = t.id;
     saveState();
     document.getElementById('quickadd-form').reset();
     document.getElementById('qa-date').value = toISODate(new Date());
     document.querySelectorAll('#quickadd-type button').forEach(function(b){ b.classList.remove('active'); });
     document.querySelector('#quickadd-type button[data-type="expense"]').classList.add('active');
+    updateSegmentPill();
     quickAddType = 'expense';
     document.getElementById('qa-category-field').style.display = 'block';
     renderRecent(); renderBudgets(); renderDashboard();
   });
+
 
   /* ---------- Settings ---------- */
   document.getElementById('balance-empty-cta').addEventListener('click', function(){
@@ -1273,10 +1625,29 @@
   });
 
   /* ---------- Init ---------- */
+  function runSplash(){
+    var splash = document.getElementById('splash');
+    if(!splash) return;
+    setTimeout(function(){
+      splash.style.transition = 'opacity .35s ease';
+      splash.style.opacity = '0';
+      var done = false;
+      function finish(){ if(done) return; done = true; splash.style.display = 'none'; splash.removeEventListener('transitionend', finish); }
+      splash.addEventListener('transitionend', finish);
+      setTimeout(finish, 450);
+    }, 1150);
+  }
   window.addEventListener('resize', function(){
     if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+    updateTabPill();
+    updateHorizonPill();
+    updateSegmentPill();
   });
   renderAll();
+  updateTabPill();
+  updateHorizonPill();
+  updateSegmentPill();
+  runSplash();
 
 })();
 </script>
