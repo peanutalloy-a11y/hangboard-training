@@ -575,9 +575,9 @@ function renderCalendarView(rows, tripId){
       if(r.leg==='full') endMin = timeToMinutes(r._calEnd);
       else if(r.leg==='depart') endMin = 1440; // overnight: runs to midnight, continues on the arrival day
       else endMin = timeToMinutes(r.time); // 'arrive' leg: runs from midnight to arrival time
-    } else if(r.type==='activity' && r.endTime){
+    } else if((r.type==='activity' || r.type==='meal') && r.endTime){
       const e = timeToMinutes(r.endTime);
-      endMin = (e!==null && e>startMin) ? e : startMin + CAL_DEFAULT_DURATIONS.activity;
+      endMin = (e!==null && e>startMin) ? e : startMin + CAL_DEFAULT_DURATIONS[r.type];
     } else if(r.type==='travel'){
       const parsed = parseDurationToMinutes(r.duration);
       endMin = startMin + (parsed && parsed>0 ? parsed : CAL_DEFAULT_DURATIONS.travel);
@@ -631,7 +631,7 @@ function renderCalendarView(rows, tripId){
       const startStr = e.leg==='arrive' ? '12:00 AM' : fmtTime(e.time);
       const endStr = e.leg==='depart' ? '12:00 AM' : fmtTime(e.leg==='full' ? e._calEnd : e.time);
       displayTime = `${startStr} – ${endStr}`;
-    } else if(e.type==='activity' && e.endTime){
+    } else if((e.type==='activity' || e.type==='meal') && e.endTime){
       displayTime = `${fmtTime(e.time)} – ${fmtTime(e.endTime)}`;
     } else {
       displayTime = fmtTime(e.time);
@@ -704,6 +704,10 @@ function renderItem(a,tripId){
     }
   } else {
     loc = esc(a.location||'');
+    if((a.type==='meal' || a.type==='activity') && a.endTime){
+      const untilStr = `until ${fmtTime(a.endTime)}`;
+      loc = loc ? `${loc} · ${untilStr}` : untilStr;
+    }
   }
   const editBtn = a.readonly ? '' : `<button onclick="openSheet('editItem','${tripId}','${a.id}')">Edit</button>`;
   const delBtn = a.readonly ? '' : `<button class="del" onclick="deleteItem('${tripId}','${a.id}')">Delete</button>`;
@@ -1018,7 +1022,10 @@ function sheetBody(kind, tripId, itemId){
           <option value="lunch" ${a.mealSlot==='lunch'?'selected':''}>Lunch</option>
           <option value="dinner" ${a.mealSlot==='dinner'?'selected':''}>Dinner</option>
         </select>
-        <label>Time</label><input type="time" id="f_mealtime" value="${attr(a.time)}">
+        <div class="row">
+          <div><label>Start time</label><input type="time" id="f_mealtime" value="${attr(a.time)}"></div>
+          <div><label>Finish time (optional)</label><input type="time" id="f_mealendtime" value="${attr(a.endTime)}"></div>
+        </div>
         <label>Restaurant / place</label><input type="text" id="f_mealname" value="${attr(a.name)}">
         <label>Location</label><input type="text" id="f_mealloc" value="${attr(a.location)}">
         <label>Notes</label><textarea id="f_mealnotes">${a.notes||''}</textarea>
@@ -1180,6 +1187,7 @@ function submitItem(e,tripId,itemId){
   if(type==='meal'){
     data.mealSlot=document.getElementById('f_mealslot').value;
     data.time=document.getElementById('f_mealtime').value;
+    data.endTime=document.getElementById('f_mealendtime').value;
     data.name=document.getElementById('f_mealname').value.trim();
     data.location=document.getElementById('f_mealloc').value.trim();
     data.notes=document.getElementById('f_mealnotes').value.trim();
