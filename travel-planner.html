@@ -106,7 +106,9 @@
     background:linear-gradient(135deg, var(--sun), var(--coral));color:#fff;border:none;border-radius:50%;
     width:56px;height:56px;font-size:26px;line-height:56px;text-align:center;
     box-shadow:0 6px 18px rgba(232,115,92,.45);cursor:pointer;z-index:15;
+    transition:transform .22s ease, opacity .22s ease;
   }
+  .fab.fab-hidden{ transform:scale(.3); opacity:0; pointer-events:none; }
 
   nav.tabbar{
     position:fixed;bottom:calc(14px + env(safe-area-inset-bottom,0px));left:14px;right:14px;
@@ -115,29 +117,44 @@
     box-shadow:0 8px 22px rgba(30,58,58,.14);
     z-index:20;
   }
+  .tab-pill{
+    position:absolute;top:7px;bottom:7px;left:0;width:0;
+    background:var(--sun-bg);border-radius:14px;z-index:0;
+  }
   nav.tabbar button{
+    position:relative;z-index:1;
     flex:1;background:none;border:none;font-family:'Nunito Sans';font-size:11.5px;
     color:var(--muted);padding:8px 2px;cursor:pointer;font-weight:600;border-radius:14px;
   }
-  nav.tabbar button.active{color:var(--coral);background:var(--sun-bg);}
+  nav.tabbar button.active{color:var(--coral);}
 
   .timetable-sticky-bar{
     position:sticky; top:var(--header-h, 100px); z-index:15;
     background:var(--bg); padding-top:2px; margin-top:-2px;
   }
-  .daychips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;-webkit-overflow-scrolling:touch;}
+  .daychips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;-webkit-overflow-scrolling:touch;position:relative;}
+  .day-pill{
+    position:absolute;top:2px;left:0;width:0;height:36px;
+    background:linear-gradient(135deg, var(--sun), var(--coral));border-radius:20px;z-index:0;
+  }
   .daychip{
+    position:relative;z-index:1;
     flex:0 0 auto;background:var(--panel);border:1px solid var(--line);
     border-radius:20px;padding:7px 14px;font-size:13px;color:var(--body);cursor:pointer;white-space:nowrap;
   }
-  .daychip.active{background:linear-gradient(135deg, var(--sun), var(--coral));color:#fff;border-color:transparent;}
+  .daychip.active{color:#fff;border-color:transparent;background:none;}
 
-  .cal-toggle{display:flex;gap:6px;margin-bottom:14px;}
+  .cal-toggle{display:flex;gap:6px;margin-bottom:14px;position:relative;}
+  .toggle-pill{
+    position:absolute;top:0;left:0;width:0;height:100%;
+    background:linear-gradient(135deg, var(--sun), var(--coral));border-radius:12px;z-index:0;
+  }
   .cal-toggle button{
-    flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    position:relative;z-index:1;
+    flex:1;background:none;border:1px solid var(--line);border-radius:12px;
     padding:8px 4px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;
   }
-  .cal-toggle button.active{background:linear-gradient(135deg, var(--sun), var(--coral));color:#fff;border-color:transparent;}
+  .cal-toggle button.active{color:#fff;border-color:transparent;}
 
   .cal-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     margin-bottom:24px;overflow:hidden;}
@@ -250,13 +267,20 @@
   .sheet-backdrop{
     position:fixed;inset:0;background:rgba(30,58,58,.45);z-index:30;
     display:flex;align-items:flex-end;
+    animation:backdropIn .22s ease both;
   }
+  .sheet-backdrop.closing{ animation:backdropOut .22s ease both; }
+  @keyframes backdropIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes backdropOut{from{opacity:1;}to{opacity:0;}}
   .sheet{
     background:var(--bg);width:100%;max-height:88vh;overflow-y:auto;
     border-radius:24px 24px 0 0;padding:18px 18px calc(24px + env(safe-area-inset-bottom,0px));
-    animation:up .18s ease-out;
+    transform-origin:calc(100% - 40px) 100%;
+    animation:sheetPop .32s cubic-bezier(.24,.86,.34,1.12) both;
   }
-  @keyframes up{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .sheet.closing{ animation:sheetUnpop .2s ease both; }
+  @keyframes sheetPop{from{transform:scale(.15);opacity:0;}to{transform:scale(1);opacity:1;}}
+  @keyframes sheetUnpop{from{transform:scale(1);opacity:1;}to{transform:scale(.15);opacity:0;}}
   .sheet h3{font-family:'Baloo 2';font-weight:700;color:var(--ink);margin:0 0 4px;font-size:19px;}
   .sheet .close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;}
   .sheet-wrap{position:relative;}
@@ -269,10 +293,60 @@
     z-index:50;opacity:0;pointer-events:none;transition:opacity .2s;
   }
   .toast.show{opacity:1;}
+
+  /* ---- App-open splash: pin drops with a bounce, then fades to reveal the app ----
+     opacity:1 is explicit and no transition is wired up here at all — that's
+     added via JS only at the exact moment we hide the splash, so there is no
+     window at load where it could be caught mid-transition and read as a
+     fade-in (it must be instantly, fully opaque from first paint). */
+  #splash{
+    position:fixed;inset:0;z-index:9999;
+    background:linear-gradient(135deg, var(--sun), var(--coral));
+    display:flex;align-items:center;justify-content:center;
+    opacity:1;
+  }
+  #splash.splash-hide{opacity:0;pointer-events:none;}
+  .splash-pin{ animation: pinDrop 900ms cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes pinDrop{
+    0%{ transform:translateY(-170px) scale(.7); opacity:0; }
+    55%{ transform:translateY(10px) scale(1.08); opacity:1; }
+    75%{ transform:translateY(-6px) scale(.96); }
+    100%{ transform:translateY(0) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .splash-pin{ animation:none; }
+  }
+
+  /* ---- Content / navigation transitions ---- */
+  @keyframes contentFadeIn{ from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+  @keyframes slideInFromRight{ from{opacity:0;transform:translateX(26px);} to{opacity:1;transform:translateX(0);} }
+  @keyframes slideInFromLeft{ from{opacity:0;transform:translateX(-26px);} to{opacity:1;transform:translateX(0);} }
+  @keyframes navSlideInForward{ from{opacity:0;transform:translateX(38px);} to{opacity:1;transform:translateX(0);} }
+  @keyframes navSlideInBack{ from{opacity:0;transform:translateX(-38px);} to{opacity:1;transform:translateX(0);} }
+  @keyframes itemEnter{ from{opacity:0;transform:translateY(10px) scale(.97);} to{opacity:1;transform:translateY(0) scale(1);} }
+  @keyframes itemExit{
+    from{opacity:1;transform:scale(1);max-height:240px;}
+    to{opacity:0;transform:scale(.92);max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-width:0;}
+  }
+  .item-exit{ overflow:hidden;animation:itemExit 240ms ease forwards; }
+  @keyframes packPop{ 0%{transform:scale(1);} 45%{transform:scale(1.035);} 100%{transform:scale(1);} }
+  .pack-row.just-toggled{ animation:packPop 260ms ease; }
+  @media (prefers-reduced-motion: reduce){
+    main, .item, .card, .pack-row{ animation:none !important; }
+    .sheet, .sheet-backdrop, .fab{ animation:none !important; transition:none !important; }
+  }
 </style>
 </head>
 <body>
 
+<div id="splash" aria-hidden="true">
+  <svg class="splash-pin" viewBox="0 0 200 200" width="120" height="120">
+    <circle cx="100" cy="80" r="46" fill="#FFFDF8"/>
+    <path d="M 64 92 L 100 164 L 136 92 Z" fill="#FFFDF8"/>
+    <circle cx="100" cy="160" r="4.3" fill="#FFFDF8"/>
+    <circle cx="100" cy="80" r="18.5" fill="#E8735C"/>
+  </svg>
+</div>
 <div id="app"></div>
 <div id="sheetHost"></div>
 <div class="toast" id="toast"></div>
@@ -357,6 +431,67 @@ function parseDurationToMinutes(str){
 function timeSort(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); }
 
 /* ---------- render root ---------- */
+let _pillRects = {};       // FLIP bookkeeping for sliding pill backgrounds (cleared in place, never reassigned, so any stored reference stays valid)
+let _justAddedId = null;   // id of the item most recently added, for its entrance animation
+function resetPillRects(){ for(const k in _pillRects) delete _pillRects[k]; }
+
+/* Animates a pill-shaped background sliding to sit behind whichever button
+   currently has the given active-class, using the FLIP technique: capture
+   where it used to be, snap the (possibly brand-new) pill element there
+   instantly, then transition it to its real position. Works even though the
+   whole container is torn down and rebuilt on every render(). */
+function animatePill(containerSel, pillSel, activeSel, key){
+  const container = document.querySelector(containerSel);
+  if(!container) return;
+  const pill = container.querySelector(pillSel);
+  const active = container.querySelector(activeSel);
+  if(!pill || !active) return;
+  const left = active.offsetLeft, width = active.offsetWidth;
+  const prev = _pillRects[key];
+  if(prev){
+    pill.style.transition = 'none';
+    pill.style.transform = `translateX(${prev.left}px)`;
+    pill.style.width = prev.width + 'px';
+    void pill.offsetWidth; // force reflow so the "from" state is committed
+    pill.style.transition = 'transform .28s cubic-bezier(.32,.72,.35,1.15), width .28s cubic-bezier(.32,.72,.35,1.15)';
+  } else {
+    pill.style.transition = 'none';
+  }
+  pill.style.transform = `translateX(${left}px)`;
+  pill.style.width = width + 'px';
+  _pillRects[key] = { left, width };
+}
+/* Plays a one-off entrance animation on an element (restarting cleanly even
+   if the same animation is already mid-flight, e.g. rapid day taps), then
+   clears the inline animation once it finishes. This matters beyond tidiness:
+   our keyframes use fill-mode "both", so without cleanup the element would be
+   left with a permanent (if inert) `transform` — and a `transform` on any
+   element is enough to break `position:fixed` children elsewhere in the tree,
+   since it creates a new containing block for them. Clearing it afterward
+   guarantees that never lingers. */
+function playEntrance(el, animName, durationMs){
+  if(!el) return;
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = `${animName} ${durationMs}ms cubic-bezier(.22,.61,.36,1) both`;
+  const cleanup = () => { el.style.animation = ''; el.removeEventListener('animationend', cleanup); };
+  el.addEventListener('animationend', cleanup);
+  setTimeout(cleanup, durationMs + 80); // fallback in case animationend doesn't fire
+}
+/* Runs fn() only after playing an exit animation on the element matched by
+   selector (so a delete reads as the row collapsing away, not vanishing).
+   Falls back to running fn() immediately if the element isn't found, and to
+   a timeout if animationend never fires. */
+function animateThenRun(selector, fn){
+  const el = document.querySelector(selector);
+  if(!el){ fn(); return; }
+  el.classList.add('item-exit');
+  let done = false;
+  const finish = () => { if(done) return; done = true; fn(); };
+  el.addEventListener('animationend', finish, { once:true });
+  setTimeout(finish, 260);
+}
+
 function render(){
   const app=document.getElementById('app');
   if(STATE.view==='home') app.innerHTML = renderHome();
@@ -366,6 +501,18 @@ function render(){
   // height the header happens to be (trip name length, back-row, etc.)
   const headerEl = document.querySelector('header.app-header');
   if(headerEl){ document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight+'px'); }
+  // sliding pill backgrounds — only the containers that exist in this render do anything
+  animatePill('nav.tabbar', '.tab-pill', 'button.active', 'tabbar');
+  animatePill('.cal-toggle', '.toggle-pill', 'button.active', 'caltoggle');
+  animatePill('.daychips', '.day-pill', '.daychip.active', 'daychip');
+  // entrance animation for whichever item was just added, if it's on screen
+  if(_justAddedId){
+    const justAdded = document.querySelector(
+      `[data-item-id="${_justAddedId}"], [data-stay-id="${_justAddedId}"], [data-pack-id="${_justAddedId}"]`
+    );
+    if(justAdded) playEntrance(justAdded, 'itemEnter', 260);
+    _justAddedId = null;
+  }
 }
 
 /* ---------- HOME ---------- */
@@ -385,17 +532,19 @@ function renderHome(){
         </div>`).join('');
   }
   return `
-    <header class="app-header">
-      <div class="title">Waypoint</div>
-      <div class="sub">Your trips</div>
-    </header>
-    <main>
-      ${body}
-      <label class="btn secondary" style="display:block;text-align:center;cursor:pointer;margin-top:8px;">
-        Restore a trip from CSV
-        <input type="file" accept=".csv" style="display:none" onchange="importNewTripFromFile(this)">
-      </label>
-    </main>
+    <div class="nav-page">
+      <header class="app-header">
+        <div class="title">Waypoint</div>
+        <div class="sub">Your trips</div>
+      </header>
+      <main>
+        ${body}
+        <label class="btn secondary" style="display:block;text-align:center;cursor:pointer;margin-top:8px;">
+          Restore a trip from CSV
+          <input type="file" accept=".csv" style="display:none" onchange="importNewTripFromFile(this)">
+        </label>
+      </main>
+    </div>
     <button class="fab" onclick="openSheet('addTrip')">+</button>
   `;
 }
@@ -456,9 +605,17 @@ function importNewTripFromFile(inputEl){
   reader.readAsText(f);
 }
 
-function openTrip(id){ STATE.view='trip'; STATE.tripId=id; STATE.tab='timetable';
-  const t=getTrip(id); STATE.day = t.startDate; render(); }
-function goHome(){ STATE.view='home'; render(); }
+function openTrip(id){
+  resetPillRects(); // fresh trip screen — pills should appear in place, not animate in from a stale position
+  STATE.view='trip'; STATE.tripId=id; STATE.tab='timetable';
+  const t=getTrip(id); STATE.day = t.startDate; render();
+  playEntrance(document.querySelector('#app .nav-page'), 'navSlideInForward', 260);
+}
+function goHome(){
+  resetPillRects();
+  STATE.view='home'; render();
+  playEntrance(document.querySelector('#app .nav-page'), 'navSlideInBack', 260);
+}
 
 /* ---------- TRIP VIEW ---------- */
 function renderTrip(t){
@@ -470,16 +627,19 @@ function renderTrip(t){
   else if(STATE.tab==='data') tabContent = renderData(t);
 
   return `
-    <header class="app-header">
-      <div class="back-row"><button class="back-btn" onclick="goHome()">‹ Trips</button></div>
-      <div class="title" style="margin-top:6px;">${esc(t.name)}</div>
-      <div class="sub">${fmtRange(t.startDate,t.endDate)}</div>
-    </header>
-    <main>${tabContent}</main>
+    <div class="nav-page">
+      <header class="app-header">
+        <div class="back-row"><button class="back-btn" onclick="goHome()">‹ Trips</button></div>
+        <div class="title" style="margin-top:6px;">${esc(t.name)}</div>
+        <div class="sub">${fmtRange(t.startDate,t.endDate)}</div>
+      </header>
+      <main>${tabContent}</main>
+    </div>
     ${STATE.tab==='timetable' ? `<button class="fab" onclick="openSheet('addItem','${t.id}')">+</button>` : ''}
     ${STATE.tab==='stay' ? `<button class="fab" onclick="openSheet('addStay','${t.id}')">+</button>` : ''}
     ${STATE.tab==='pack' ? `<button class="fab" onclick="openSheet('addPack','${t.id}')">+</button>` : ''}
     <nav class="tabbar">
+      <div class="tab-pill"></div>
       <button class="${STATE.tab==='timetable'?'active':''}" onclick="setTab('timetable')">Timetable</button>
       <button class="${STATE.tab==='stay'?'active':''}" onclick="setTab('stay')">Stays</button>
       <button class="${STATE.tab==='pack'?'active':''}" onclick="setTab('pack')">Packing</button>
@@ -487,7 +647,10 @@ function renderTrip(t){
     </nav>
   `;
 }
-function setTab(tab){ STATE.tab=tab; render(); }
+function setTab(tab){
+  STATE.tab=tab; render();
+  playEntrance(document.querySelector('#app main'), 'contentFadeIn', 220);
+}
 
 /* ---- Timetable ---- */
 /* Gathers every row that belongs on a given day: normal agenda items, plus
@@ -516,8 +679,9 @@ function getDayRows(t, day){
 function renderTimetable(t){
   const days = daysBetween(t.startDate,t.endDate);
   if(!STATE.day || !days.includes(STATE.day)) STATE.day = days[0];
-  const chips = days.map((d,i)=>`<div class="daychip ${d===STATE.day?'active':''}" onclick="setDay('${d}')">Day ${i+1} · ${fmtDate(d)}</div>`).join('');
+  const chips = `<div class="day-pill"></div>` + days.map((d,i)=>`<div class="daychip ${d===STATE.day?'active':''}" onclick="setDay('${d}')">Day ${i+1} · ${fmtDate(d)}</div>`).join('');
   const toggle = `<div class="cal-toggle">
+    <div class="toggle-pill"></div>
     <button class="${STATE.calView?'':'active'}" onclick="setCalView(false)">List</button>
     <button class="${STATE.calView?'active':''}" onclick="setCalView(true)">Calendar</button>
   </div>`;
@@ -535,8 +699,19 @@ function renderTimetable(t){
 function scrollTimetableToTop(){
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
-function setDay(d){ STATE.day=d; render(); scrollTimetableToTop(); }
-function setCalView(on){ STATE.calView=on; render(); scrollTimetableToTop(); }
+function setDay(d){
+  const t = getTrip(STATE.tripId);
+  const days = t ? daysBetween(t.startDate, t.endDate) : [];
+  const oldIdx = days.indexOf(STATE.day), newIdx = days.indexOf(d);
+  STATE.day=d; render(); scrollTimetableToTop();
+  const main = document.querySelector('#app main');
+  if(newIdx > oldIdx) playEntrance(main, 'slideInFromRight', 220);
+  else if(newIdx < oldIdx) playEntrance(main, 'slideInFromLeft', 220);
+}
+function setCalView(on){
+  STATE.calView=on; render(); scrollTimetableToTop();
+  playEntrance(document.querySelector('#app main'), 'contentFadeIn', 220);
+}
 
 /* Assigns a side-by-side column (and the column count for its cluster) to
    each event whose time overlaps another's, so the calendar view never
@@ -721,7 +896,7 @@ function renderItem(a,tripId){
   const editBtn = a.readonly ? '' : `<button onclick="openSheet('editItem','${tripId}','${a.id}')">Edit</button>`;
   const delBtn = a.readonly ? '' : `<button class="del" onclick="deleteItem('${tripId}','${a.id}')">Delete</button>`;
   return `
-    <div class="item ${a.type}${modeClass}">
+    <div class="item ${a.type}${modeClass}" data-item-id="${a.id}">
       <div class="bar"></div>
       <div class="time num">${fmtTime(a.time)||'--:--'}</div>
       <div class="body">
@@ -735,8 +910,10 @@ function renderItem(a,tripId){
     </div>`;
 }
 function deleteItem(tripId,itemId){
-  const t=getTrip(tripId); t.agenda = (t.agenda||[]).filter(a=>a.id!==itemId);
-  save(DATA); render();
+  animateThenRun(`[data-item-id="${itemId}"]`, ()=>{
+    const t=getTrip(tripId); t.agenda = (t.agenda||[]).filter(a=>a.id!==itemId);
+    save(DATA); render();
+  });
 }
 
 /* ---- Accommodation ---- */
@@ -744,7 +921,7 @@ function renderAccommodation(t){
   const list=(t.accommodations||[]).slice().sort((a,b)=>a.checkIn.localeCompare(b.checkIn));
   if(!list.length) return `<div class="empty"><div class="big">No stays added</div>Tap + to add where you're staying.</div>`;
   return list.map(a=>`
-    <div class="card">
+    <div class="card" data-stay-id="${a.id}">
       <div class="name" style="font-family:'Baloo 2';font-weight:700;color:var(--ink);font-size:15.5px;">${esc(a.name)}</div>
       <div class="dates" style="margin-bottom:6px;">${fmtRange(a.checkIn,a.checkOut)}</div>
       ${a.address?`<div style="font-size:13.5px;color:var(--body);margin-bottom:4px;">${esc(a.address)}</div>`:''}
@@ -757,8 +934,10 @@ function renderAccommodation(t){
     </div>`).join('');
 }
 function deleteStay(tripId,id){
-  const t=getTrip(tripId); t.accommodations=(t.accommodations||[]).filter(a=>a.id!==id);
-  save(DATA); render();
+  animateThenRun(`[data-stay-id="${id}"]`, ()=>{
+    const t=getTrip(tripId); t.accommodations=(t.accommodations||[]).filter(a=>a.id!==id);
+    save(DATA); render();
+  });
 }
 
 /* ---- Packing ---- */
@@ -766,17 +945,30 @@ function renderPacking(t){
   const list=t.packing||[];
   if(!list.length) return `<div class="empty"><div class="big">Packing list is empty</div>Tap + to add items.</div>`;
   return `<div class="card">${list.map(p=>`
-    <div class="pack-row ${p.packed?'done':''}">
+    <div class="pack-row ${p.packed?'done':''}" data-pack-id="${p.id}">
       <input type="checkbox" ${p.packed?'checked':''} onchange="togglePack('${t.id}','${p.id}')">
       <div class="pname">${esc(p.name)}</div>
       <button class="del" onclick="deletePack('${t.id}','${p.id}')">✕</button>
     </div>`).join('')}</div>`;
 }
+/* Toggling packed state updates the DOM directly (no full render()) so the
+   pop animation isn't cut short by an immediate DOM rebuild. */
 function togglePack(tripId,id){
-  const t=getTrip(tripId); const p=t.packing.find(x=>x.id===id); p.packed=!p.packed; save(DATA); render();
+  const t=getTrip(tripId); const p=t.packing.find(x=>x.id===id);
+  p.packed=!p.packed; save(DATA);
+  const row = document.querySelector(`[data-pack-id="${id}"]`);
+  if(row){
+    row.classList.toggle('done', p.packed);
+    row.classList.remove('just-toggled');
+    void row.offsetWidth;
+    row.classList.add('just-toggled');
+  }
 }
 function deletePack(tripId,id){
-  const t=getTrip(tripId); t.packing=t.packing.filter(p=>p.id!==id); save(DATA); render();
+  animateThenRun(`[data-pack-id="${id}"]`, ()=>{
+    const t=getTrip(tripId); t.packing=t.packing.filter(p=>p.id!==id);
+    save(DATA); render();
+  });
 }
 
 /* ---- Data / Export-Import ---- */
@@ -953,8 +1145,18 @@ function importCSV(tripId){
 }
 
 /* ---------- SHEETS (forms) ---------- */
-function closeSheet(){ document.getElementById('sheetHost').innerHTML=''; }
+function closeSheet(){
+  const host = document.getElementById('sheetHost');
+  const sheet = host.querySelector('.sheet');
+  const backdrop = host.querySelector('.sheet-backdrop');
+  document.querySelectorAll('.fab').forEach(f => f.classList.remove('fab-hidden'));
+  if(!sheet){ host.innerHTML=''; return; }
+  sheet.classList.add('closing');
+  if(backdrop) backdrop.classList.add('closing');
+  setTimeout(()=>{ host.innerHTML=''; }, 200);
+}
 function openSheet(kind, tripId, itemId){
+  document.querySelectorAll('.fab').forEach(f => f.classList.add('fab-hidden'));
   const host=document.getElementById('sheetHost');
   host.innerHTML = `<div class="sheet-backdrop" onclick="if(event.target===this) closeSheet()">
     <div class="sheet sheet-wrap"><button class="close" onclick="closeSheet()">✕</button>${sheetBody(kind,tripId,itemId)}</div>
@@ -1167,12 +1369,16 @@ function submitStay(e,tripId,itemId){
     confirmation:document.getElementById('f_conf').value.trim(),
     notes:document.getElementById('f_notes').value.trim(),
   };
+  let newId = null;
   if(itemId){
     Object.assign(t.accommodations.find(a=>a.id===itemId), data);
   } else {
-    t.accommodations.push({id:uid(), ...data});
+    newId = uid();
+    t.accommodations.push({id:newId, ...data});
   }
-  save(DATA); closeSheet(); render();
+  save(DATA); closeSheet();
+  _justAddedId = newId;
+  render();
   return false;
 }
 
@@ -1181,8 +1387,11 @@ function submitPack(e,tripId){
   const name=document.getElementById('f_name').value.trim();
   if(!name) return false;
   const t=getTrip(tripId);
-  t.packing.push({id:uid(), name, packed:false});
-  save(DATA); closeSheet(); render();
+  const newId = uid();
+  t.packing.push({id:newId, name, packed:false});
+  save(DATA); closeSheet();
+  _justAddedId = newId;
+  render();
   return false;
 }
 
@@ -1241,7 +1450,9 @@ function submitItem(e,tripId,itemId){
   if(itemId){
     Object.assign(t.agenda.find(a=>a.id===itemId), data);
   } else {
-    t.agenda.push({id:uid(), ...data});
+    const newId = uid();
+    t.agenda.push({id:newId, ...data});
+    _justAddedId = newId;
   }
   save(DATA); closeSheet();
   STATE.day = type==='flight' ? (data.depDate||STATE.day) : date;
@@ -1255,7 +1466,24 @@ function esc(s){
 }
 function attachHomeHandlers(){}
 
+/* App-open splash: hold on the bounced pin briefly, then fade it out to
+   reveal the loaded app underneath. Respects prefers-reduced-motion by
+   skipping straight to the reveal. The fade transition is attached here,
+   right before triggering it — never present beforehand — so the splash
+   cannot be caught mid-transition at load and misread as fading in. */
+function runSplash(){
+  const splash = document.getElementById('splash');
+  if(!splash) return;
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const holdMs = reduced ? 0 : 700;
+  setTimeout(()=>{
+    splash.style.transition = reduced ? 'none' : 'opacity .45s ease';
+    splash.classList.add('splash-hide');
+  }, holdMs);
+}
+
 render();
+runSplash();
 </script>
 </body>
 </html>
