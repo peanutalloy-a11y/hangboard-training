@@ -176,6 +176,26 @@
     background: var(--sky-soft); color: var(--sky); margin-right: 4px;
   }
 
+  /* Bill category groups */
+  .bill-group { margin-bottom: 8px; }
+  .bill-group-head {
+    width: 100%; display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+    background: var(--paper-raised); border: none; border-radius: 14px; cursor: pointer;
+    font: inherit; color: var(--ink); text-align: left;
+  }
+  .bill-group-head:active { background: var(--brass-soft); }
+  .bill-group-chevron { display: flex; color: var(--ink-soft); transition: transform .25s ease; flex-shrink: 0; }
+  .bill-group-chevron svg { width: 16px; height: 16px; }
+  .bill-group-chevron.open { transform: rotate(90deg); }
+  .bill-group-name { flex: 1; font-weight: 700; font-size: 14px; }
+  .bill-group-count {
+    font-size: 11.5px; font-weight: 700; color: var(--ink-soft); background: var(--paper);
+    padding: 2px 9px; border-radius: 20px; flex-shrink: 0;
+  }
+  .bill-group-body { overflow: hidden; max-height: 0; transition: max-height .32s cubic-bezier(.22,.61,.36,1); }
+  .bill-group-body.open { max-height: none; }
+  .bill-group-body .row { margin: 8px 0 0; }
+
   .empty-state {
     color: var(--ink-soft); font-size: 13.5px; padding: 22px 0; text-align: center;
     background: var(--paper-raised); border-radius: 14px; font-weight: 600;
@@ -264,7 +284,8 @@
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
-  .progress-track, .segmented, .horizon-tabs, .tab-pill, .horizon-pill, .segment-pill {
+  .progress-track, .segmented, .horizon-tabs, .tab-pill, .horizon-pill, .segment-pill,
+  .bill-group-head, .bill-group-count {
     transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease;
   }
 
@@ -709,6 +730,7 @@
     state = next;
     saveState();
     applyTheme();
+    expandedBillGroups = {};
     renderAll();
   }
 
@@ -916,6 +938,7 @@
 
   function iconEdit(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5.5 16.5 4 20z"/></svg>'; }
   function iconTrash(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0-.7 12.1a2 2 0 0 1-2 1.9H8.7a2 2 0 0 1-2-1.9L6 7"/></svg>'; }
+  function iconChevron(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'; }
 
 
   function renderDashboard(){
@@ -1047,6 +1070,10 @@
     setTimeout(cleanup, 700);
   }
 
+  // Tracks which bill category groups are expanded on the Plan tab. Starts
+  // empty (all collapsed) each page load/import — in-memory only, not saved.
+  var expandedBillGroups = {};
+
   function renderPlan(){
     var incomeList = document.getElementById('income-list');
     if(!state.incomes.length){
@@ -1066,13 +1093,37 @@
     if(!state.bills.length){
       billsList.innerHTML = '<div class="empty-state">No bills yet.</div>';
     } else {
-      billsList.innerHTML = state.bills.map(function(b){
-        var next = nextOccurrence(b.anchorDate, b.frequency, b.intervalDays);
-        var freqLabel = {weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', custom:'Every ' + (b.intervalDays||'?') + ' days'}[b.frequency] || b.frequency;
-        return '<div class="row" data-id="' + b.id + '"><div class="row-main"><div class="row-name">' + escapeHTML(b.name) + '</div>' +
-          '<div class="row-sub"><span class="chip">' + freqLabel + '</span>' + (b.category?('<span class="chip">'+escapeHTML(b.category)+'</span>'):'') + 'Next: ' + (next?formatShortDate(next):'—') + '</div></div>' +
-          '<div class="row-amount expense num">-' + formatCurrency(b.amount) + '</div>' +
-          '<div class="row-actions"><button data-edit-bill="' + b.id + '">' + iconEdit() + '</button><button data-del-bill="' + b.id + '">' + iconTrash() + '</button></div></div>';
+      var catOrder = state.categories.map(function(c){ return c.name; });
+      var groupsMap = {};
+      state.bills.forEach(function(b){
+        var key = (b.category && b.category.trim()) ? b.category : '__none__';
+        if(!groupsMap[key]) groupsMap[key] = [];
+        groupsMap[key].push(b);
+      });
+      var orderedKeys = catOrder.filter(function(c){ return groupsMap[c]; });
+      Object.keys(groupsMap).forEach(function(k){ if(orderedKeys.indexOf(k) === -1 && k !== '__none__') orderedKeys.push(k); });
+      if(groupsMap['__none__']) orderedKeys.push('__none__');
+
+      billsList.innerHTML = orderedKeys.map(function(key){
+        var bills = groupsMap[key];
+        var label = key === '__none__' ? 'Other' : key;
+        var isOpen = !!expandedBillGroups[key];
+        var rowsHtml = bills.map(function(b){
+          var next = nextOccurrence(b.anchorDate, b.frequency, b.intervalDays);
+          var freqLabel = {weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', custom:'Every ' + (b.intervalDays||'?') + ' days'}[b.frequency] || b.frequency;
+          return '<div class="row" data-id="' + b.id + '"><div class="row-main"><div class="row-name">' + escapeHTML(b.name) + '</div>' +
+            '<div class="row-sub"><span class="chip">' + freqLabel + '</span>Next: ' + (next?formatShortDate(next):'—') + '</div></div>' +
+            '<div class="row-amount expense num">-' + formatCurrency(b.amount) + '</div>' +
+            '<div class="row-actions"><button data-edit-bill="' + b.id + '">' + iconEdit() + '</button><button data-del-bill="' + b.id + '">' + iconTrash() + '</button></div></div>';
+        }).join('');
+        return '<div class="bill-group">' +
+          '<button type="button" class="bill-group-head" data-toggle-group="' + escapeHTML(key) + '" aria-expanded="' + isOpen + '">' +
+            '<span class="bill-group-chevron' + (isOpen?' open':'') + '">' + iconChevron() + '</span>' +
+            '<span class="bill-group-name">' + escapeHTML(label) + '</span>' +
+            '<span class="bill-group-count">' + bills.length + '</span>' +
+          '</button>' +
+          '<div class="bill-group-body' + (isOpen?' open':'') + '"' + (isOpen?' style="max-height:none;"':'') + '>' + rowsHtml + '</div>' +
+        '</div>';
       }).join('');
     }
     applyPendingEnter();
@@ -1350,6 +1401,7 @@
         state.bills.push(data);
         pendingEnterId = data.id;
       }
+      expandedBillGroups[data.category || '__none__'] = true;
       saveState(); closeModal(); renderPlan(); renderDashboard(); renderBudgets();
     });
     if(isEdit){
@@ -1445,10 +1497,36 @@
   }
   document.getElementById('add-goal').addEventListener('click', function(e){ openGoalForm(null, e.currentTarget); });
 
+  /* ---------- Bill category groups ---------- */
+  function toggleBillGroup(buttonEl, key){
+    var body = buttonEl.nextElementSibling;
+    var chevron = buttonEl.querySelector('.bill-group-chevron');
+    var isOpen = !!expandedBillGroups[key];
+    if(!isOpen){
+      expandedBillGroups[key] = true;
+      body.classList.add('open');
+      body.style.maxHeight = body.scrollHeight + 'px';
+      var done1 = false;
+      function openFinish(){ if(done1) return; done1 = true; body.style.maxHeight = 'none'; body.removeEventListener('transitionend', openFinish); }
+      body.addEventListener('transitionend', openFinish);
+      setTimeout(openFinish, 400);
+    } else {
+      expandedBillGroups[key] = false;
+      body.style.maxHeight = body.scrollHeight + 'px';
+      void body.offsetWidth;
+      body.style.maxHeight = '0px';
+      body.classList.remove('open');
+    }
+    if(chevron) chevron.classList.toggle('open', !isOpen);
+    buttonEl.setAttribute('aria-expanded', String(!isOpen));
+  }
+
   /* ---------- List action delegation (edit/delete/save-to-goal) ---------- */
   document.addEventListener('click', function(e){
     var t = e.target.closest('button');
     if(!t) return;
+    var groupKey = t.getAttribute('data-toggle-group');
+    if(groupKey !== null){ toggleBillGroup(t, groupKey); return; }
     var id;
     if((id = t.getAttribute('data-edit-income'))) openIncomeForm(state.incomes.find(function(i){return i.id===id;}), t);
     else if((id = t.getAttribute('data-del-income'))){
