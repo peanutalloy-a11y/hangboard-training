@@ -560,6 +560,8 @@ function renderPick(pick) {
     ['🚌', pick['Public Transport Suggestion']],
   ].filter(([, v]) => !isUnclear(v)).map(([icon, v]) => `<span>${icon} ${escapeHtml(v)}</span>`).join('');
 
+  const itineraryLink = `<a href="itinerary.html" style="font-weight:800;color:var(--ink);text-decoration:underline;white-space:nowrap;">🎫 Full itinerary →</a>`;
+
   container.innerHTML = `
     <div class="ticket-row">
       <div class="ticket-stub">
@@ -573,7 +575,7 @@ function renderPick(pick) {
       </div>
     </div>
     <div class="ticket-forecasts">${forecastMarkup}</div>
-    ${statsMarkup ? `<div class="ticket-stats">${statsMarkup}</div>` : ''}
+    ${statsMarkup ? `<div class="ticket-stats">${statsMarkup}<span>${itineraryLink}</span></div>` : `<div class="ticket-stats">${itineraryLink}</div>`}
     ${pick['Why This One'] && !isUnclear(pick['Why This One']) ? `<p class="ticket-why">${escapeHtml(pick['Why This One'])}</p>` : ''}
   `;
 }

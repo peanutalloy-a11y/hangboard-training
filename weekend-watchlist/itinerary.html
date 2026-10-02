@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting There — Weekend Watchlist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --cream: #FFF8EE;
+    --cream-card: #FFFFFF;
+    --ink: #2B2640;
+    --ink-soft: #6B6485;
+    --coral: #FF6B6B;
+    --coral-bg: #FFE3E3;
+    --sunshine: #FFC857;
+    --sunshine-bg: #FFF3D6;
+    --grape: #8E7CC3;
+    --grape-bg: #EDE8F7;
+    --leaf: #4CAF6D;
+    --leaf-bg: #DFF4E6;
+    --sky: #2BA9A1;
+    --sky-bg: #DAF3F1;
+    --line: #EDE6D9;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 20px 90px;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-top: 28px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .back-link:hover { color: var(--ink); }
+
+  header.masthead {
+    padding: 14px 0 6px;
+    text-align: center;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 5vw, 2.4rem);
+    margin: 0 0 4px;
+  }
+
+  .masthead .suburb {
+    color: var(--ink-soft);
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .section-card {
+    background: var(--cream-card);
+    border-radius: 22px;
+    padding: 22px 24px;
+    margin: 22px 0;
+    box-shadow: 0 8px 0 rgba(43, 38, 64, 0.06);
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .section-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+
+  .section-icon.car { background: var(--coral-bg); }
+  .section-icon.transit { background: var(--sky-bg); }
+  .section-icon.walk { background: var(--leaf-bg); }
+
+  .section-head h2 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.25rem;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .big-time {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 2.1rem;
+    font-weight: 700;
+    margin: 4px 0 2px;
+  }
+
+  .section-note {
+    color: var(--ink-soft);
+    font-weight: 700;
+    font-size: 0.88rem;
+  }
+
+  /* Transit steps */
+
+  .leg-list {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+  }
+
+  .leg-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 2px dashed var(--line);
+    align-items: baseline;
+  }
+
+  .leg-item:first-child { border-top: none; }
+
+  .leg-icon { flex-shrink: 0; }
+
+  .leg-text { font-weight: 700; }
+
+  .leg-approx {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* Walk unavailable state */
+
+  .walk-unavailable {
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+
+  .walk-card.is-pick {
+    border: 2px solid var(--leaf);
+  }
+
+  .walk-badge {
+    display: inline-block;
+    background: var(--leaf-bg);
+    color: var(--leaf);
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+  }
+
+  .state-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back-link" href="weekend-watchlist.html">← Back to Weekend Watchlist</a>
+
+  <header class="masthead">
+    <h1 id="place-name">Loading...</h1>
+    <p class="suburb" id="place-suburb"></p>
+  </header>
+
+  <div id="content"></div>
+
+</div>
+
+<script>
+const PICK_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLtrsHemEsiBjBhmJKsyMxwxtUO9Vn2SMWOO4xt5MGhNsqzIVQjoSaf8yBTHlXpxb2AqJBnCieGBoS/pub?gid=662357100&single=true&output=csv";
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+function isUnclear(val) {
+  if (!val) return true;
+  return val.trim().toLowerCase() === 'unclear';
+}
+
+function renderLegs(legsString) {
+  if (isUnclear(legsString)) {
+    return '<p class="section-note">No step-by-step breakdown available for this trip yet.</p>';
+  }
+  const legs = legsString.split('→').map(l => l.trim()).filter(Boolean);
+  const items = legs.map(leg => {
+    const isApprox = /approx/i.test(leg);
+    const isWalk = /walk/i.test(leg);
+    const icon = isWalk ? '🚶' : '🚌';
+    const cleanText = leg.replace(/,?\s*approx\s*/i, ' ');
+    return `
+      <li class="leg-item">
+        <span class="leg-icon">${icon}</span>
+        <span>
+          <span class="leg-text">${escapeHtml(cleanText)}</span>
+          ${isApprox ? '<br><span class="leg-approx">estimated, not exact</span>' : ''}
+        </span>
+      </li>
+    `;
+  }).join('');
+  return `<ul class="leg-list">${items}</ul>`;
+}
+
+function render(pick) {
+  if (!pick || !pick['Place Name'] || isUnclear(pick['Place Name'])) {
+    document.getElementById('place-name').textContent = "No pick yet";
+    document.getElementById('content').innerHTML = `
+      <div class="state-empty">There's no recommended outing to show an itinerary for yet — this fills in after the next scheduled run.</div>
+    `;
+    return;
+  }
+
+  document.getElementById('place-name').textContent = pick['Place Name'];
+  document.getElementById('place-suburb').textContent = pick['Suburb'] || '';
+
+  const driveTime = pick['Drive Time From Home'];
+  const walkTime = pick['Walk Time (Approx)'];
+  const transitSummary = pick['Public Transport Suggestion'];
+  const legs = pick['Public Transport Legs'];
+  const walkRecommended = (pick['Walking Recommended?'] || '').trim().toLowerCase() === 'yes';
+
+  const carSection = `
+    <div class="section-card">
+      <div class="section-head">
+        <div class="section-icon car">🚗</div>
+        <h2>Driving</h2>
+      </div>
+      ${!isUnclear(driveTime)
+        ? `<div class="big-time">${escapeHtml(driveTime)}</div><p class="section-note">Estimated with current traffic conditions.</p>`
+        : `<p class="section-note">Drive time isn't available for this pick.</p>`}
+    </div>
+  `;
+
+  const transitSection = `
+    <div class="section-card">
+      <div class="section-head">
+        <div class="section-icon transit">🚌</div>
+        <h2>Public transport</h2>
+      </div>
+      ${!isUnclear(transitSummary) ? `<p class="section-note">${escapeHtml(transitSummary)}</p>` : ''}
+      ${renderLegs(legs)}
+    </div>
+  `;
+
+  const walkSection = walkRecommended ? `
+    <div class="section-card walk-card is-pick">
+      <div class="section-head">
+        <div class="section-icon walk">🚶</div>
+        <h2>Walking</h2>
+      </div>
+      <span class="walk-badge">🏆 Fastest option this week</span>
+      <div class="big-time">${escapeHtml(walkTime)}</div>
+      <p class="section-note">Estimated as a straight-line distance at an average walking pace — actual streets may add a bit of time.</p>
+    </div>
+  ` : `
+    <div class="section-card">
+      <div class="section-head">
+        <div class="section-icon walk">🚶</div>
+        <h2>Walking</h2>
+      </div>
+      <p class="walk-unavailable">Slower than driving or public transport this week, so it's left off as an option. ${!isUnclear(walkTime) ? `(Roughly ${escapeHtml(walkTime)} on foot, if you're keen anyway.)` : ''}</p>
+    </div>
+  `;
+
+  document.getElementById('content').innerHTML = carSection + transitSection + walkSection;
+}
+
+Papa.parse(PICK_CSV_URL, {
+  download: true,
+  header: true,
+  skipEmptyLines: true,
+  complete: function(results) {
+    render(results.data[0]);
+  },
+  error: function() {
+    document.getElementById('content').innerHTML = '<div class="state-empty">Couldn\'t load this week\'s pick right now.</div>';
+  }
+});
+</script>
+</body>
+</html>
