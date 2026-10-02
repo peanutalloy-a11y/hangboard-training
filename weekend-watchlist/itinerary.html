@@ -235,6 +235,31 @@
     text-decoration: none;
   }
 
+  .car-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 24px 0 4px;
+  }
+
+  .toggle-btn {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.85rem;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    background: var(--cream-card);
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  .toggle-btn.is-active {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--cream);
+  }
+
   .export-section {
     margin-top: 32px;
     text-align: center;
@@ -302,6 +327,11 @@
     <p class="sub" id="plan-sub"></p>
   </header>
 
+  <div class="car-toggle" id="car-toggle" style="display:none;">
+    <button class="toggle-btn is-active" id="toggle-car">🚗 I have a car today</button>
+    <button class="toggle-btn" id="toggle-no-car">🚌 No car today</button>
+  </div>
+
   <div class="timeline" id="timeline"></div>
 
   <div class="export-section" id="export-section" style="display:none;">
@@ -352,10 +382,17 @@ function travelSlug(mode) {
   return 'public';
 }
 
+let hasCar = true;
+
+function travelFieldSuffix() {
+  return hasCar ? ' (Car Day)' : ' (No Car Day)';
+}
+
 function renderTravelConnector(stop) {
-  const mode = stop['Travel Mode From Previous'];
-  const time = stop['Travel Time From Previous'];
-  const legs = stop['Travel Legs From Previous'];
+  const suffix = travelFieldSuffix();
+  const mode = stop['Travel Mode From Previous' + suffix];
+  const time = stop['Travel Time From Previous' + suffix];
+  const legs = stop['Travel Legs From Previous' + suffix];
 
   if (isUnclear(mode) && isUnclear(time)) return '';
 
@@ -414,10 +451,12 @@ function render(stops) {
       <div class="state-empty">No itinerary built yet — this fills in after the next scheduled run.</div>
     `;
     document.getElementById('export-section').style.display = 'none';
+    document.getElementById('car-toggle').style.display = 'none';
     return;
   }
 
   currentStops = stops;
+  document.getElementById('car-toggle').style.display = 'flex';
   document.getElementById('plan-sub').textContent = `${stops.length}-stop plan, starting with ${stops[0]['Place Name']}`;
 
   const sorted = [...stops].sort((a, b) => Number(a['Stop Number']) - Number(b['Stop Number']));
@@ -505,15 +544,17 @@ function buildItineraryICS(mode) {
 
     // Travel to the NEXT stop (stops 2 and 3 only, using the previous stop's end time)
     const next = sorted[i + 1];
-    if (next && !isUnclear(next['Travel Mode From Previous']) && end) {
-      const travelMin = parseInt(next['Travel Time From Previous Minutes'], 10);
+    const suffix = travelFieldSuffix();
+    const nextMode = next ? next['Travel Mode From Previous' + suffix] : null;
+    if (next && !isUnclear(nextMode) && end) {
+      const travelMin = parseInt(next['Travel Time From Previous Minutes' + suffix], 10);
       const nextArrival = parseDateTime(next['Suggested Date'], next['Suggested Time']);
       const travelStart = !isNaN(travelMin) ? addMinutes(nextArrival || end, -travelMin) : end;
       if (nextArrival) {
         events.push(buildEvent(
-          `${next['Travel Mode From Previous']} to ${next['Place Name']}`,
+          `${nextMode} to ${next['Place Name']}`,
           travelStart, nextArrival, stop['Address'],
-          next['Travel Legs From Previous']
+          next['Travel Legs From Previous' + suffix]
         ));
       }
     }
@@ -550,6 +591,17 @@ function downloadICS(mode) {
 document.getElementById('export-car').addEventListener('click', () => downloadICS('car'));
 document.getElementById('export-transit').addEventListener('click', () => downloadICS('transit'));
 document.getElementById('export-walk').addEventListener('click', () => downloadICS('walk'));
+
+function setCarToggle(state) {
+  hasCar = state;
+  document.getElementById('toggle-car').classList.toggle('is-active', hasCar);
+  document.getElementById('toggle-no-car').classList.toggle('is-active', !hasCar);
+  document.getElementById('export-car').style.display = hasCar ? 'flex' : 'none';
+  if (currentStops) render(currentStops);
+}
+
+document.getElementById('toggle-car').addEventListener('click', () => setCarToggle(true));
+document.getElementById('toggle-no-car').addEventListener('click', () => setCarToggle(false));
 
 Papa.parse(ITINERARY_CSV_URL, {
   download: true,
