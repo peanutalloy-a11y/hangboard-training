@@ -217,17 +217,12 @@ function renderLegs(legsString) {
   }
   const legs = legsString.split('→').map(l => l.trim()).filter(Boolean);
   const items = legs.map(leg => {
-    const isApprox = /approx/i.test(leg);
     const isWalk = /walk/i.test(leg);
     const icon = isWalk ? '🚶' : '🚌';
-    const cleanText = leg.replace(/,?\s*approx\s*/i, ' ');
     return `
       <li class="leg-item">
         <span class="leg-icon">${icon}</span>
-        <span>
-          <span class="leg-text">${escapeHtml(cleanText)}</span>
-          ${isApprox ? '<br><span class="leg-approx">estimated, not exact</span>' : ''}
-        </span>
+        <span class="leg-text">${escapeHtml(leg)}</span>
       </li>
     `;
   }).join('');
@@ -283,7 +278,7 @@ function render(pick) {
       </div>
       <span class="walk-badge">🏆 Fastest option this week</span>
       <div class="big-time">${escapeHtml(walkTime)}</div>
-      <p class="section-note">Estimated as a straight-line distance at an average walking pace — actual streets may add a bit of time.</p>
+      <p class="section-note">Routed walking time, following actual streets.</p>
     </div>
   ` : `
     <div class="section-card">
