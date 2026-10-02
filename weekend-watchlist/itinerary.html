@@ -235,6 +235,69 @@
     text-decoration: none;
   }
 
+  .getting-there {
+    background: var(--cream-card);
+    border-radius: 20px;
+    padding: 18px 20px;
+    margin: 24px 0;
+    box-shadow: 0 8px 0 rgba(43, 38, 64, 0.06);
+  }
+
+  .getting-there h2 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.1rem;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+
+  .mode-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+
+  .mode-pill {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.82rem;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    background: var(--cream);
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+
+  .mode-pill.is-active {
+    background: var(--sky-bg);
+    border-color: var(--sky);
+    color: var(--sky);
+  }
+
+  .leg-steps {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+  }
+
+  .leg-step {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 2px dashed var(--line);
+    align-items: baseline;
+    font-size: 0.85rem;
+  }
+
+  .leg-step:first-child { border-top: none; }
+
+  .leg-step.is-wait { color: var(--ink-soft); font-style: italic; }
+
+  .leg-step-icon { flex-shrink: 0; }
+
+  .leg-step-text { font-weight: 700; }
+
   .car-toggle {
     display: flex;
     justify-content: center;
@@ -327,6 +390,12 @@
     <p class="sub" id="plan-sub"></p>
   </header>
 
+  <div class="getting-there" id="getting-there" style="display:none;">
+    <h2>🧭 Getting to Stop 1</h2>
+    <div class="mode-options" id="stop1-mode-options"></div>
+    <div id="stop1-mode-detail"></div>
+  </div>
+
   <div class="car-toggle" id="car-toggle" style="display:none;">
     <button class="toggle-btn is-active" id="toggle-car">🚗 I have a car today</button>
     <button class="toggle-btn" id="toggle-no-car">🚌 No car today</button>
@@ -388,6 +457,77 @@ function travelFieldSuffix() {
   return hasCar ? ' (Car Day)' : ' (No Car Day)';
 }
 
+function renderLegSteps(legsString) {
+  if (isUnclear(legsString)) {
+    return '<p class="section-note">No step-by-step breakdown available.</p>';
+  }
+  const legs = legsString.split('→').map(l => l.trim()).filter(Boolean);
+  const items = legs.map(leg => {
+    const isWait = /^wait/i.test(leg);
+    const isWalk = /^walk/i.test(leg);
+    const icon = isWait ? '⏳' : isWalk ? '🚶' : '🚌';
+    return `
+      <li class="leg-step ${isWait ? 'is-wait' : ''}">
+        <span class="leg-step-icon">${icon}</span>
+        <span class="leg-step-text">${escapeHtml(leg)}</span>
+      </li>
+    `;
+  }).join('');
+  return `<ul class="leg-steps">${items}</ul>`;
+}
+
+function showStop1Mode(mode, stop1) {
+  const detail = document.getElementById('stop1-mode-detail');
+  document.querySelectorAll('.mode-pill').forEach(p => p.classList.toggle('is-active', p.dataset.mode === mode));
+
+  const fieldMap = {
+    car: 'Leave By Car',
+    walk: 'Leave By Walk',
+    transit: 'Leave By Public Transport'
+  };
+  const leaveBy = stop1[fieldMap[mode]];
+
+  if (isUnclear(leaveBy)) {
+    detail.innerHTML = '<p class="section-note">Not available for this pick.</p>';
+    return;
+  }
+
+  const summary = `<p class="section-note">Leave by <strong>${escapeHtml(leaveBy)}</strong> to arrive at ${escapeHtml(stop1['Suggested Time'] || '')}.</p>`;
+  const legs = mode === 'transit' ? renderLegSteps(stop1['Public Transport Legs To Stop 1']) : '';
+  detail.innerHTML = summary + legs;
+}
+
+function renderGettingThere(stop1) {
+  const modes = [
+    { key: 'car', icon: '🚗', label: 'Car' },
+    { key: 'walk', icon: '🚶', label: 'Walk' },
+    { key: 'transit', icon: '🚌', label: 'Transit' },
+  ];
+  const fieldMap = {
+    car: 'Leave By Car',
+    walk: 'Leave By Walk',
+    transit: 'Leave By Public Transport'
+  };
+  const available = modes.filter(m => !isUnclear(stop1[fieldMap[m.key]]));
+
+  if (available.length === 0) {
+    document.getElementById('getting-there').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('getting-there').style.display = 'block';
+  document.getElementById('stop1-mode-options').innerHTML = available.map(m =>
+    `<button class="mode-pill" data-mode="${m.key}">${m.icon} ${m.label}</button>`
+  ).join('');
+
+  available.forEach(m => {
+    document.getElementById('stop1-mode-options').querySelector(`[data-mode="${m.key}"]`)
+      .addEventListener('click', () => showStop1Mode(m.key, stop1));
+  });
+
+  showStop1Mode(available[0].key, stop1);
+}
+
 function renderTravelConnector(stop) {
   const suffix = travelFieldSuffix();
   const mode = stop['Travel Mode From Previous' + suffix];
@@ -398,7 +538,7 @@ function renderTravelConnector(stop) {
 
   const slug = travelSlug(mode);
   const legsMarkup = (slug === 'public' && !isUnclear(legs))
-    ? `<div class="travel-legs">${escapeHtml(legs)}</div>`
+    ? renderLegSteps(legs)
     : '';
 
   return `
@@ -452,11 +592,14 @@ function render(stops) {
     `;
     document.getElementById('export-section').style.display = 'none';
     document.getElementById('car-toggle').style.display = 'none';
+    document.getElementById('getting-there').style.display = 'none';
     return;
   }
 
   currentStops = stops;
   document.getElementById('car-toggle').style.display = 'flex';
+  const stop1 = stops.find(s => Number(s['Stop Number']) === 1);
+  if (stop1) renderGettingThere(stop1);
   document.getElementById('plan-sub').textContent = `${stops.length}-stop plan, starting with ${stops[0]['Place Name']}`;
 
   const sorted = [...stops].sort((a, b) => Number(a['Stop Number']) - Number(b['Stop Number']));
