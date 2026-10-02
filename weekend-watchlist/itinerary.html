@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Getting There — Weekend Watchlist</title>
+<title>Your Half-Day Plan — Weekend Watchlist</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -24,6 +24,8 @@
     --leaf-bg: #DFF4E6;
     --sky: #2BA9A1;
     --sky-bg: #DAF3F1;
+    --slate: #8B849F;
+    --slate-bg: #EAE7F0;
     --line: #EDE6D9;
   }
 
@@ -39,7 +41,7 @@
   }
 
   .wrap {
-    max-width: 680px;
+    max-width: 640px;
     margin: 0 auto;
     padding: 0 20px 90px;
   }
@@ -63,116 +65,174 @@
   h1 {
     font-family: 'Fredoka', sans-serif;
     font-weight: 700;
-    font-size: clamp(1.8rem, 5vw, 2.4rem);
+    font-size: clamp(1.7rem, 5vw, 2.3rem);
     margin: 0 0 4px;
   }
 
-  .masthead .suburb {
+  .masthead .sub {
     color: var(--ink-soft);
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
   }
 
-  .section-card {
-    background: var(--cream-card);
-    border-radius: 22px;
-    padding: 22px 24px;
-    margin: 22px 0;
-    box-shadow: 0 8px 0 rgba(43, 38, 64, 0.06);
+  /* ---------- Timeline ---------- */
+
+  .timeline {
+    margin-top: 30px;
   }
 
-  .section-head {
+  .travel-connector {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 10px;
+    padding: 6px 0 6px 26px;
+    position: relative;
   }
 
-  .section-icon {
-    width: 46px;
-    height: 46px;
+  .travel-connector::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: -10px;
+    bottom: -10px;
+    width: 3px;
+    background: repeating-linear-gradient(
+      to bottom, var(--line), var(--line) 6px, transparent 6px, transparent 12px
+    );
+  }
+
+  .travel-icon {
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
+    background: var(--cream-card);
+    border: 2px solid var(--line);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .travel-detail {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+
+  .travel-legs {
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    font-weight: 600;
+  }
+
+  /* ---------- Stop cards ---------- */
+
+  .stop-card {
+    background: var(--cream-card);
+    border-radius: 20px;
+    padding: 18px 20px;
+    box-shadow: 0 8px 0 rgba(43, 38, 64, 0.06);
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .stop-card.is-missing {
+    box-shadow: none;
+    border: 2px dashed var(--line);
+    text-align: center;
+    color: var(--ink-soft);
+    font-weight: 700;
+    padding: 24px 20px;
+  }
+
+  .stop-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .stop-number {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--cream);
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
   }
 
-  .section-icon.car { background: var(--coral-bg); }
-  .section-icon.transit { background: var(--sky-bg); }
-  .section-icon.walk { background: var(--leaf-bg); }
-
-  .section-head h2 {
+  .stop-time-badge {
     font-family: 'Fredoka', sans-serif;
-    font-size: 1.25rem;
-    margin: 0;
     font-weight: 600;
-  }
-
-  .big-time {
-    font-family: 'Fredoka', sans-serif;
-    font-size: 2.1rem;
-    font-weight: 700;
-    margin: 4px 0 2px;
-  }
-
-  .section-note {
-    color: var(--ink-soft);
-    font-weight: 700;
-    font-size: 0.88rem;
-  }
-
-  /* Transit steps */
-
-  .leg-list {
-    list-style: none;
-    margin: 10px 0 0;
-    padding: 0;
-  }
-
-  .leg-item {
-    display: flex;
-    gap: 12px;
-    padding: 10px 0;
-    border-top: 2px dashed var(--line);
-    align-items: baseline;
-  }
-
-  .leg-item:first-child { border-top: none; }
-
-  .leg-icon { flex-shrink: 0; }
-
-  .leg-text { font-weight: 700; }
-
-  .leg-approx {
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--ink-soft);
-    font-style: italic;
-  }
-
-  /* Walk unavailable state */
-
-  .walk-unavailable {
-    color: var(--ink-soft);
-    font-weight: 700;
-  }
-
-  .walk-card.is-pick {
-    border: 2px solid var(--leaf);
-  }
-
-  .walk-badge {
-    display: inline-block;
-    background: var(--leaf-bg);
-    color: var(--leaf);
-    font-family: 'Fredoka', sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 3px 11px;
+    font-size: 0.85rem;
+    background: var(--sunshine-bg);
+    color: #B8860B;
+    padding: 4px 12px;
     border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .stop-body { display: flex; gap: 12px; align-items: flex-start; }
+
+  .type-pill {
+    display: inline-block;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 6px;
+  }
+
+  .type-pill.cafe { background: var(--coral-bg); color: var(--coral); }
+  .type-pill.restaurant { background: var(--sunshine-bg); color: #B8860B; }
+  .type-pill.bar { background: var(--grape-bg); color: var(--grape); }
+  .type-pill.activity { background: var(--leaf-bg); color: var(--leaf); }
+  .type-pill.view { background: var(--sky-bg); color: var(--sky); }
+  .type-pill.other { background: var(--slate-bg); color: var(--slate); }
+
+  .stop-card h2 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.15rem;
+    margin: 0 0 2px;
+    font-weight: 600;
+  }
+
+  .stop-suburb {
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+    font-weight: 700;
     margin-bottom: 8px;
+  }
+
+  .stop-duration {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+
+  .stop-why {
+    font-size: 0.9rem;
+    font-style: italic;
+    margin: 0 0 8px;
+  }
+
+  .stop-link {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--sky);
+    text-decoration: none;
   }
 
   .state-empty {
@@ -189,16 +249,25 @@
   <a class="back-link" href="weekend-watchlist.html">← Back to Weekend Watchlist</a>
 
   <header class="masthead">
-    <h1 id="place-name">Loading...</h1>
-    <p class="suburb" id="place-suburb"></p>
+    <h1>Your Half-Day Plan 🗓️</h1>
+    <p class="sub" id="plan-sub"></p>
   </header>
 
-  <div id="content"></div>
+  <div class="timeline" id="timeline"></div>
 
 </div>
 
 <script>
-const PICK_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLtrsHemEsiBjBhmJKsyMxwxtUO9Vn2SMWOO4xt5MGhNsqzIVQjoSaf8yBTHlXpxb2AqJBnCieGBoS/pub?gid=662357100&single=true&output=csv";
+// Replace with the published CSV link for the "Itinerary" tab once it's live
+const ITINERARY_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLtrsHemEsiBjBhmJKsyMxwxtUO9Vn2SMWOO4xt5MGhNsqzIVQjoSaf8yBTHlXpxb2AqJBnCieGBoS/pub?gid=207826843&single=true&output=csv";
+
+const TYPE_ICON = {
+  cafe: '☕', restaurant: '🍝', bar: '🍹', activity: '🎨', view: '🌅', other: '⭐'
+};
+
+const TRAVEL_ICON = {
+  car: '🚗', walk: '🚶', public: '🚌'
+};
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -211,97 +280,98 @@ function isUnclear(val) {
   return val.trim().toLowerCase() === 'unclear';
 }
 
-function renderLegs(legsString) {
-  if (isUnclear(legsString)) {
-    return '<p class="section-note">No step-by-step breakdown available for this trip yet.</p>';
-  }
-  const legs = legsString.split('→').map(l => l.trim()).filter(Boolean);
-  const items = legs.map(leg => {
-    const isWalk = /walk/i.test(leg);
-    const icon = isWalk ? '🚶' : '🚌';
-    return `
-      <li class="leg-item">
-        <span class="leg-icon">${icon}</span>
-        <span class="leg-text">${escapeHtml(leg)}</span>
-      </li>
-    `;
-  }).join('');
-  return `<ul class="leg-list">${items}</ul>`;
+function typeSlug(type) {
+  const slug = (type || 'other').trim().toLowerCase();
+  return TYPE_ICON[slug] ? slug : 'other';
 }
 
-function render(pick) {
-  if (!pick || !pick['Place Name'] || isUnclear(pick['Place Name'])) {
-    document.getElementById('place-name').textContent = "No pick yet";
-    document.getElementById('content').innerHTML = `
-      <div class="state-empty">There's no recommended outing to show an itinerary for yet — this fills in after the next scheduled run.</div>
+function travelSlug(mode) {
+  const m = (mode || '').toLowerCase();
+  if (m.includes('car') || m.includes('drive')) return 'car';
+  if (m.includes('walk')) return 'walk';
+  return 'public';
+}
+
+function renderTravelConnector(stop) {
+  const mode = stop['Travel Mode From Previous'];
+  const time = stop['Travel Time From Previous'];
+  const legs = stop['Travel Legs From Previous'];
+
+  if (isUnclear(mode) && isUnclear(time)) return '';
+
+  const slug = travelSlug(mode);
+  const legsMarkup = (slug === 'public' && !isUnclear(legs))
+    ? `<div class="travel-legs">${escapeHtml(legs)}</div>`
+    : '';
+
+  return `
+    <div class="travel-connector">
+      <div class="travel-icon">${TRAVEL_ICON[slug]}</div>
+      <div>
+        <div class="travel-detail">${!isUnclear(mode) ? escapeHtml(mode) : 'Travel'}${!isUnclear(time) ? ' · ' + escapeHtml(time) : ''}</div>
+        ${legsMarkup}
+      </div>
+    </div>
+  `;
+}
+
+function renderStop(stop) {
+  const placeName = stop['Place Name'] || '';
+  if (isUnclear(placeName) || /no suitable option/i.test(placeName)) {
+    return `
+      <div class="stop-card is-missing">
+        Stop ${escapeHtml(stop['Stop Number'] || '')}: no suitable option found this week
+        ${stop['Why This Stop'] && !isUnclear(stop['Why This Stop']) ? `<br><span style="font-weight:400;">${escapeHtml(stop['Why This Stop'])}</span>` : ''}
+      </div>
+    `;
+  }
+
+  const slug = typeSlug(stop['Type']);
+  const sourceLink = stop['Source Link'];
+
+  return `
+    <div class="stop-card">
+      <div class="stop-top">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="stop-number">${escapeHtml(stop['Stop Number'] || '')}</div>
+        </div>
+        ${!isUnclear(stop['Suggested Time']) ? `<span class="stop-time-badge">${escapeHtml(stop['Suggested Time'])}</span>` : ''}
+      </div>
+      <span class="type-pill ${slug}">${TYPE_ICON[slug]} ${escapeHtml(stop['Type'] || 'Other')}</span>
+      <h2>${escapeHtml(placeName)}</h2>
+      <div class="stop-suburb">${escapeHtml(stop['Suburb'] || '')}</div>
+      ${!isUnclear(stop['Suggested Duration']) ? `<div class="stop-duration">⏱️ ${escapeHtml(stop['Suggested Duration'])}</div>` : ''}
+      ${!isUnclear(stop['Why This Stop']) ? `<p class="stop-why">${escapeHtml(stop['Why This Stop'])}</p>` : ''}
+      ${sourceLink && !isUnclear(sourceLink) ? `<a class="stop-link" href="${escapeHtml(sourceLink)}" target="_blank" rel="noopener">View source →</a>` : ''}
+    </div>
+  `;
+}
+
+function render(stops) {
+  if (!stops || stops.length === 0 || isUnclear(stops[0]['Place Name'])) {
+    document.getElementById('plan-sub').textContent = '';
+    document.getElementById('timeline').innerHTML = `
+      <div class="state-empty">No itinerary built yet — this fills in after the next scheduled run.</div>
     `;
     return;
   }
 
-  document.getElementById('place-name').textContent = pick['Place Name'];
-  document.getElementById('place-suburb').textContent = pick['Suburb'] || '';
+  document.getElementById('plan-sub').textContent = `${stops.length}-stop plan, starting with ${stops[0]['Place Name']}`;
 
-  const driveTime = pick['Drive Time From Home'];
-  const walkTime = pick['Walk Time (Approx)'];
-  const transitSummary = pick['Public Transport Suggestion'];
-  const legs = pick['Public Transport Legs'];
-  const walkRecommended = (pick['Walking Recommended?'] || '').trim().toLowerCase() === 'yes';
-
-  const carSection = `
-    <div class="section-card">
-      <div class="section-head">
-        <div class="section-icon car">🚗</div>
-        <h2>Driving</h2>
-      </div>
-      ${!isUnclear(driveTime)
-        ? `<div class="big-time">${escapeHtml(driveTime)}</div><p class="section-note">Estimated with current traffic conditions.</p>`
-        : `<p class="section-note">Drive time isn't available for this pick.</p>`}
-    </div>
-  `;
-
-  const transitSection = `
-    <div class="section-card">
-      <div class="section-head">
-        <div class="section-icon transit">🚌</div>
-        <h2>Public transport</h2>
-      </div>
-      ${!isUnclear(transitSummary) ? `<p class="section-note">${escapeHtml(transitSummary)}</p>` : ''}
-      ${renderLegs(legs)}
-    </div>
-  `;
-
-  const walkSection = walkRecommended ? `
-    <div class="section-card walk-card is-pick">
-      <div class="section-head">
-        <div class="section-icon walk">🚶</div>
-        <h2>Walking</h2>
-      </div>
-      <span class="walk-badge">🏆 Fastest option this week</span>
-      <div class="big-time">${escapeHtml(walkTime)}</div>
-      <p class="section-note">Routed walking time, following actual streets.</p>
-    </div>
-  ` : `
-    <div class="section-card">
-      <div class="section-head">
-        <div class="section-icon walk">🚶</div>
-        <h2>Walking</h2>
-      </div>
-      <p class="walk-unavailable">Slower than driving or public transport this week, so it's left off as an option. ${!isUnclear(walkTime) ? `(Roughly ${escapeHtml(walkTime)} on foot, if you're keen anyway.)` : ''}</p>
-    </div>
-  `;
-
-  document.getElementById('content').innerHTML = carSection + transitSection + walkSection;
+  const sorted = [...stops].sort((a, b) => Number(a['Stop Number']) - Number(b['Stop Number']));
+  const html = sorted.map(stop => renderTravelConnector(stop) + renderStop(stop)).join('');
+  document.getElementById('timeline').innerHTML = html;
 }
 
-Papa.parse(PICK_CSV_URL, {
+Papa.parse(ITINERARY_CSV_URL, {
   download: true,
   header: true,
   skipEmptyLines: true,
   complete: function(results) {
-    render(results.data[0]);
+    render(results.data);
   },
   error: function() {
-    document.getElementById('content').innerHTML = '<div class="state-empty">Couldn\'t load this week\'s pick right now.</div>';
+    document.getElementById('timeline').innerHTML = '<div class="state-empty">Couldn\'t load the itinerary right now.</div>';
   }
 });
 </script>

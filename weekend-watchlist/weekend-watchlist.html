@@ -560,7 +560,7 @@ function renderPick(pick) {
     ['🚌', pick['Public Transport Suggestion']],
   ].filter(([, v]) => !isUnclear(v)).map(([icon, v]) => `<span>${icon} ${escapeHtml(v)}</span>`).join('');
 
-  const itineraryLink = `<a href="itinerary.html" style="font-weight:800;color:var(--ink);text-decoration:underline;white-space:nowrap;">🎫 Full itinerary →</a>`;
+  const itineraryLink = `<a href="itinerary.html" style="font-weight:800;color:var(--ink);text-decoration:underline;white-space:nowrap;">🗓️ See the full plan →</a>`;
 
   container.innerHTML = `
     <div class="ticket-row">
