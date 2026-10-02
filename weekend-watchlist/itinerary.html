@@ -235,6 +235,55 @@
     text-decoration: none;
   }
 
+  .export-section {
+    margin-top: 32px;
+    text-align: center;
+  }
+
+  .export-label {
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+
+  .export-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .export-btn {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.88rem;
+    padding: 12px 20px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    color: var(--cream);
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .export-btn:hover { background: var(--coral); }
+
+  .export-btn:disabled {
+    background: var(--line);
+    color: var(--ink-soft);
+    cursor: not-allowed;
+  }
+
+  .export-note {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+
   .state-empty {
     text-align: center;
     padding: 60px 20px;
@@ -254,6 +303,16 @@
   </header>
 
   <div class="timeline" id="timeline"></div>
+
+  <div class="export-section" id="export-section" style="display:none;">
+    <div class="export-label">📅 Add this plan to your calendar</div>
+    <div class="export-buttons">
+      <button class="export-btn" id="export-car">🚗 Leave by car</button>
+      <button class="export-btn" id="export-transit">🚌 Leave by transit</button>
+      <button class="export-btn" id="export-walk">🚶 Leave by foot</button>
+    </div>
+    <div class="export-note">Downloads one file with all stops and travel legs — import it into Apple Calendar, Google Calendar, or Outlook.</div>
+  </div>
 
 </div>
 
@@ -353,15 +412,143 @@ function render(stops) {
     document.getElementById('timeline').innerHTML = `
       <div class="state-empty">No itinerary built yet — this fills in after the next scheduled run.</div>
     `;
+    document.getElementById('export-section').style.display = 'none';
     return;
   }
 
+  currentStops = stops;
   document.getElementById('plan-sub').textContent = `${stops.length}-stop plan, starting with ${stops[0]['Place Name']}`;
 
   const sorted = [...stops].sort((a, b) => Number(a['Stop Number']) - Number(b['Stop Number']));
   const html = sorted.map(stop => renderTravelConnector(stop) + renderStop(stop)).join('');
   document.getElementById('timeline').innerHTML = html;
+  document.getElementById('export-section').style.display = 'block';
 }
+
+/* ---------- Calendar export ---------- */
+
+let currentStops = null;
+
+// Parses "6:12 AM" + "2026-10-04" into a Date object (local time)
+function parseDateTime(dateStr, timeStr) {
+  if (isUnclear(dateStr) || isUnclear(timeStr)) return null;
+  const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return null;
+  let [, h, m, ampm] = match;
+  h = parseInt(h, 10);
+  m = parseInt(m, 10);
+  if (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+  if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, h, m, 0);
+}
+
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60000);
+}
+
+function formatICSDate(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
+}
+
+function escapeICS(str) {
+  return (str || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+}
+
+function buildEvent(summary, start, end, location, description) {
+  if (!start || !end) return '';
+  return [
+    'BEGIN:VEVENT',
+    `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@weekendwatchlist`,
+    `DTSTART:${formatICSDate(start)}`,
+    `DTEND:${formatICSDate(end)}`,
+    `SUMMARY:${escapeICS(summary)}`,
+    location ? `LOCATION:${escapeICS(location)}` : '',
+    description ? `DESCRIPTION:${escapeICS(description)}` : '',
+    'END:VEVENT'
+  ].filter(Boolean).join('\r\n');
+}
+
+function buildItineraryICS(mode) {
+  const stops = currentStops;
+  if (!stops || stops.length === 0) return null;
+
+  const events = [];
+  const stop1 = stops.find(s => Number(s['Stop Number']) === 1);
+  if (!stop1) return null;
+
+  const date = stop1['Suggested Date'];
+  const arrival1 = parseDateTime(date, stop1['Suggested Time']);
+
+  const leaveByField = mode === 'car' ? 'Leave By Car' : mode === 'walk' ? 'Leave By Walk' : 'Leave By Public Transport';
+  const leaveBy = parseDateTime(date, stop1[leaveByField]);
+  const modeLabel = mode === 'car' ? 'Drive' : mode === 'walk' ? 'Walk' : 'Public transport';
+
+  if (leaveBy && arrival1) {
+    const desc = mode === 'transit' ? stop1['Public Transport Legs To Stop 1'] : `${modeLabel} to ${stop1['Place Name']}`;
+    events.push(buildEvent(`${modeLabel} to ${stop1['Place Name']}`, leaveBy, arrival1, stop1['Address'], desc));
+  }
+
+  const sorted = [...stops].sort((a, b) => Number(a['Stop Number']) - Number(b['Stop Number']));
+
+  sorted.forEach((stop, i) => {
+    if (isUnclear(stop['Place Name']) || /no suitable option/i.test(stop['Place Name'])) return;
+    const arrival = parseDateTime(stop['Suggested Date'], stop['Suggested Time']);
+    const durationMin = parseInt(stop['Suggested Duration Minutes'], 10);
+    const end = arrival && !isNaN(durationMin) ? addMinutes(arrival, durationMin) : null;
+
+    if (arrival && end) {
+      events.push(buildEvent(stop['Place Name'], arrival, end, stop['Address'], stop['Why This Stop']));
+    }
+
+    // Travel to the NEXT stop (stops 2 and 3 only, using the previous stop's end time)
+    const next = sorted[i + 1];
+    if (next && !isUnclear(next['Travel Mode From Previous']) && end) {
+      const travelMin = parseInt(next['Travel Time From Previous Minutes'], 10);
+      const nextArrival = parseDateTime(next['Suggested Date'], next['Suggested Time']);
+      const travelStart = !isNaN(travelMin) ? addMinutes(nextArrival || end, -travelMin) : end;
+      if (nextArrival) {
+        events.push(buildEvent(
+          `${next['Travel Mode From Previous']} to ${next['Place Name']}`,
+          travelStart, nextArrival, stop['Address'],
+          next['Travel Legs From Previous']
+        ));
+      }
+    }
+  });
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Weekend Watchlist//EN',
+    ...events,
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  return ics;
+}
+
+function downloadICS(mode) {
+  const ics = buildItineraryICS(mode);
+  if (!ics) {
+    alert("Couldn't build a calendar file — some required times are missing for this plan.");
+    return;
+  }
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `weekend-plan-${mode}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('export-car').addEventListener('click', () => downloadICS('car'));
+document.getElementById('export-transit').addEventListener('click', () => downloadICS('transit'));
+document.getElementById('export-walk').addEventListener('click', () => downloadICS('walk'));
 
 Papa.parse(ITINERARY_CSV_URL, {
   download: true,
