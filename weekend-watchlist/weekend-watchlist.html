@@ -6,430 +6,462 @@
 <title>Weekend Watchlist</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root {
-    --paper: #EAE3D2;
-    --paper-raised: #F2EDE1;
-    --ink: #1E2A2E;
-    --ink-soft: #52605f;
-    --teal: #1F4E4A;
-    --coral: #D9572C;
-    --lichen: #6E7F52;
-    --lichen-bg: #DCE2CB;
-    --line: #C7BEA8;
-    --closed: #A33B2E;
+    --cream: #FFF8EE;
+    --cream-card: #FFFFFF;
+    --ink: #2B2640;
+    --ink-soft: #6B6485;
+    --coral: #FF6B6B;
+    --coral-bg: #FFE3E3;
+    --sunshine: #FFC857;
+    --sunshine-bg: #FFF3D6;
+    --grape: #8E7CC3;
+    --grape-bg: #EDE8F7;
+    --leaf: #4CAF6D;
+    --leaf-bg: #DFF4E6;
+    --sky: #2BA9A1;
+    --sky-bg: #DAF3F1;
+    --slate: #8B849F;
+    --slate-bg: #EAE7F0;
+    --line: #EDE6D9;
   }
 
   * { box-sizing: border-box; }
 
   html, body {
     margin: 0;
-    padding: 0;
-    background: var(--paper);
+    background: var(--cream);
     color: var(--ink);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: 'Nunito', sans-serif;
     font-size: 16px;
     line-height: 1.5;
   }
 
   .wrap {
-    max-width: 1100px;
+    max-width: 1080px;
     margin: 0 auto;
-    padding: 0 24px 80px;
+    padding: 0 20px 90px;
   }
-
-  /* ---------- Masthead ---------- */
 
   header.masthead {
-    padding: 48px 0 28px;
-    border-bottom: 3px solid var(--ink);
-    margin-bottom: 32px;
-  }
-
-  .masthead-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 12px;
+    padding: 44px 0 10px;
+    text-align: center;
   }
 
   h1 {
-    font-family: 'Fraunces', serif;
-    font-weight: 600;
-    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
     margin: 0;
-    letter-spacing: -0.01em;
-  }
-
-  .masthead-meta {
-    font-size: 0.85rem;
-    color: var(--ink-soft);
-    font-variant-numeric: tabular-nums;
+    color: var(--ink);
   }
 
   .tagline {
-    margin: 10px 0 0;
-    max-width: 52ch;
+    margin: 8px auto 0;
+    max-width: 46ch;
     color: var(--ink-soft);
-    font-size: 1.02rem;
-  }
-
-  /* ---------- Weekend pick (placeholder) ---------- */
-
-  .pick {
-    background: var(--paper-raised);
-    border: 1px solid var(--line);
-    border-left: 6px solid var(--coral);
-    padding: 22px 26px;
-    margin-bottom: 40px;
-  }
-
-  .pick-label {
-    font-family: 'Fraunces', serif;
-    font-style: italic;
     font-size: 1.05rem;
-    color: var(--coral);
-    display: block;
-    margin-bottom: 10px;
+    font-weight: 600;
   }
 
-  .pick-top {
+  /* ---------- Ticket banner ---------- */
+
+  .ticket {
+    background: var(--sunshine);
+    border-radius: 24px;
+    margin: 32px 0 44px;
+    padding: 26px 30px;
+    position: relative;
+    box-shadow: 0 10px 0 rgba(43, 38, 64, 0.08);
+  }
+
+  .ticket::before, .ticket::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    background: var(--cream);
+    border-radius: 50%;
+  }
+
+  .ticket::before { left: -14px; }
+  .ticket::after { right: -14px; }
+
+  .ticket-row {
     display: flex;
-    gap: 20px;
-    align-items: flex-start;
+    gap: 24px;
+    align-items: center;
     flex-wrap: wrap;
-    justify-content: space-between;
   }
 
-  .pick-body h2 {
-    font-family: 'Fraunces', serif;
-    font-size: 1.5rem;
-    margin: 0 0 4px;
-    font-weight: 500;
-  }
-
-  .pick-body .pick-suburb {
-    color: var(--ink-soft);
-    font-size: 0.9rem;
-    margin: 0 0 10px;
-  }
-
-  .pick-body p {
-    margin: 0;
-    color: var(--ink-soft);
-    max-width: 60ch;
-  }
-
-  .pick-why {
-    font-style: italic;
-  }
-
-  .pick-forecasts {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin: 16px 0;
-  }
-
-  .forecast-day {
-    border: 1px solid var(--line);
-    padding: 8px 14px;
-    min-width: 90px;
+  .ticket-stub {
     text-align: center;
-    background: var(--paper);
+    padding-right: 24px;
+    border-right: 3px dashed rgba(43, 38, 64, 0.25);
+    flex-shrink: 0;
   }
 
-  .forecast-day.is-best {
-    border-color: var(--coral);
-    border-width: 2px;
-  }
-
-  .forecast-day .day-name {
+  .ticket-stub .stub-label {
+    font-family: 'Fredoka', sans-serif;
     font-size: 0.72rem;
-    color: var(--ink-soft);
-    display: block;
-    margin-bottom: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(43, 38, 64, 0.65);
   }
 
-  .forecast-day .day-forecast {
+  .ticket-stub .stub-day {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 2.1rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .ticket-main { flex: 1; min-width: 220px; }
+
+  .ticket-eyebrow {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgba(43, 38, 64, 0.7);
+    margin: 0 0 2px;
+  }
+
+  .ticket-main h2 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.8rem;
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+
+  .ticket-suburb {
+    margin: 0;
+    font-weight: 700;
+    color: rgba(43, 38, 64, 0.7);
     font-size: 0.88rem;
   }
 
-  .pick-logistics {
+  .ticket-forecasts {
     display: flex;
-    gap: 24px;
+    gap: 10px;
     flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding-top: 14px;
-    font-size: 0.85rem;
-    color: var(--ink-soft);
+    margin: 16px 0 14px;
   }
 
-  .pick-logistics strong {
+  .fc-pill {
+    background: rgba(255,255,255,0.55);
+    border: 2px solid transparent;
+    border-radius: 14px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
     color: var(--ink);
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 600;
-    margin-bottom: 2px;
   }
 
-  .pick-empty {
-    color: var(--ink-soft);
+  .fc-pill.is-best {
+    border-color: var(--coral);
+    background: #fff;
+  }
+
+  .ticket-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: rgba(43, 38, 64, 0.8);
+    border-top: 2px dashed rgba(43,38,64,0.2);
+    padding-top: 12px;
+  }
+
+  .ticket-why {
+    margin: 10px 0 0;
+    font-weight: 700;
+    font-style: italic;
+    color: rgba(43,38,64,0.75);
+    font-size: 0.9rem;
+  }
+
+  .ticket-empty {
+    font-weight: 700;
+    color: rgba(43,38,64,0.75);
   }
 
   /* ---------- Controls ---------- */
 
   .controls {
     display: flex;
-    gap: 14px;
+    gap: 10px;
     flex-wrap: wrap;
     align-items: center;
-    margin-bottom: 28px;
-  }
-
-  .search-field {
-    flex: 1 1 220px;
-    position: relative;
+    margin-bottom: 10px;
+    justify-content: center;
   }
 
   .search-field input {
-    width: 100%;
-    padding: 10px 14px;
-    background: var(--paper-raised);
-    border: 1px solid var(--line);
-    color: var(--ink);
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    background: var(--cream-card);
     font-family: inherit;
     font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ink);
+    min-width: 220px;
   }
 
   .search-field input:focus-visible {
-    outline: 2px solid var(--teal);
-    outline-offset: 1px;
+    outline: none;
+    border-color: var(--grape);
   }
 
   select#suburb-filter {
-    padding: 10px 14px;
-    background: var(--paper-raised);
-    border: 1px solid var(--line);
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    background: var(--cream-card);
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
     color: var(--ink);
-    font-family: inherit;
-    font-size: 0.95rem;
-  }
-
-  select#suburb-filter:focus-visible {
-    outline: 2px solid var(--teal);
-    outline-offset: 1px;
   }
 
   .type-chips {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   .chip {
-    border: 1px solid var(--line);
-    background: var(--paper-raised);
+    border: 2px solid var(--line);
+    background: var(--cream-card);
     color: var(--ink-soft);
-    padding: 7px 14px;
+    padding: 9px 16px;
+    border-radius: 999px;
     font-size: 0.85rem;
-    font-family: inherit;
+    font-weight: 700;
+    font-family: 'Nunito', sans-serif;
     cursor: pointer;
   }
 
-  .chip:hover { border-color: var(--teal); color: var(--ink); }
+  .chip:hover { border-color: var(--grape); }
 
   .chip[aria-pressed="true"] {
-    background: var(--teal);
-    border-color: var(--teal);
-    color: var(--paper);
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--cream);
   }
 
-  .chip:focus-visible {
-    outline: 2px solid var(--teal);
-    outline-offset: 2px;
-  }
+  .chip:focus-visible { outline: 2px solid var(--grape); outline-offset: 2px; }
 
   .count-line {
+    text-align: center;
     color: var(--ink-soft);
-    font-size: 0.88rem;
-    margin: 0 0 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin: 18px 0 24px;
   }
 
-  /* ---------- Grid & cards ---------- */
+  /* ---------- Grid ---------- */
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 22px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 30px;
   }
 
   .card {
-    background: var(--paper-raised);
-    border: 1px solid var(--line);
+    background: var(--cream-card);
+    border-radius: 20px;
+    padding: 14px 14px 18px;
+    box-shadow: 0 8px 0 rgba(43, 38, 64, 0.06);
     position: relative;
-    padding: 0 0 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    overflow: hidden;
+    transition: transform 0.15s ease;
   }
 
-  .card.is-closed {
-    opacity: 0.6;
+  .card:nth-child(3n+1) { transform: rotate(-1.4deg); }
+  .card:nth-child(3n+2) { transform: rotate(1deg); }
+  .card:nth-child(3n+3) { transform: rotate(-0.5deg); }
+  .card:hover { transform: rotate(0deg) translateY(-3px); }
+  .card.is-closed { opacity: 0.55; }
+
+  .card-photo-frame {
+    background: #fff;
+    border-radius: 14px;
+    padding: 8px 8px 0;
+    position: relative;
   }
 
-  .card-photo {
+  .card-photo, .card-photo-empty {
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 4/3;
     object-fit: cover;
+    border-radius: 10px 10px 0 0;
     display: block;
-    border-bottom: 1px solid var(--line);
-    background: var(--lichen-bg);
   }
 
   .card-photo-empty {
-    width: 100%;
-    aspect-ratio: 4 / 3;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-bottom: 1px solid var(--line);
-    background: repeating-linear-gradient(
-      135deg,
-      var(--lichen-bg),
-      var(--lichen-bg) 10px,
-      var(--paper-raised) 10px,
-      var(--paper-raised) 20px
-    );
-    color: var(--lichen);
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-size: 0.95rem;
+    background: var(--line);
+    color: var(--ink-soft);
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.85rem;
     text-align: center;
-    padding: 12px;
+    padding: 10px;
   }
 
-  .card-body {
-    padding: 14px 18px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .tab {
+  .stamp {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    background: var(--paper-raised);
-    color: var(--lichen);
-    font-size: 0.72rem;
-    padding: 4px 10px 3px;
-    border: 1px solid var(--line);
+    top: -14px;
+    right: -14px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.4rem;
+    border: 3px solid var(--cream-card);
+    box-shadow: 0 3px 0 rgba(43,38,64,0.1);
   }
 
-  .card-head h3 {
-    font-family: 'Fraunces', serif;
-    font-weight: 600;
-    font-size: 1.18rem;
+  .stamp.cafe { background: var(--coral-bg); color: var(--coral); }
+  .stamp.restaurant { background: var(--sunshine-bg); color: #B8860B; }
+  .stamp.bar { background: var(--grape-bg); color: var(--grape); }
+  .stamp.activity { background: var(--leaf-bg); color: var(--leaf); }
+  .stamp.view { background: var(--sky-bg); color: var(--sky); }
+  .stamp.other { background: var(--slate-bg); color: var(--slate); }
+
+  .card-body { padding: 14px 6px 0; }
+
+  .card-body h3 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.2rem;
     margin: 0 0 2px;
+    font-weight: 600;
   }
 
   .suburb-line {
     color: var(--ink-soft);
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 8px;
   }
 
-  .closed-ribbon {
+  .type-pill {
     display: inline-block;
-    color: var(--closed);
-    font-size: 0.78rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.72rem;
     font-weight: 600;
-    border: 1px solid var(--closed);
-    padding: 2px 8px;
-    width: fit-content;
+    padding: 3px 11px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+  }
+
+  .type-pill.cafe { background: var(--coral-bg); color: var(--coral); }
+  .type-pill.restaurant { background: var(--sunshine-bg); color: #B8860B; }
+  .type-pill.bar { background: var(--grape-bg); color: var(--grape); }
+  .type-pill.activity { background: var(--leaf-bg); color: var(--leaf); }
+  .type-pill.view { background: var(--sky-bg); color: var(--sky); }
+  .type-pill.other { background: var(--slate-bg); color: var(--slate); }
+
+  .closed-pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--coral);
+    border: 2px dashed var(--coral);
+    padding: 2px 10px;
+    border-radius: 999px;
+    margin-bottom: 8px;
   }
 
   .why {
-    margin: 2px 0 4px;
-    font-size: 0.93rem;
+    font-size: 0.9rem;
+    margin: 0 0 10px;
+    color: var(--ink);
   }
 
-  .detail-rows {
-    border-top: 1px solid var(--line);
-    padding-top: 10px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 12px;
-    font-size: 0.82rem;
+  .detail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .detail-chip {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--cream);
+    border-radius: 999px;
+    padding: 3px 10px;
     color: var(--ink-soft);
   }
-
-  .detail-rows dt {
-    font-weight: 600;
-    color: var(--ink);
-    display: inline;
-  }
-
-  .detail-rows div { grid-column: span 1; }
 
   .card-foot {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 4px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    border-top: 2px dashed var(--line);
     padding-top: 10px;
-    border-top: 1px solid var(--line);
+    margin-top: 4px;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .rating {
-    font-size: 0.85rem;
-    color: var(--ink-soft);
+  .rating-pill {
+    background: var(--sunshine-bg);
+    color: #B8860B;
+    padding: 2px 10px;
+    border-radius: 999px;
+  }
+
+  .visited-pill {
+    background: var(--leaf-bg);
+    color: var(--leaf);
+    padding: 2px 10px;
+    border-radius: 999px;
   }
 
   .source-link {
-    font-size: 0.85rem;
-    color: var(--teal);
+    color: var(--sky);
     text-decoration: none;
-    border-bottom: 1px solid var(--teal);
+    font-weight: 800;
   }
-
-  .source-link:hover { color: var(--coral); border-color: var(--coral); }
-
-  .visited-tag {
-    font-size: 0.75rem;
-    color: var(--lichen);
-  }
-
-  /* ---------- States ---------- */
 
   .state-block {
     padding: 60px 20px;
     text-align: center;
     color: var(--ink-soft);
-    border: 1px dashed var(--line);
+    background: var(--cream-card);
+    border-radius: 20px;
+    font-weight: 700;
   }
 
   .state-block h2 {
-    font-family: 'Fraunces', serif;
+    font-family: 'Fredoka', sans-serif;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 600;
     margin-bottom: 8px;
   }
 
-  .state-block code {
-    background: var(--paper);
-    padding: 2px 6px;
-    border: 1px solid var(--line);
-    font-size: 0.85em;
-  }
-
   @media (max-width: 480px) {
-    .pick-logistics { flex-direction: column; gap: 10px; }
-    .card-head h3 { padding-right: 0; }
+    .card { transform: none !important; }
+    .ticket-row { flex-direction: column; align-items: stretch; text-align: center; }
+    .ticket-stub { border-right: none; border-bottom: 3px dashed rgba(43,38,64,0.25); padding: 0 0 14px; }
+    .ticket-stats, .ticket-forecasts { justify-content: center; }
   }
 </style>
 </head>
@@ -437,27 +469,25 @@
 <div class="wrap">
 
   <header class="masthead">
-    <div class="masthead-row">
-      <h1>Weekend Watchlist</h1>
-      <div class="masthead-meta" id="last-updated"></div>
-    </div>
-    <p class="tagline">Every cafe, view and outing you've screenshotted and almost forgot — catalogued in one place, pulled fresh from your Outings sheet.</p>
+    <h1>Weekend Watchlist 🎟️</h1>
+    <p class="tagline">Every cafe, view and outing you've screenshotted and almost forgot about — saved, sorted, and ready to go.</p>
   </header>
 
-  <section class="pick" aria-label="Weekend recommendation" id="pick-section">
-    <span class="pick-label">This weekend's pick</span>
+  <section class="ticket" id="pick-section">
     <div id="pick-content">
-      <p class="pick-empty">Loading this week's pick...</p>
+      <p class="ticket-empty">Loading this week's pick...</p>
     </div>
   </section>
 
   <div class="controls">
     <div class="search-field">
-      <input type="text" id="search" placeholder="Search by name or vibe..." aria-label="Search outings">
+      <input type="text" id="search" placeholder="🔍 Search by name or vibe..." aria-label="Search outings">
     </div>
     <select id="suburb-filter" aria-label="Filter by suburb">
       <option value="">All suburbs</option>
     </select>
+  </div>
+  <div class="controls">
     <div class="type-chips" id="type-chips" role="group" aria-label="Filter by type"></div>
   </div>
 
@@ -473,8 +503,31 @@
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLtrsHemEsiBjBhmJKsyMxwxtUO9Vn2SMWOO4xt5MGhNsqzIVQjoSaf8yBTHlXpxb2AqJBnCieGBoS/pub?gid=0&single=true&output=csv";
 const PICK_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLtrsHemEsiBjBhmJKsyMxwxtUO9Vn2SMWOO4xt5MGhNsqzIVQjoSaf8yBTHlXpxb2AqJBnCieGBoS/pub?gid=662357100&single=true&output=csv";
 
+const TYPE_ICON = {
+  cafe: '☕', restaurant: '🍝', bar: '🍹', activity: '🎨', view: '🌅', other: '⭐'
+};
+const FIXED_TYPES = ['Cafe', 'Restaurant', 'Bar', 'Activity', 'View', 'Other'];
+
 let allRows = [];
 let activeType = "";
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+function isUnclear(val) {
+  if (!val) return true;
+  return val.trim().toLowerCase() === 'unclear';
+}
+
+function typeSlug(type) {
+  const slug = (type || 'other').trim().toLowerCase();
+  return TYPE_ICON[slug] ? slug : 'other';
+}
+
+/* ---------- Weekend pick ---------- */
 
 function renderPick(pick) {
   const container = document.getElementById('pick-content');
@@ -483,7 +536,7 @@ function renderPick(pick) {
     const reason = (pick && pick['Why This One'] && !isUnclear(pick['Why This One']))
       ? pick['Why This One']
       : "No pick has been generated yet — this fills in after the next scheduled run.";
-    container.innerHTML = `<p class="pick-empty">${escapeHtml(reason)}</p>`;
+    container.innerHTML = `<p class="ticket-empty">🎟️ ${escapeHtml(reason)}</p>`;
     return;
   }
 
@@ -493,36 +546,35 @@ function renderPick(pick) {
     { label: 'Sun', key: 'Sunday Forecast' },
   ];
   const bestDay = (pick['Best Day To Go'] || '').trim().toLowerCase();
+  const bestDayShort = bestDay.slice(0, 3);
 
   const forecastMarkup = days.map(d => {
-    const isBest = bestDay && d.label.toLowerCase().startsWith(bestDay.slice(0, 3));
+    const isBest = bestDay && d.label.toLowerCase() === bestDayShort;
     const forecast = isUnclear(pick[d.key]) ? '—' : pick[d.key];
-    return `
-      <div class="forecast-day ${isBest ? 'is-best' : ''}">
-        <span class="day-name">${d.label}${isBest ? ' · best day' : ''}</span>
-        <span class="day-forecast">${escapeHtml(forecast)}</span>
-      </div>
-    `;
+    return `<span class="fc-pill ${isBest ? 'is-best' : ''}">${d.label}: ${escapeHtml(forecast)}</span>`;
   }).join('');
 
-  const logisticsMarkup = [
-    ['Drive', pick['Drive Time From Home']],
-    ['Walk (approx)', pick['Walk Time (Approx)']],
-    ['Public transport', pick['Public Transport Suggestion']],
-  ].filter(([, v]) => !isUnclear(v)).map(([label, v]) => `
-    <div><strong>${label}</strong>${escapeHtml(v)}</div>
-  `).join('');
+  const statsMarkup = [
+    ['🚗', pick['Drive Time From Home']],
+    ['🚶', pick['Walk Time (Approx)']],
+    ['🚌', pick['Public Transport Suggestion']],
+  ].filter(([, v]) => !isUnclear(v)).map(([icon, v]) => `<span>${icon} ${escapeHtml(v)}</span>`).join('');
 
   container.innerHTML = `
-    <div class="pick-top">
-      <div class="pick-body">
+    <div class="ticket-row">
+      <div class="ticket-stub">
+        <div class="stub-label">Best day</div>
+        <div class="stub-day">${escapeHtml((pick['Best Day To Go'] || '—').slice(0, 3).toUpperCase())}</div>
+      </div>
+      <div class="ticket-main">
+        <div class="ticket-eyebrow">🏆 This weekend's pick</div>
         <h2>${escapeHtml(pick['Place Name'])}</h2>
-        <p class="pick-suburb">${escapeHtml(pick['Suburb'] || '')}</p>
+        <p class="ticket-suburb">${escapeHtml(pick['Suburb'] || '')}</p>
       </div>
     </div>
-    <div class="pick-forecasts">${forecastMarkup}</div>
-    ${logisticsMarkup ? `<div class="pick-logistics">${logisticsMarkup}</div>` : ''}
-    ${pick['Why This One'] && !isUnclear(pick['Why This One']) ? `<p class="pick-why">${escapeHtml(pick['Why This One'])}</p>` : ''}
+    <div class="ticket-forecasts">${forecastMarkup}</div>
+    ${statsMarkup ? `<div class="ticket-stats">${statsMarkup}</div>` : ''}
+    ${pick['Why This One'] && !isUnclear(pick['Why This One']) ? `<p class="ticket-why">${escapeHtml(pick['Why This One'])}</p>` : ''}
   `;
 }
 
@@ -536,31 +588,23 @@ function loadPick() {
     },
     error: function() {
       document.getElementById('pick-content').innerHTML =
-        '<p class="pick-empty">Couldn\'t load this week\'s pick right now.</p>';
+        '<p class="ticket-empty">Couldn\'t load this week\'s pick right now.</p>';
     }
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? "";
-  return div.innerHTML;
-}
+/* ---------- Cards ---------- */
 
-function isUnclear(val) {
-  if (!val) return true;
-  return val.trim().toLowerCase() === 'unclear';
-}
-
-function renderDetail(label, value) {
+function detailChip(icon, value) {
   if (isUnclear(value)) return '';
-  return `<div><dt>${label}:</dt> ${escapeHtml(value)}</div>`;
+  return `<span class="detail-chip">${icon} ${escapeHtml(value)}</span>`;
 }
 
 function buildCard(row) {
   const name = row['Place Name'] || 'Untitled spot';
   const suburb = row['Suburb'] || '';
-  const type = row['Type'] || 'Other';
+  const slug = typeSlug(row['Type']);
+  const typeLabel = row['Type'] || 'Other';
   const why = row["Why It's Worth Visiting"] || '';
   const stillOperating = (row['Still Operating?'] || '').trim().toLowerCase();
   const closed = stillOperating === 'no';
@@ -572,36 +616,37 @@ function buildCard(row) {
   const hasPhoto = photoUrl && !isUnclear(photoUrl);
 
   const photoMarkup = hasPhoto
-    ? `<img class="card-photo" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;card-photo-empty&quot;>No photo found yet</div>';">`
-    : `<div class="card-photo-empty">No photo found yet</div>`;
+    ? `<img class="card-photo" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;card-photo-empty&quot;>No photo yet</div>';">`
+    : `<div class="card-photo-empty">No photo yet</div>`;
 
-  const details = [
-    renderDetail('Hours', row['Opening Hours']),
-    renderDetail('Booking', row['Booking Required?']),
-    renderDetail('Price', row['Price Range']),
-    renderDetail('Seating', row['Seating']),
-    renderDetail('Good for', row['Good For']),
-    renderDetail('Standout', row['Signature Dish/Drink']),
-    renderDetail('Parking', row['Parking']),
-    renderDetail('Transport', row['Nearest Transport']),
+  const chips = [
+    detailChip('💵', row['Price Range']),
+    detailChip('🪑', row['Seating']),
+    detailChip('🎉', row['Good For']),
+    detailChip('🕒', row['Opening Hours']),
+    detailChip('📅', row['Booking Required?']),
+    detailChip('✨', row['Signature Dish/Drink']),
+    detailChip('🅿️', row['Parking']),
+    detailChip('🚌', row['Nearest Transport']),
   ].join('');
 
   return `
     <article class="card ${closed ? 'is-closed' : ''}">
-      <span class="tab">${escapeHtml(type)}</span>
-      ${photoMarkup}
+      <div class="card-photo-frame">
+        ${photoMarkup}
+        <div class="stamp ${slug}">${TYPE_ICON[slug]}</div>
+      </div>
       <div class="card-body">
-        <div class="card-head">
-          <h3>${escapeHtml(name)}</h3>
-          <div class="suburb-line">${escapeHtml(suburb)}</div>
-        </div>
-        ${closed ? '<span class="closed-ribbon">Possibly closed — check before you go</span>' : ''}
+        <span class="type-pill ${slug}">${escapeHtml(typeLabel)}</span>
+        <h3>${escapeHtml(name)}</h3>
+        <div class="suburb-line">${escapeHtml(suburb)}</div>
+        ${closed ? '<span class="closed-pill">Might be closed — check first</span>' : ''}
         ${why ? `<p class="why">${escapeHtml(why)}</p>` : ''}
-        ${details ? `<dl class="detail-rows">${details}</dl>` : ''}
+        ${chips ? `<div class="detail-chips">${chips}</div>` : ''}
         <div class="card-foot">
-          <span class="rating">${!isUnclear(rating) ? escapeHtml(rating) : ''}</span>
-          ${isVisited ? '<span class="visited-tag">Been here</span>' : ''}
-          ${sourceLink && !isUnclear(sourceLink) ? `<a class="source-link" href="${escapeHtml(sourceLink)}" target="_blank" rel="noopener">View source</a>` : ''}
+          ${!isUnclear(rating) ? `<span class="rating-pill">★ ${escapeHtml(rating)}</span>` : '<span></span>'}
+          ${isVisited ? '<span class="visited-pill">✅ Been here</span>' : ''}
+          ${sourceLink && !isUnclear(sourceLink) ? `<a class="source-link" href="${escapeHtml(sourceLink)}" target="_blank" rel="noopener">View source →</a>` : ''}
         </div>
       </div>
     </article>
@@ -618,20 +663,32 @@ function populateFilters(rows) {
     select.appendChild(opt);
   });
 
-  const FIXED_TYPES = ['Cafe', 'Restaurant', 'Bar', 'Activity', 'View', 'Other'];
   const presentTypes = new Set(rows.map(r => (r['Type'] || '').trim()));
   const types = FIXED_TYPES.filter(t => presentTypes.has(t));
   const chipWrap = document.getElementById('type-chips');
+
+  const allBtn = document.createElement('button');
+  allBtn.className = 'chip';
+  allBtn.textContent = 'All';
+  allBtn.setAttribute('aria-pressed', 'true');
+  allBtn.addEventListener('click', () => {
+    activeType = '';
+    chipWrap.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    allBtn.setAttribute('aria-pressed', 'true');
+    render();
+  });
+  chipWrap.appendChild(allBtn);
+
   types.forEach(t => {
+    const slug = typeSlug(t);
     const btn = document.createElement('button');
     btn.className = 'chip';
-    btn.textContent = t;
+    btn.textContent = `${TYPE_ICON[slug]} ${t}`;
     btn.setAttribute('aria-pressed', 'false');
     btn.addEventListener('click', () => {
-      const isActive = btn.getAttribute('aria-pressed') === 'true';
       chipWrap.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
-      activeType = isActive ? '' : t;
-      btn.setAttribute('aria-pressed', String(!isActive));
+      activeType = t;
+      btn.setAttribute('aria-pressed', 'true');
       render();
     });
     chipWrap.appendChild(btn);
@@ -658,7 +715,7 @@ function render() {
     countLine.textContent = '';
     content.innerHTML = `
       <div class="state-block">
-        <h2>Nothing catalogued yet</h2>
+        <h2>Nothing catalogued yet 🗒️</h2>
         <p>Drop a screenshot into your Outings Screenshots folder, then ask Claude to check for new outings. It'll land here once the sheet picks it up.</p>
       </div>
     `;
@@ -669,7 +726,7 @@ function render() {
     countLine.textContent = `0 of ${allRows.length} spots match`;
     content.innerHTML = `
       <div class="state-block">
-        <h2>No matches</h2>
+        <h2>No matches 🔍</h2>
         <p>Try a different search term, suburb, or clear the type filter.</p>
       </div>
     `;
@@ -688,15 +745,13 @@ function loadData() {
     complete: function(results) {
       allRows = results.data.filter(r => r['Place Name'] && r['Place Name'].trim());
       populateFilters(allRows);
-      document.getElementById('last-updated').textContent =
-        'Updated ' + new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
       render();
     },
     error: function(err) {
       document.getElementById('content').innerHTML = `
         <div class="state-block">
           <h2>Couldn't load the sheet</h2>
-          <p>Check the published CSV link is still live, or try refreshing.<br><code>${escapeHtml(err.message || '')}</code></p>
+          <p>Check the published CSV link is still live, or try refreshing.<br>${escapeHtml(err.message || '')}</p>
         </div>
       `;
     }
