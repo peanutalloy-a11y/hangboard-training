@@ -336,7 +336,8 @@ function escapeHtml(str) {
 
 function isUnclear(val) {
   if (!val) return true;
-  return val.trim().toLowerCase() === 'unclear';
+  const v = val.trim().toLowerCase();
+  return ['unclear', 'n/a', 'na', 'none', '-', 'not applicable'].includes(v);
 }
 
 function typeSlug(type) {
