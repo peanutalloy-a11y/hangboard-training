@@ -519,7 +519,8 @@ function escapeHtml(str) {
 
 function isUnclear(val) {
   if (!val) return true;
-  return val.trim().toLowerCase() === 'unclear';
+  const v = val.trim().toLowerCase();
+  return ['unclear', 'n/a', 'na', 'none', '-', 'not applicable'].includes(v);
 }
 
 function typeSlug(type) {
@@ -595,6 +596,54 @@ function loadPick() {
   });
 }
 
+/* ---------- Hours and event dates ---------- */
+
+function dayHours(row, day) {
+  const open = (row['Open (' + day + ')'] || '').trim();
+  const close = (row['Close (' + day + ')'] || '').trim();
+  if (open.toLowerCase() === 'closed') return 'Closed';
+  if (isUnclear(open) || isUnclear(close)) return null;
+  if (open === '12:00 AM' && close === '11:59 PM') return 'Open 24 hours';
+  return open + '–' + close;
+}
+
+function weekendHours(row) {
+  const sat = dayHours(row, 'Saturday');
+  const sun = dayHours(row, 'Sunday');
+  if (!sat && !sun) return '';
+  if (sat && sun && sat === sun) return 'Sat–Sun ' + sat;
+  const parts = [];
+  if (sat) parts.push('Sat ' + sat);
+  if (sun) parts.push('Sun ' + sun);
+  return parts.join(' · ');
+}
+
+function parseISODate(str) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((str || '').trim());
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+
+function shortDate(str) {
+  const d = parseISODate(str);
+  return d ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '';
+}
+
+function eventDates(row) {
+  const start = shortDate(row['Event Start Date']);
+  const end = shortDate(row['Event End Date']);
+  if (start && end) return start + ' – ' + end;
+  if (end) return 'Until ' + end;
+  if (start) return 'From ' + start;
+  return '';
+}
+
+function eventHasEnded(row) {
+  const end = parseISODate(row['Event End Date']);
+  if (!end) return false;
+  end.setHours(23, 59, 59);
+  return end < new Date();
+}
+
 /* ---------- Cards ---------- */
 
 function detailChip(icon, value) {
@@ -612,7 +661,6 @@ function buildCard(row) {
   const closed = stillOperating === 'no';
   const visited = (row['Visited?'] || '').trim().toLowerCase();
   const isVisited = visited === 'yes' || visited === 'y';
-  const rating = row['Rating'] || '';
   const sourceLink = row['Source Link'] || '';
   const photoUrl = row['Photo URL'] || '';
   const hasPhoto = photoUrl && !isUnclear(photoUrl);
@@ -621,15 +669,17 @@ function buildCard(row) {
     ? `<img class="card-photo" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;card-photo-empty&quot;>No photo yet</div>';">`
     : `<div class="card-photo-empty">No photo yet</div>`;
 
+  const dryWeather = (row['Weather Dependent?'] || '').trim().toLowerCase() === 'yes'
+    ? '<span class="detail-chip">☀️ Best in dry weather</span>' : '';
+  const hours = weekendHours(row);
+  const dates = eventDates(row);
+
   const chips = [
-    detailChip('💵', row['Price Range']),
-    detailChip('🪑', row['Seating']),
     detailChip('🎉', row['Good For']),
-    detailChip('🕒', row['Opening Hours']),
-    detailChip('📅', row['Booking Required?']),
     detailChip('✨', row['Signature Dish/Drink']),
-    detailChip('🅿️', row['Parking']),
-    detailChip('🚌', row['Nearest Transport']),
+    dryWeather,
+    hours ? detailChip('🕒', hours) : '',
+    dates ? detailChip('📅', dates) : '',
   ].join('');
 
   return `
@@ -646,7 +696,7 @@ function buildCard(row) {
         ${why ? `<p class="why">${escapeHtml(why)}</p>` : ''}
         ${chips ? `<div class="detail-chips">${chips}</div>` : ''}
         <div class="card-foot">
-          ${!isUnclear(rating) ? `<span class="rating-pill">★ ${escapeHtml(rating)}</span>` : '<span></span>'}
+          <span></span>
           ${isVisited ? '<span class="visited-pill">✅ Been here</span>' : ''}
           ${sourceLink && !isUnclear(sourceLink) ? `<a class="source-link" href="${escapeHtml(sourceLink)}" target="_blank" rel="noopener">View source →</a>` : ''}
         </div>
@@ -745,7 +795,7 @@ function loadData() {
     header: true,
     skipEmptyLines: true,
     complete: function(results) {
-      allRows = results.data.filter(r => r['Place Name'] && r['Place Name'].trim());
+      allRows = results.data.filter(r => r['Place Name'] && r['Place Name'].trim() && !eventHasEnded(r));
       populateFilters(allRows);
       render();
     },
