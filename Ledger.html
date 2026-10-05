@@ -695,7 +695,7 @@
     state.incomes.forEach(function(i){ rows.push(row({RecordType:'INCOME', ID:i.id, Name:i.name, Amount:i.amount, Frequency:i.frequency, AnchorDate:i.anchorDate})); });
     state.bills.forEach(function(b){ rows.push(row({RecordType:'BILL', ID:b.id, Name:b.name, Amount:b.amount, Frequency:b.frequency, IntervalDays:b.intervalDays||'', AnchorDate:b.anchorDate, Category:b.category||'', Notes:(b.paidDates||[]).join('|')})); });
     state.categories.forEach(function(c){ rows.push(row({RecordType:'CATEGORY', ID:c.id, Name:c.name, Amount:c.budget})); });
-    state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved})); });
+    state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||''})); });
     state.transactions.forEach(function(t){ rows.push(row({RecordType:'TRANSACTION', ID:t.id, Name:t.name, Amount:t.amount, Category:t.category||'', Date:t.date})); });
     var csv = rows.map(function(r){ return r.map(csvValue).join(','); }).join('\r\n');
     var blob = new Blob([csv], {type:'text/csv'});
@@ -756,7 +756,7 @@
           next.categories.push({ id:o.ID||uid(), name:o.Name, budget:parseFloat(o.Amount)||0 });
           break;
         case 'GOAL':
-          next.goals.push({ id:o.ID||uid(), name:o.Name, targetAmount:parseFloat(o.TargetAmount)||0, targetDate:o.TargetDate, currentSaved:parseFloat(o.CurrentSaved)||0 });
+          next.goals.push({ id:o.ID||uid(), name:o.Name, targetAmount:parseFloat(o.TargetAmount)||0, targetDate:o.TargetDate, currentSaved:parseFloat(o.CurrentSaved)||0, startDate:o.AnchorDate||'' });
           break;
         case 'TRANSACTION':
           next.transactions.push({ id:o.ID||uid(), name:o.Name, amount:parseFloat(o.Amount)||0, category:o.Category||'', date:o.Date });
@@ -859,7 +859,8 @@
     var remaining = Math.max(0, Number(goal.targetAmount) - (Number(goal.currentSaved)||0));
     var today = startOfDay(new Date());
     var target = parseISODate(goal.targetDate);
-    var daysLeft = Math.max(1, Math.round((target - today) / 86400000));
+    var from = (goal.startDate && parseISODate(goal.startDate) > today) ? parseISODate(goal.startDate) : today;
+    var daysLeft = Math.max(1, Math.round((target - from) / 86400000));
     var perFortnight = remaining / Math.max(1, daysLeft/14);
     var perMonth = remaining / Math.max(1, daysLeft/30.44);
     return {remaining:remaining, daysLeft:daysLeft, perFortnight:perFortnight, perMonth:perMonth};
@@ -1114,11 +1115,17 @@
 
 
   /* ---------- Expenses + goals (weekly commitment vs combined income) ---------- */
+  // A goal with a future start date is waiting: it stays out of the weekly
+  // table and totals until that day arrives. Money already saved still counts.
+  function goalHasStarted(g){
+    return !g.startDate || parseISODate(g.startDate) <= startOfDay(new Date());
+  }
+
   function computeGoalsCover(){
     var today = startOfDay(new Date());
     var billsWeekly = 0;
     state.bills.forEach(function(b){ billsWeekly += weeklyEquivalent(b); });
-    var goals = state.goals.map(function(g){
+    var goals = state.goals.filter(goalHasStarted).map(function(g){
       var remaining = Math.max(0, (Number(g.targetAmount) || 0) - (Number(g.currentSaved) || 0));
       var daysLeft = Math.round((parseISODate(g.targetDate) - today) / 86400000);
       var overdue = daysLeft < 1;
@@ -1146,6 +1153,8 @@
     }
     var c = computeGoalsCover();
     var hasIncome = c.incomeWeekly > 0;
+    var waiting = state.goals.length - c.goals.length;
+    var waitingNote = waiting > 0 ? '<div class="cover-caption" style="margin-top:10px;">' + waiting + (waiting === 1 ? ' goal is' : ' goals are') + ' waiting for its start date and not counted yet.</div>' : '';
     var goalRows = c.goals.map(function(g){
       var sub = g.funded ? 'Fully funded'
         : g.overdue ? 'Target date has passed, ' + formatCurrency(g.remaining) + ' still to go'
@@ -1173,6 +1182,7 @@
         (hasIncome ? '<div class="gc-row gc-income"><div><div class="gc-name">Combined income</div><div class="gc-sub">All pay converted to a weekly amount</div></div><div class="gc-amt num">' + formatCurrency(c.incomeWeekly) + ' / week</div></div>' : '') +
         leftRow +
         status +
+        waitingNote +
       '</div>';
   }
 
@@ -1401,7 +1411,7 @@
       return '<div class="row" data-id="' + g.id + '" style="display:block;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
         '<div class="row-main"><div class="row-name">' + escapeHTML(g.name) + '</div>' +
-        '<div class="row-sub">Target ' + formatFullDate(parseISODate(g.targetDate)) + ' · ' + formatCurrency(c.remaining) + ' to go</div></div>' +
+        '<div class="row-sub">' + (goalHasStarted(g) ? '' : '<span class="chip">Starts ' + formatShortDate(parseISODate(g.startDate)) + '</span>') + 'Target ' + formatFullDate(parseISODate(g.targetDate)) + ' · ' + formatCurrency(c.remaining) + ' to go</div></div>' +
         '<div class="row-actions"><button data-save-goal="' + g.id + '" title="Add to savings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg></button>' +
         '<button data-edit-goal="' + g.id + '">' + iconEdit() + '</button><button data-del-goal="' + g.id + '">' + iconTrash() + '</button></div>' +
         '</div>' +
@@ -1700,6 +1710,7 @@
       '<div class="field"><label for="goal-target">Target amount</label><input type="number" id="goal-target" inputmode="decimal" step="0.01" min="0" required value="' + (existing?existing.targetAmount:'') + '"></div>' +
       '<div class="field"><label for="goal-date">Target date</label><input type="date" id="goal-date" required value="' + (existing?existing.targetDate:'') + '"></div>' +
       '</div>' +
+      '<div class="field"><label for="goal-start">Start saving from (optional)</label><input type="date" id="goal-start" value="' + (existing && existing.startDate ? existing.startDate : '') + '"><div class="row-sub" style="margin-top:4px;">Leave blank to start straight away. The goal joins the weekly table on this date.</div></div>' +
       '<div class="field"><label for="goal-saved">Already saved</label><input type="number" id="goal-saved" inputmode="decimal" step="0.01" min="0" value="' + (existing?(existing.currentSaved||0):0) + '"></div>' +
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add goal') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="goal-delete">Delete</button>':'') +
@@ -1712,8 +1723,13 @@
         name: document.getElementById('goal-name').value.trim() || 'Goal',
         targetAmount: parseFloat(document.getElementById('goal-target').value) || 0,
         targetDate: document.getElementById('goal-date').value,
+        startDate: document.getElementById('goal-start').value || '',
         currentSaved: parseFloat(document.getElementById('goal-saved').value) || 0
       };
+      if(data.startDate && data.startDate > data.targetDate){
+        alert('The start date needs to be before the target date.');
+        return;
+      }
       if(existing){
         var idx = state.goals.findIndex(function(g){ return g.id === existing.id; });
         state.goals[idx] = data;
