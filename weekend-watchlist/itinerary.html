@@ -528,10 +528,19 @@ function renderGettingThere(stop1) {
   showStop1Mode(available[0].key, stop1);
 }
 
+function formatMinutes(value) {
+  const total = parseInt(value, 10);
+  if (isNaN(total) || total <= 0) return '';
+  if (total < 60) return `${total} min`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
 function renderTravelConnector(stop) {
   const suffix = travelFieldSuffix();
   const mode = stop['Travel Mode From Previous' + suffix];
-  const time = stop['Travel Time From Previous' + suffix];
+  const time = formatMinutes(stop['Travel Time From Previous Minutes' + suffix]);
   const legs = stop['Travel Legs From Previous' + suffix];
 
   if (isUnclear(mode) && isUnclear(time)) return '';
@@ -577,7 +586,7 @@ function renderStop(stop) {
       <span class="type-pill ${slug}">${TYPE_ICON[slug]} ${escapeHtml(stop['Type'] || 'Other')}</span>
       <h2>${escapeHtml(placeName)}</h2>
       <div class="stop-suburb">${escapeHtml(stop['Suburb'] || '')}</div>
-      ${!isUnclear(stop['Suggested Duration']) ? `<div class="stop-duration">⏱️ ${escapeHtml(stop['Suggested Duration'])}</div>` : ''}
+      ${formatMinutes(stop['Suggested Duration Minutes']) ? `<div class="stop-duration">⏱️ ${escapeHtml(formatMinutes(stop['Suggested Duration Minutes']))}</div>` : ''}
       ${!isUnclear(stop['Why This Stop']) ? `<p class="stop-why">${escapeHtml(stop['Why This Stop'])}</p>` : ''}
       ${sourceLink && !isUnclear(sourceLink) ? `<a class="stop-link" href="${escapeHtml(sourceLink)}" target="_blank" rel="noopener">View source →</a>` : ''}
     </div>
