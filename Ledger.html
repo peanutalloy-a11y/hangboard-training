@@ -281,11 +281,30 @@
   a { color: var(--brass); }
   ::selection { background: var(--brass-soft); }
 
+
+  /* Expenses cover card */
+  .cover-card { margin-top: 14px; background: var(--paper-raised); border-radius: var(--radius); padding: 16px; }
+  .cover-title { font-family: "Fredoka", sans-serif; font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .cover-figures { display: flex; gap: 10px; }
+  .cover-fig { flex: 1; background: var(--paper); border-radius: 14px; padding: 12px; min-width: 0; }
+  .cover-fig-label { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+  .cover-fig-value { font-family: "Fredoka", sans-serif; font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .cover-status { margin-top: 12px; padding: 10px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; }
+  .cover-status.ahead { background: var(--green-soft); color: var(--green); }
+  .cover-status.short { background: var(--rust-soft); color: var(--rust); }
+  .cover-status.neutral { background: var(--paper); color: var(--ink-soft); }
+  canvas.cover-canvas { width: 100%; display: block; margin-top: 14px; }
+  .cover-caption { font-size: 12px; color: var(--ink-soft); font-weight: 600; margin-top: 4px; }
+  .cover-card .bill-group-head { background: var(--paper); margin-top: 12px; }
+  .cover-row { display: flex; justify-content: space-between; padding: 9px 4px; font-size: 13.5px; font-weight: 600; border-bottom: 1px dashed var(--line); }
+  .cover-row:last-child { border-bottom: none; }
+  .cover-row span:last-child { font-weight: 700; }
+
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
   .progress-track, .segmented, .horizon-tabs, .tab-pill, .horizon-pill, .segment-pill,
-  .bill-group-head, .bill-group-count {
+  .bill-group-head, .bill-group-count, .cover-card, .cover-fig, .cover-status {
     transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease;
   }
 
@@ -379,6 +398,8 @@
           Add your starting balance to begin forecasting. <button id="balance-empty-cta">Add it now</button>
         </div>
       </div>
+
+      <div id="cover-block"></div>
 
       <div id="forecast-block">
         <div class="horizon-tabs" id="horizon-tabs">
@@ -941,7 +962,143 @@
   function iconChevron(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'; }
 
 
+
+  /* ---------- Expenses cover (weekly set-aside + target balance) ---------- */
+  function weeklyEquivalent(b){
+    var amt = Math.abs(Number(b.amount) || 0);
+    if(b.frequency === 'weekly') return amt;
+    if(b.frequency === 'fortnightly') return amt / 2;
+    if(b.frequency === 'monthly') return amt * 12 / 52;
+    var n = Math.max(1, parseInt(b.intervalDays, 10) || 1);
+    return amt * 7 / n;
+  }
+
+  // Works out the weekly top-up needed to cover every bill, and the lowest
+  // balance the expenses account must hold today so that, with that top-up
+  // landing every 7 days, it never dips below zero. The returned series is
+  // the target balance at the start of each day (before that day's bills).
+  function computeCover(chartDays){
+    var today = startOfDay(new Date());
+    var weekly = 0, byCat = {}, maxInterval = 0;
+    state.bills.forEach(function(b){
+      var w = weeklyEquivalent(b);
+      weekly += w;
+      var k = (b.category && b.category.trim()) ? b.category : 'Other';
+      byCat[k] = (byCat[k] || 0) + w;
+      if(b.frequency === 'custom') maxInterval = Math.max(maxInterval, parseInt(b.intervalDays, 10) || 0);
+    });
+    var H = Math.min(1100, Math.max(400, maxInterval + 30));
+    var end = addDays(today, H);
+    var dayOut = [];
+    for(var i = 0; i <= H; i++) dayOut.push(0);
+    state.bills.forEach(function(b){
+      getOccurrences(parseISODate(b.anchorDate), b.frequency, b.intervalDays, today, end).forEach(function(d){
+        var idx = Math.round((startOfDay(d) - today) / 86400000);
+        if(idx >= 0 && idx <= H) dayOut[idx] += Math.abs(Number(b.amount) || 0);
+      });
+    });
+    // one-off planned expenses dated after today also need covering
+    state.transactions.forEach(function(t){
+      var amt = Number(t.amount) || 0;
+      if(amt >= 0) return;
+      var idx = Math.round((parseISODate(t.date) - today) / 86400000);
+      if(idx >= 1 && idx <= H) dayOut[idx] += -amt;
+    });
+    var bal = 0, min = 0, after = [];
+    for(var j = 0; j <= H; j++){
+      if(j > 0 && j % 7 === 0) bal += weekly;
+      bal -= dayOut[j];
+      after.push(bal);
+      if(bal < min) min = bal;
+    }
+    var buffer = -min;
+    var series = [];
+    for(var k = 0; k <= chartDays; k++) series.push({ day: k, balance: buffer + after[k] + dayOut[k] });
+    var cats = Object.keys(byCat).map(function(c){ return { name: c, weekly: byCat[c] }; })
+      .sort(function(a, b){ return b.weekly - a.weekly; });
+    return { weekly: weekly, buffer: buffer, series: series, byCat: cats };
+  }
+
+  function drawCoverChart(canvas, series, actual){
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || 300, h = 130;
+    canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = h + 'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr); ctx.clearRect(0,0,w,h);
+    var padL = 54, padR = 10, padT = 10, padB = 20;
+    var maxV = Math.max.apply(null, series.map(function(p){ return p.balance; }).concat([actual === null ? 0 : actual, 1]));
+    function xFor(i){ return padL + (i / (series.length - 1)) * (w - padL - padR); }
+    function yFor(v){ return h - padB - (v / maxV) * (h - padT - padB); }
+    ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, yFor(0)); ctx.lineTo(w - padR, yFor(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xFor(0), yFor(0));
+    series.forEach(function(p, i){ ctx.lineTo(xFor(i), yFor(p.balance)); });
+    ctx.lineTo(xFor(series.length - 1), yFor(0)); ctx.closePath();
+    ctx.fillStyle = cssVar('--green-soft'); ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = cssVar('--green'); ctx.lineWidth = 2; ctx.beginPath();
+    series.forEach(function(p, i){ if(i === 0) ctx.moveTo(xFor(i), yFor(p.balance)); else ctx.lineTo(xFor(i), yFor(p.balance)); });
+    ctx.stroke();
+    if(actual !== null){
+      ctx.strokeStyle = cssVar('--brass'); ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+      var ay = yFor(Math.max(0, actual));
+      ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(w - padR, ay); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.fillStyle = cssVar('--ink-soft'); ctx.font = '11px "Nunito Sans", sans-serif';
+    ctx.fillText(formatCurrency(maxV), 2, yFor(maxV) + 4);
+    ctx.fillText(formatCurrency(0), 2, yFor(0) + 4);
+    var today = startOfDay(new Date());
+    ctx.fillText(formatShortDate(today), padL, h - 5);
+    var endLabel = formatShortDate(addDays(today, series.length - 1));
+    ctx.fillText(endLabel, w - padR - ctx.measureText(endLabel).width, h - 5);
+  }
+
+  function renderCover(){
+    var el = document.getElementById('cover-block');
+    if(!el) return;
+    if(!state.bills.length){
+      el.innerHTML = '<div class="empty-state" style="margin-top:14px;">Add your bills in Plan to see how much to set aside each week.</div>';
+      return;
+    }
+    var CHART_DAYS = 84;
+    var c = computeCover(CHART_DAYS);
+    var bal = state.settings.startingBalance;
+    var hasBal = !(bal === null || bal === undefined || bal === '');
+    var actual = hasBal ? Number(bal) : null;
+    var status;
+    if(!hasBal){
+      status = '<div class="cover-status neutral">Add your current balance in Settings to compare it against this target.</div>';
+    } else {
+      var gap = actual - c.buffer;
+      if(gap >= 0.5) status = '<div class="cover-status ahead">You are ' + formatCurrency(gap) + ' ahead of target.</div>';
+      else if(gap <= -0.5) status = '<div class="cover-status short">You are ' + formatCurrency(-gap) + ' short. Top up to stay covered.</div>';
+      else status = '<div class="cover-status ahead">Right on target.</div>';
+    }
+    var isOpen = !!expandedBillGroups['__wb__'];
+    var rows = c.byCat.map(function(r){
+      return '<div class="cover-row"><span>' + escapeHTML(r.name) + '</span><span class="num">' + formatCurrency(r.weekly) + ' / week</span></div>';
+    }).join('');
+    el.innerHTML =
+      '<div class="cover-card">' +
+        '<div class="cover-title">Expenses cover</div>' +
+        '<div class="cover-figures">' +
+          '<div class="cover-fig"><div class="cover-fig-label">Set aside each week</div><div class="cover-fig-value num">' + formatCurrency(c.weekly) + '</div></div>' +
+          '<div class="cover-fig"><div class="cover-fig-label">Should hold today</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div></div>' +
+        '</div>' +
+        status +
+        '<canvas class="cover-canvas" id="cover-canvas"></canvas>' +
+        '<div class="cover-caption">Target balance over the next 12 weeks' + (hasBal ? '. Dashed line is your current balance.' : '.') + '</div>' +
+        '<button type="button" class="bill-group-head" data-toggle-group="__wb__" aria-expanded="' + isOpen + '">' +
+          '<span class="bill-group-chevron' + (isOpen ? ' open' : '') + '">' + iconChevron() + '</span>' +
+          '<span class="bill-group-name">Weekly set-aside by category</span>' +
+        '</button>' +
+        '<div class="bill-group-body' + (isOpen ? ' open' : '') + '"' + (isOpen ? ' style="max-height:none;"' : '') + '>' + rows + '</div>' +
+      '</div>';
+    drawCoverChart(document.getElementById('cover-canvas'), c.series, actual);
+  }
+
   function renderDashboard(){
+    renderCover();
     var bal = state.settings.startingBalance;
     var balEl = document.getElementById('balance-amount');
     var noteEl = document.getElementById('balance-empty-note');
