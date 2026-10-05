@@ -300,6 +300,19 @@
   .cover-row:last-child { border-bottom: none; }
   .cover-row span:last-child { font-weight: 700; }
 
+
+  /* Expenses + goals card */
+  .gc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px dashed var(--line); }
+  .gc-row:last-child { border-bottom: none; }
+  .gc-name { font-size: 14px; font-weight: 700; }
+  .gc-sub { font-size: 12px; color: var(--ink-soft); font-weight: 600; margin-top: 1px; }
+  .gc-amt { font-size: 14.5px; font-weight: 700; white-space: nowrap; }
+  .gc-total { border-top: 2px solid var(--line); border-bottom: none; margin-top: 4px; padding-top: 12px; }
+  .gc-total .gc-name, .gc-total .gc-amt { font-size: 15px; }
+  .gc-income .gc-amt { color: var(--green); }
+  .gc-left .gc-amt.ahead { color: var(--green); }
+  .gc-left .gc-amt.short { color: var(--rust); }
+
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
@@ -400,6 +413,8 @@
       </div>
 
       <div id="cover-block"></div>
+
+      <div id="goals-cover-block"></div>
 
       <div id="forecast-block">
         <div class="horizon-tabs" id="horizon-tabs">
@@ -1097,8 +1112,73 @@
     drawCoverChart(document.getElementById('cover-canvas'), c.series, actual);
   }
 
+
+  /* ---------- Expenses + goals (weekly commitment vs combined income) ---------- */
+  function computeGoalsCover(){
+    var today = startOfDay(new Date());
+    var billsWeekly = 0;
+    state.bills.forEach(function(b){ billsWeekly += weeklyEquivalent(b); });
+    var goals = state.goals.map(function(g){
+      var remaining = Math.max(0, (Number(g.targetAmount) || 0) - (Number(g.currentSaved) || 0));
+      var daysLeft = Math.round((parseISODate(g.targetDate) - today) / 86400000);
+      var overdue = daysLeft < 1;
+      var weeksLeft = Math.max(1, daysLeft / 7);
+      return { id: g.id, name: g.name, remaining: remaining, targetDate: g.targetDate,
+               weekly: remaining / weeksLeft, funded: remaining <= 0, overdue: overdue && remaining > 0 };
+    });
+    var goalsWeekly = goals.reduce(function(s, g){ return s + g.weekly; }, 0);
+    var incomeWeekly = 0;
+    state.incomes.forEach(function(i){
+      var amt = Number(i.amount) || 0;
+      incomeWeekly += i.frequency === 'monthly' ? amt * 12 / 52 : amt / 2;
+    });
+    var total = billsWeekly + goalsWeekly;
+    return { billsWeekly: billsWeekly, goals: goals, goalsWeekly: goalsWeekly,
+             incomeWeekly: incomeWeekly, total: total, left: incomeWeekly - total };
+  }
+
+  function renderGoalsCover(){
+    var el = document.getElementById('goals-cover-block');
+    if(!el) return;
+    if(!state.goals.length){
+      el.innerHTML = '<div class="empty-state" style="margin-top:14px;">Add a savings goal in Goals to see what it costs each week alongside your bills.</div>';
+      return;
+    }
+    var c = computeGoalsCover();
+    var hasIncome = c.incomeWeekly > 0;
+    var goalRows = c.goals.map(function(g){
+      var sub = g.funded ? 'Fully funded'
+        : g.overdue ? 'Target date has passed, ' + formatCurrency(g.remaining) + ' still to go'
+        : formatCurrency(g.remaining) + ' to go by ' + formatShortDate(parseISODate(g.targetDate));
+      return '<div class="gc-row"><div><div class="gc-name">' + escapeHTML(g.name) + '</div><div class="gc-sub">' + sub + '</div></div>' +
+        '<div class="gc-amt num">' + formatCurrency(g.weekly) + ' / week</div></div>';
+    }).join('');
+    var status, leftRow = '';
+    if(!hasIncome){
+      status = '<div class="cover-status neutral">Add your pay in Plan to check whether you can afford this each week.</div>';
+    } else {
+      var left = c.left;
+      leftRow = '<div class="gc-row gc-left"><div class="gc-name">' + (left >= 0 ? 'Left over each week' : 'Short each week') + '</div>' +
+        '<div class="gc-amt num ' + (left >= 0 ? 'ahead' : 'short') + '">' + formatCurrency(Math.abs(left)) + '</div></div>';
+      status = left >= 0
+        ? '<div class="cover-status ahead">You can afford your bills and goals, with ' + formatCurrency(left) + ' a week to spare.</div>'
+        : '<div class="cover-status short">Bills and goals come to ' + formatCurrency(-left) + ' more than your weekly income.</div>';
+    }
+    el.innerHTML =
+      '<div class="cover-card">' +
+        '<div class="cover-title">Expenses and goals</div>' +
+        '<div class="gc-row"><div><div class="gc-name">Bills</div><div class="gc-sub">Weekly set-aside</div></div><div class="gc-amt num">' + formatCurrency(c.billsWeekly) + ' / week</div></div>' +
+        goalRows +
+        '<div class="gc-row gc-total"><div class="gc-name">Total to set aside</div><div class="gc-amt num">' + formatCurrency(c.total) + ' / week</div></div>' +
+        (hasIncome ? '<div class="gc-row gc-income"><div><div class="gc-name">Combined income</div><div class="gc-sub">All pay converted to a weekly amount</div></div><div class="gc-amt num">' + formatCurrency(c.incomeWeekly) + ' / week</div></div>' : '') +
+        leftRow +
+        status +
+      '</div>';
+  }
+
   function renderDashboard(){
     renderCover();
+    renderGoalsCover();
     var bal = state.settings.startingBalance;
     var balEl = document.getElementById('balance-amount');
     var noteEl = document.getElementById('balance-empty-note');
