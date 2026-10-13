@@ -333,7 +333,7 @@ var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
 </script>
-<script>const APP_VERSION = "13 Oct 2026, build 5";
+<script>const APP_VERSION = "13 Oct 2026, build 6";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -2721,14 +2721,14 @@ function FingerApp() {
         height: 1,
         background: "#DDD8D0"
       }
-    })), /*#__PURE__*/React.createElement("p", {
+    })), /*#__PURE__*/React.createElement(DriveBackupPanel, null), /*#__PURE__*/React.createElement("p", {
       style: {
         fontFamily: F.b,
         fontSize: 11,
-        color: "#3A8A7A",
+        color: "#999",
         marginBottom: 10
       }
-    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "Or keep your own copy: download the backup file, or restore one. One file covers Send Log, Climb Log and Stretch."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
@@ -2749,7 +2749,7 @@ function FingerApp() {
         border: `1.5px solid ${loadStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: loadStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, loadStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
+    }, loadStatus === "exported" ? "DOWNLOADED ✓" : "DOWNLOAD FILE"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -2765,7 +2765,7 @@ function FingerApp() {
         border: `1.5px solid ${loadStatus === "loaded" ? "#3A8A7A" : loadStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: loadStatus === "loaded" || loadStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, loadStatus === "loaded" ? "RESTORED ✓" : loadStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
+    }, loadStatus === "loaded" ? "RESTORED ✓" : loadStatus === "error" ? "INVALID FILE" : "RESTORE FROM FILE")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
@@ -7033,14 +7033,14 @@ function ClimbApp() {
         height: 1,
         background: "#DDD8D0"
       }
-    })), /*#__PURE__*/React.createElement("p", {
+    })), /*#__PURE__*/React.createElement(DriveBackupPanel, null), /*#__PURE__*/React.createElement("p", {
       style: {
         fontFamily: F.b,
         fontSize: 11,
-        color: "#3A8A7A",
+        color: "#999",
         marginBottom: 10
       }
-    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "Or keep your own copy: download the backup file, or restore one. One file covers Send Log, Climb Log and Stretch."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
@@ -7061,7 +7061,7 @@ function ClimbApp() {
         border: `1.5px solid ${backupStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: backupStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
+    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "DOWNLOAD FILE"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -7077,7 +7077,7 @@ function ClimbApp() {
         border: `1.5px solid ${backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: backupStatus === "restored" || backupStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
+    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE FROM FILE")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
@@ -8811,7 +8811,7 @@ function getDriveToken() {
       include_granted_scopes: false,
       callback: resp => {
         if (!resp || resp.error || !resp.access_token) {
-          reject(new Error(resp && resp.error === "access_denied" ? "Google access wasn't allowed, so the photo wasn't saved." : "Google sign-in didn't finish. Try again."));
+          reject(new Error(resp && resp.error === "access_denied" ? "Google access wasn't allowed, so nothing was saved." : "Google sign-in didn't finish. Try again."));
           return;
         }
         try {
@@ -11244,14 +11244,14 @@ function StretchApp() {
         height: 1,
         background: "#DDD8D0"
       }
-    })), /*#__PURE__*/React.createElement("p", {
+    })), /*#__PURE__*/React.createElement(DriveBackupPanel, null), /*#__PURE__*/React.createElement("p", {
       style: {
         fontFamily: F.b,
         fontSize: 11,
-        color: "#3A8A7A",
+        color: "#999",
         marginBottom: 10
       }
-    }, "✓ Your data is saved automatically on this device. One backup covers Send Log, Climb Log, and Stretch together — export it periodically for extra safety or to move to another device."), /*#__PURE__*/React.createElement("div", {
+    }, "Or keep your own copy: download the backup file, or restore one. One file covers Send Log, Climb Log and Stretch."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8
@@ -11272,7 +11272,7 @@ function StretchApp() {
         border: `1.5px solid ${backupStatus === "exported" ? "#2A2520" : "#E8E4DE"}`,
         color: backupStatus === "exported" ? "#F5F2ED" : "#2A2520"
       }
-    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "BACKUP EVERYTHING"), /*#__PURE__*/React.createElement("button", {
+    }, backupStatus === "exported" ? "DOWNLOADED ✓" : "DOWNLOAD FILE"), /*#__PURE__*/React.createElement("button", {
       onClick: () => csvInputRef.current?.click(),
       style: {
         flex: 1,
@@ -11288,7 +11288,7 @@ function StretchApp() {
         border: `1.5px solid ${backupStatus === "restored" ? "#3A8A7A" : backupStatus === "error" ? "#C45A5A" : "#E8E4DE"}`,
         color: backupStatus === "restored" || backupStatus === "error" ? "#FFF" : "#2A2520"
       }
-    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE EVERYTHING")), /*#__PURE__*/React.createElement("input", {
+    }, backupStatus === "restored" ? "RESTORED ✓" : backupStatus === "error" ? "INVALID FILE" : "RESTORE FROM FILE")), /*#__PURE__*/React.createElement("input", {
       ref: csvInputRef,
       type: "file",
       accept: ".csv,text/csv",
@@ -11970,6 +11970,580 @@ function StretchApp() {
   }
   return null;
 }
+// ═══════════════════════════════════════════════════
+// ─── GOOGLE DRIVE BACKUP ─────────────────────────────
+// Saves the same unified backup file that "Download file" makes into a private "Send Log Backups"
+// folder in the user's Drive. Runs by itself whenever the Google sign-in from a photo or an earlier
+// backup is still valid (they last an hour) and something has changed. Otherwise a reminder line
+// shows under the tabs once the last backup is over BACKUP_REMIND_DAYS old. Keeps the newest
+// BACKUP_KEEP files and moves older ones to the Drive bin. Backups are never shared.
+// ═══════════════════════════════════════════════════
+const BACKUP_FOLDER_NAME = "Send Log Backups";
+const BACKUP_FOLDER_KEY = "send-log-backup-folder";
+const BACKUP_META_KEY = "send-log-backup-meta";
+const BACKUP_KEEP = 10;
+const BACKUP_REMIND_DAYS = 3;
+const BACKUP_EVENT = "sendlog-backup-change";
+const DAY_MS = 86400000;
+function readBackupMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(BACKUP_META_KEY) || "null") || {};
+  } catch (e) {
+    return {};
+  }
+}
+function writeBackupMeta(m) {
+  try {
+    localStorage.setItem(BACKUP_META_KEY, JSON.stringify(m));
+  } catch (e) {}
+  window.dispatchEvent(new Event(BACKUP_EVENT));
+}
+function hashText(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36) + "-" + s.length;
+}
+
+// null = not checked yet, true = this phone has changes the last Drive backup doesn't.
+let backupDirty = null;
+function refreshBackupDirty() {
+  const csv = buildUnifiedCSV();
+  const sig = hashText(csv);
+  const was = backupDirty;
+  backupDirty = readBackupMeta().sig !== sig;
+  if (was !== backupDirty) window.dispatchEvent(new Event(BACKUP_EVENT));
+  return {
+    csv,
+    sig
+  };
+}
+async function backupFetch(token, url, opts = {}, asText = false) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(opts.headers || {})
+    }
+  });
+  if (res.status === 401) {
+    clearDriveToken();
+    const e = new Error("Your Google sign-in has expired. Tap Back up again.");
+    e.expired = true;
+    throw e;
+  }
+  if (!res.ok) throw new Error(`Google Drive returned an error (${res.status}). Try again.`);
+  if (res.status === 204) return null;
+  return asText ? res.text() : res.json();
+}
+async function ensureBackupFolder(token) {
+  let id = null;
+  try {
+    id = localStorage.getItem(BACKUP_FOLDER_KEY);
+  } catch (e) {}
+  if (id) {
+    try {
+      const f = await backupFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
+      if (f && !f.trashed) return id;
+    } catch (e) {
+      if (e.expired) throw e;
+    }
+  }
+  const q = encodeURIComponent(`name='${BACKUP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await backupFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+  if (found.files && found.files.length) {
+    id = found.files[0].id;
+  } else {
+    const made = await backupFetch(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: BACKUP_FOLDER_NAME,
+        mimeType: "application/vnd.google-apps.folder"
+      })
+    });
+    id = made.id;
+  }
+  try {
+    localStorage.setItem(BACKUP_FOLDER_KEY, id);
+  } catch (e) {}
+  return id;
+}
+function backupFileName(d) {
+  const p = n => String(n).padStart(2, "0");
+  return `Send Log backup ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}.csv`;
+}
+async function listBackups(token, folderId) {
+  const fid = folderId || (await ensureBackupFolder(token));
+  const q = encodeURIComponent(`'${fid}' in parents and trashed=false`);
+  const res = await backupFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,modifiedTime,size)`);
+  return res.files || [];
+}
+async function pruneBackups(token, folderId) {
+  const files = await listBackups(token, folderId);
+  for (const f of files.slice(BACKUP_KEEP)) {
+    await backupFetch(token, `https://www.googleapis.com/drive/v3/files/${f.id}?fields=id`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        trashed: true
+      })
+    });
+  }
+}
+let backupInFlight = null;
+// Automatic backups keep one file per day (updating today's file), so a busy session doesn't use
+// up all BACKUP_KEEP copies and the history still reaches back over several days. Tapping
+// Back up now always makes a new file.
+function localDay(d) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+function runBackup(token, {
+  force = false
+} = {}) {
+  if (backupInFlight) return backupInFlight;
+  backupInFlight = (async () => {
+    const {
+      csv,
+      sig
+    } = refreshBackupDirty();
+    if (!force && !backupDirty) return {
+      skipped: true
+    };
+    const folderId = await ensureBackupFolder(token);
+    const now = new Date();
+    const meta = readBackupMeta();
+    const multipart = m => {
+      const body = new FormData();
+      body.append("metadata", new Blob([JSON.stringify(m)], {
+        type: "application/json"
+      }));
+      body.append("file", new Blob([csv], {
+        type: "text/csv"
+      }));
+      return body;
+    };
+    let up = null;
+    if (!force && meta.fileId && meta.day === localDay(now)) {
+      try {
+        up = await backupFetch(token, `https://www.googleapis.com/upload/drive/v3/files/${meta.fileId}?uploadType=multipart&fields=id,name,trashed`, {
+          method: "PATCH",
+          body: multipart({
+            name: backupFileName(now)
+          })
+        });
+        if (up && up.trashed) up = null;
+      } catch (e) {
+        if (e.expired) throw e;
+        up = null; // today's file was deleted in Drive, so make a new one
+      }
+    }
+    if (!up) {
+      up = await backupFetch(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", {
+        method: "POST",
+        body: multipart({
+          name: backupFileName(now),
+          mimeType: "text/csv",
+          parents: [folderId]
+        })
+      });
+    }
+    backupDirty = false;
+    writeBackupMeta({
+      at: now.getTime(),
+      sig,
+      name: up.name,
+      fileId: up.id,
+      day: localDay(now)
+    });
+    try {
+      await pruneBackups(token, folderId);
+    } catch (e) {}
+    return up;
+  })().finally(() => {
+    backupInFlight = null;
+  });
+  return backupInFlight;
+}
+
+// Call straight from a tap: the Google sign-in window only opens if nothing is awaited first.
+function backupNowFromTap() {
+  return getDriveToken().then(token => runBackup(token, {
+    force: true
+  }));
+}
+function listBackupsFromTap() {
+  return getDriveToken().then(token => listBackups(token));
+}
+async function restoreBackupFromDrive(id) {
+  const token = storedDriveToken();
+  if (!token) throw new Error("Your Google sign-in has expired. Tap Restore from Drive again.");
+  const text = await backupFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {}, true);
+  restoreUnifiedCSV(text);
+}
+
+// Silent automatic backup: a short while after the training data changes, and whenever the app
+// comes back into view. Only uploads when a valid sign-in already exists, so it never pops up a
+// Google window by itself.
+let backupTimer = null;
+let backupDueAt = 0;
+function scheduleAutoBackup(delay = 8000) {
+  // A run that's already due sooner wins, so a burst of saves can't keep pushing it back.
+  const due = Date.now() + delay;
+  if (backupTimer && backupDueAt <= due) return;
+  clearTimeout(backupTimer);
+  backupDueAt = due;
+  backupTimer = setTimeout(() => {
+    backupTimer = null;
+    const go = () => {
+      try {
+        refreshBackupDirty();
+        const token = storedDriveToken();
+        if (backupDirty && token) runBackup(token).catch(() => {});
+      } catch (e) {}
+    };
+    if (window.requestIdleCallback) window.requestIdleCallback(go, {
+      timeout: 2000
+    });else go();
+  }, delay);
+}
+(function watchTrainingData() {
+  const watched = () => [STORAGE_KEY, SESSIONS_CONFIG_KEY, CLIMB_STORAGE_KEY, STRETCH_STORAGE_KEY];
+  try {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      orig.call(this, k, v);
+      try {
+        if (this === window.localStorage && watched().includes(k)) scheduleAutoBackup();
+        // A fresh Google sign-in (e.g. from saving a photo) is a chance to back up straight away.
+        if (this === window.localStorage && k === DRIVE_TOKEN_KEY) scheduleAutoBackup(1500);
+      } catch (e) {}
+    };
+  } catch (e) {}
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") scheduleAutoBackup(2000);
+  });
+  scheduleAutoBackup(1500);
+})();
+function useBackupState() {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const h = () => bump(n => n + 1);
+    window.addEventListener(BACKUP_EVENT, h);
+    return () => window.removeEventListener(BACKUP_EVENT, h);
+  }, []);
+  return {
+    meta: readBackupMeta(),
+    dirty: backupDirty
+  };
+}
+function formatBackupTime(ms) {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short"
+  });
+  let h = d.getHours();
+  const ap = h >= 12 ? "pm" : "am";
+  h = h % 12 || 12;
+  return `${date}, ${h}:${String(d.getMinutes()).padStart(2, "0")} ${ap}`;
+}
+function formatBackupListTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }) + ", " + formatBackupTime(d.getTime()).split(", ")[1];
+}
+
+// The slim reminder line under the FINGERS / CLIMBS / STRETCH tabs.
+function BackupReminder() {
+  const {
+    meta,
+    dirty
+  } = useBackupState();
+  const [state, setState] = useState({
+    s: "idle"
+  });
+  const due = dirty === true && (!meta.at || Date.now() - meta.at > BACKUP_REMIND_DAYS * DAY_MS);
+  if (!due && state.s === "idle") return null;
+  const tap = () => {
+    setState({
+      s: "busy"
+    });
+    backupNowFromTap().then(() => {
+      setState({
+        s: "done"
+      });
+      setTimeout(() => setState({
+        s: "idle"
+      }), 2500);
+    }).catch(e => setState({
+      s: "error",
+      msg: e.message
+    }));
+  };
+  const days = meta.at ? Math.floor((Date.now() - meta.at) / DAY_MS) : null;
+  const label = state.s === "done" ? "Backed up to Drive ✓" : state.s === "error" ? state.msg : days == null ? "Not backed up to Drive yet" : `Last backup ${days} days ago`;
+  const color = state.s === "done" ? "#3A8A7A" : state.s === "error" ? "#C45A5A" : "#8A6A1A";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 520,
+      margin: "0 auto",
+      padding: "0 18px 10px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontFamily: F.b,
+      fontSize: 11,
+      color,
+      lineHeight: 1.35
+    }
+  }, label), state.s !== "done" && /*#__PURE__*/React.createElement("button", {
+    onClick: tap,
+    disabled: state.s === "busy",
+    style: {
+      flexShrink: 0,
+      padding: "6px 12px",
+      borderRadius: 8,
+      fontSize: 10,
+      fontWeight: 700,
+      fontFamily: F.m,
+      letterSpacing: 1,
+      cursor: "pointer",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      color: "#2A2520",
+      opacity: state.s === "busy" ? 0.6 : 1
+    }
+  }, state.s === "busy" ? "BACKING UP…" : state.s === "error" ? "TRY AGAIN" : "BACK UP"));
+}
+
+// Drive backup controls, shown at the top of the BACKUP section in each settings page.
+function DriveBackupPanel() {
+  const {
+    meta,
+    dirty
+  } = useBackupState();
+  const [busy, setBusy] = useState(null); // "backup" | "list" | "restore"
+  const [msg, setMsg] = useState(null); // { text, tone }
+  const [files, setFiles] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+  const btn = active => ({
+    flex: 1,
+    padding: "12px 0",
+    borderRadius: 8,
+    fontSize: 11,
+    fontWeight: 700,
+    fontFamily: F.m,
+    cursor: "pointer",
+    letterSpacing: 1,
+    transition: "all 0.2s",
+    background: active ? "#2A2520" : "#FFF",
+    border: `1.5px solid ${active ? "#2A2520" : "#E8E4DE"}`,
+    color: active ? "#F5F2ED" : "#2A2520"
+  });
+  const backUp = () => {
+    setBusy("backup");
+    setMsg(null);
+    backupNowFromTap().then(() => {
+      setBusy(null);
+      setMsg({
+        text: "Backed up to Drive ✓",
+        tone: "ok"
+      });
+      setTimeout(() => setMsg(m => m && m.tone === "ok" ? null : m), 3000);
+    }).catch(e => {
+      setBusy(null);
+      setMsg({
+        text: e.message,
+        tone: "bad"
+      });
+    });
+  };
+  const openRestore = () => {
+    if (files) {
+      setFiles(null);
+      setConfirmId(null);
+      return;
+    }
+    setBusy("list");
+    setMsg(null);
+    listBackupsFromTap().then(list => {
+      setBusy(null);
+      setFiles(list);
+    }).catch(e => {
+      setBusy(null);
+      setMsg({
+        text: e.message,
+        tone: "bad"
+      });
+    });
+  };
+  const restore = id => {
+    setBusy("restore");
+    setMsg(null);
+    restoreBackupFromDrive(id).then(() => {
+      setMsg({
+        text: "Restored ✓ Reloading…",
+        tone: "ok"
+      });
+      setTimeout(() => window.location.reload(), 900);
+    }).catch(e => {
+      setBusy(null);
+      setMsg({
+        text: e.message || "That backup couldn't be read.",
+        tone: "bad"
+      });
+    });
+  };
+  const status = meta.at ? `Last backed up ${formatBackupTime(meta.at)}` : "Not backed up to Drive yet";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 12,
+      color: "#2A2520",
+      marginBottom: 4
+    }
+  }, status, meta.at && dirty === true && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#999"
+    }
+  }, " \xB7 newer changes waiting")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#999",
+      marginBottom: 10,
+      lineHeight: 1.4
+    }
+  }, "Backs up to your Google Drive by itself while you're signed in, keeping the last ", BACKUP_KEEP, ". Backups are private to you."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: backUp,
+    disabled: !!busy,
+    style: btn(false)
+  }, busy === "backup" ? "BACKING UP…" : "BACK UP NOW"), /*#__PURE__*/React.createElement("button", {
+    onClick: openRestore,
+    disabled: !!busy && busy !== "list",
+    style: btn(!!files)
+  }, busy === "list" ? "LOADING…" : files ? "CLOSE" : "RESTORE FROM DRIVE")), msg && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      marginTop: 8,
+      color: msg.tone === "ok" ? "#3A8A7A" : "#C45A5A"
+    }
+  }, msg.text), files && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      borderRadius: 8,
+      overflow: "hidden"
+    }
+  }, files.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#999",
+      padding: 12
+    }
+  }, "No backups in Drive yet."), files.map((f, i) => /*#__PURE__*/React.createElement("div", {
+    key: f.id,
+    style: {
+      padding: "10px 12px",
+      borderTop: i ? "1px solid #F0ECE6" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontFamily: F.b,
+      fontSize: 12,
+      color: "#2A2520"
+    }
+  }, formatBackupListTime(f.modifiedTime), i === 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#3A8A7A"
+    }
+  }, " \xB7 latest"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#AAA",
+      fontSize: 10
+    }
+  }, " \xB7 ", Math.max(1, Math.round(Number(f.size || 0) / 1024)), " KB")), confirmId !== f.id && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmId(f.id),
+    disabled: !!busy,
+    style: {
+      padding: "6px 10px",
+      borderRadius: 6,
+      fontSize: 10,
+      fontWeight: 700,
+      fontFamily: F.m,
+      letterSpacing: 1,
+      cursor: "pointer",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      color: "#2A2520"
+    }
+  }, "RESTORE")), confirmId === f.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#666",
+      marginBottom: 8,
+      lineHeight: 1.4
+    }
+  }, "Adds anything in this backup that isn't on this phone. Nothing here gets deleted."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => restore(f.id),
+    disabled: !!busy,
+    style: {
+      ...btn(true),
+      padding: "9px 0"
+    }
+  }, busy === "restore" ? "RESTORING…" : "RESTORE THIS"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmId(null),
+    disabled: busy === "restore",
+    style: {
+      ...btn(false),
+      padding: "9px 0"
+    }
+  }, "CANCEL")))))));
+}
 function RootApp() {
   const [page, setPageRaw] = useState("fingers");
   const setPage = p => {
@@ -12041,7 +12615,7 @@ function RootApp() {
       border: `1.5px solid ${page === "stretch" ? "#2A2520" : "#E8E4DE"}`,
       color: page === "stretch" ? "#F5F2ED" : "#999"
     }
-  }, "STRETCH"))), /*#__PURE__*/React.createElement("div", {
+  }, "STRETCH")), /*#__PURE__*/React.createElement(BackupReminder, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: page === "fingers" ? "block" : "none"
     }
