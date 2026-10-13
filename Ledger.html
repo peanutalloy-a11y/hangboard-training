@@ -13,6 +13,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="manifest" href="manifest.json">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <title>Jarful</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -288,6 +289,12 @@
   .cover-figures { display: flex; gap: 10px; }
   .cover-fig { flex: 1; background: var(--paper); border-radius: 14px; padding: 12px; min-width: 0; }
   .cover-fig-label { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+  .cover-fig-note { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
+  .cover-fig.wide { margin-top: 10px; }
+  .cover-fig.wide.ahead { background: var(--green-soft); }
+  .cover-fig.wide.ahead .cover-fig-value { color: var(--green); }
+  .cover-fig.wide.short { background: var(--rust-soft); }
+  .cover-fig.wide.short .cover-fig-value { color: var(--rust); }
   .cover-fig-value { font-family: "Fredoka", sans-serif; font-size: 24px; font-weight: 700; margin-top: 2px; }
   .cover-status { margin-top: 12px; padding: 10px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; }
   .cover-status.ahead { background: var(--green-soft); color: var(--green); }
@@ -312,6 +319,32 @@
   .gc-income .gc-amt { color: var(--green); }
   .gc-left .gc-amt.ahead { color: var(--green); }
   .gc-left .gc-amt.short { color: var(--rust); }
+
+
+  /* Google Drive backup */
+  .backup-reminder { display: flex; align-items: center; gap: 10px; padding: 0 0 10px; font-size: 12.5px; font-weight: 700; color: var(--brass); }
+  .backup-reminder[hidden] { display: none; }
+  .backup-reminder span { flex: 1; }
+  .backup-reminder.ok { color: var(--green); }
+  .backup-reminder.bad { color: var(--rust); }
+  .backup-reminder button {
+    flex-shrink: 0; border: none; border-radius: 20px; padding: 6px 14px; font: inherit; font-size: 12px; font-weight: 800;
+    background: var(--brass-soft); color: var(--ink); cursor: pointer;
+  }
+  .drive-panel { background: var(--paper-raised); border-radius: var(--radius); padding: 14px; }
+  .drive-panel .waiting { color: var(--brass); }
+  .drive-msg { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 700; }
+  .drive-msg.ok { background: var(--green-soft); color: var(--green); }
+  .drive-msg.bad { background: var(--rust-soft); color: var(--rust); }
+  .drive-list { margin-top: 10px; }
+  .drive-file { padding: 10px 2px; border-top: 1px dashed var(--line); }
+  .drive-file:first-child { border-top: none; }
+  .drive-file-row { display: flex; align-items: center; gap: 10px; }
+  .drive-file-row span { flex: 1; font-size: 13px; font-weight: 700; }
+  .drive-file-row small { color: var(--ink-soft); font-weight: 600; }
+  .drive-file .btn { padding: 7px 12px; font-size: 12.5px; }
+  .drive-confirm { margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+  .drive-confirm .field-row { gap: 8px; margin-top: 8px; }
 
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
@@ -394,6 +427,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.55 1h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1z"/></svg>
         </button>
       </div>
+    </div>
+    <div class="backup-reminder" id="backup-reminder" hidden>
+      <span id="backup-reminder-text"></span>
+      <button type="button" id="backup-reminder-btn">Back up</button>
     </div>
   </header>
 
@@ -496,6 +533,16 @@
       </div>
       <button class="btn btn-primary btn-block" id="save-balance">Save balance</button>
 
+      <div class="section-title">Budgeting</div>
+      <div class="field">
+        <label for="settings-topup-day">Weekly top-up day</label>
+        <select id="settings-topup-day">
+          <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+          <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+        </select>
+        <div class="row-sub" style="margin-top:6px;">The day you move the weekly set-aside into your expenses account. "Should hold" is worked out for this day.</div>
+      </div>
+
       <div class="section-title">Appearance</div>
       <div class="row">
         <div class="row-main"><div class="row-name">Dark mode</div></div>
@@ -503,6 +550,17 @@
       </div>
 
       <div class="section-title">Backup</div>
+      <div class="drive-panel">
+        <div class="row-name" id="drive-status">Not backed up to Drive yet</div>
+        <div class="row-sub" style="margin:4px 0 12px;">Backs up to a private Jarful Backups folder in your Google Drive by itself while you're signed in, keeping the last 10. Signing in here or in the Send Log covers both apps.</div>
+        <div class="field-row" style="gap:8px;">
+          <button type="button" class="btn btn-primary" style="flex:1;" id="drive-backup-btn">Back up now</button>
+          <button type="button" class="btn" style="flex:1;" id="drive-restore-btn">Restore from Drive</button>
+        </div>
+        <div class="drive-msg" id="drive-msg" hidden></div>
+        <div class="drive-list" id="drive-list" hidden></div>
+      </div>
+      <div class="row-sub" style="margin:16px 0 8px;">Or keep your own copy as a file:</div>
       <button class="btn btn-block" id="export-btn" style="margin-bottom:10px;">Export backup (.csv)</button>
       <input type="file" id="import-input" accept=".csv" style="display:none;">
       <button class="btn btn-block" id="import-btn">Import backup (.csv)</button>
@@ -661,6 +719,7 @@
   function saveState(){
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     catch(e){ console.error('Failed to save data', e); alert('Could not save your data — your browser storage may be full or blocked in this mode.'); }
+    if(typeof scheduleAutoBackup === 'function') scheduleAutoBackup();
   }
   state = loadState();
   // Guard against older/partial saves missing a field
@@ -688,16 +747,20 @@
   function row(obj){
     return CSV_HEADER.map(function(h){ return obj[h] !== undefined ? obj[h] : ''; });
   }
-  function exportCSV(){
+  function buildCSV(){
     var rows = [CSV_HEADER];
     rows.push(row({RecordType:'SETTING', Name:'StartingBalance', Amount: state.settings.startingBalance === null ? '' : state.settings.startingBalance}));
     rows.push(row({RecordType:'SETTING', Name:'DarkMode', Amount: state.settings.darkMode ? 1 : 0}));
+    rows.push(row({RecordType:'SETTING', Name:'TopUpDay', Amount: topUpDay()}));
     state.incomes.forEach(function(i){ rows.push(row({RecordType:'INCOME', ID:i.id, Name:i.name, Amount:i.amount, Frequency:i.frequency, AnchorDate:i.anchorDate})); });
     state.bills.forEach(function(b){ rows.push(row({RecordType:'BILL', ID:b.id, Name:b.name, Amount:b.amount, Frequency:b.frequency, IntervalDays:b.intervalDays||'', AnchorDate:b.anchorDate, Category:b.category||'', Notes:(b.paidDates||[]).join('|')})); });
     state.categories.forEach(function(c){ rows.push(row({RecordType:'CATEGORY', ID:c.id, Name:c.name, Amount:c.budget})); });
     state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||''})); });
     state.transactions.forEach(function(t){ rows.push(row({RecordType:'TRANSACTION', ID:t.id, Name:t.name, Amount:t.amount, Category:t.category||'', Date:t.date})); });
-    var csv = rows.map(function(r){ return r.map(csvValue).join(','); }).join('\r\n');
+    return rows.map(function(r){ return r.map(csvValue).join(','); }).join('\r\n');
+  }
+  function exportCSV(){
+    var csv = buildCSV();
     var blob = new Blob([csv], {type:'text/csv'});
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -745,6 +808,7 @@
         case 'SETTING':
           if(o.Name === 'StartingBalance') next.settings.startingBalance = o.Amount === '' ? null : parseFloat(o.Amount);
           if(o.Name === 'DarkMode') next.settings.darkMode = o.Amount === '1';
+          if(o.Name === 'TopUpDay' && o.Amount !== '') next.settings.topUpDay = parseInt(o.Amount, 10);
           break;
         case 'INCOME':
           next.incomes.push({ id:o.ID||uid(), name:o.Name, amount:parseFloat(o.Amount)||0, frequency:o.Frequency||'monthly', anchorDate:o.AnchorDate });
@@ -993,6 +1057,12 @@
   // balance the expenses account must hold today so that, with that top-up
   // landing every 7 days, it never dips below zero. The returned series is
   // the target balance at the start of each day (before that day's bills).
+  // Weekday the weekly set-aside is moved into the expenses account (0 = Sun).
+  function topUpDay(){
+    var d = parseInt(state.settings.topUpDay, 10);
+    return (d >= 0 && d <= 6) ? d : 1;
+  }
+
   function computeCover(chartDays){
     var today = startOfDay(new Date());
     var weekly = 0, byCat = {}, maxInterval = 0;
@@ -1020,22 +1090,29 @@
       var idx = Math.round((parseISODate(t.date) - today) / 86400000);
       if(idx >= 1 && idx <= H) dayOut[idx] += -amt;
     });
-    var bal = 0, min = 0, after = [];
-    for(var j = 0; j <= H; j++){
-      if(j > 0 && j % 7 === 0) bal += weekly;
+    // Anchor on the next top-up day (today counts if it is that day). The
+    // figure is what the account should hold that morning, before that
+    // week's set-aside goes in. Bills before then come out of today's balance.
+    var k0 = (topUpDay() - today.getDay() + 7) % 7;
+    var billsBefore = 0;
+    for(var b0 = 0; b0 < k0; b0++) billsBefore += dayOut[b0];
+    var bal = 0, min = 0, startOf = [];
+    for(var j = k0; j <= H; j++){
+      startOf.push(bal);
+      if((j - k0) % 7 === 0) bal += weekly;
       bal -= dayOut[j];
-      after.push(bal);
       if(bal < min) min = bal;
     }
     var buffer = -min;
     var series = [];
-    for(var k = 0; k <= chartDays; k++) series.push({ day: k, balance: buffer + after[k] + dayOut[k] });
+    for(var k = 0; k <= chartDays && k < startOf.length; k++) series.push({ day: k, balance: buffer + startOf[k] });
     var cats = Object.keys(byCat).map(function(c){ return { name: c, weekly: byCat[c] }; })
       .sort(function(a, b){ return b.weekly - a.weekly; });
-    return { weekly: weekly, buffer: buffer, series: series, byCat: cats };
+    return { weekly: weekly, buffer: buffer, series: series, byCat: cats,
+             holdDate: addDays(today, k0), billsBefore: billsBefore };
   }
 
-  function drawCoverChart(canvas, series, actual){
+  function drawCoverChart(canvas, series, actual, startDate){
     var ctx = canvas.getContext('2d');
     var dpr = window.devicePixelRatio || 1;
     var w = canvas.clientWidth || 300, h = 130;
@@ -1064,9 +1141,24 @@
     ctx.fillText(formatCurrency(maxV), 2, yFor(maxV) + 4);
     ctx.fillText(formatCurrency(0), 2, yFor(0) + 4);
     var today = startOfDay(new Date());
-    ctx.fillText(formatShortDate(today), padL, h - 5);
-    var endLabel = formatShortDate(addDays(today, series.length - 1));
+    ctx.fillText(formatShortDate(startDate), padL, h - 5);
+    var endLabel = formatShortDate(addDays(startDate, series.length - 1));
     ctx.fillText(endLabel, w - padR - ctx.measureText(endLabel).width, h - 5);
+  }
+
+  // Weekly income left after bills and any goals that have started.
+  function disposableBox(){
+    var g = computeGoalsCover();
+    if(g.incomeWeekly <= 0){
+      return '<div class="cover-fig wide"><div class="cover-fig-label">Disposable each week</div><div class="cover-fig-note">Add your pay in Plan to see this.</div></div>';
+    }
+    var left = g.left;
+    var note = 'Income ' + formatCurrency(g.incomeWeekly) + ' less bills ' + formatCurrency(g.billsWeekly) +
+      (g.goalsWeekly > 0 ? ' and goals ' + formatCurrency(g.goalsWeekly) : '');
+    return '<div class="cover-fig wide ' + (left >= 0 ? 'ahead' : 'short') + '">' +
+      '<div class="cover-fig-label">' + (left >= 0 ? 'Disposable each week' : 'Short each week') + '</div>' +
+      '<div class="cover-fig-value num">' + formatCurrency(Math.abs(left)) + '</div>' +
+      '<div class="cover-fig-note">' + note + '</div></div>';
   }
 
   function renderCover(){
@@ -1081,14 +1173,18 @@
     var bal = state.settings.startingBalance;
     var hasBal = !(bal === null || bal === undefined || bal === '');
     var actual = hasBal ? Number(bal) : null;
+    var holdLabel = (c.holdDate.getTime() === startOfDay(new Date()).getTime() ? 'today, ' : '') +
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][c.holdDate.getDay()] + ' ' + formatShortDate(c.holdDate);
+    var projected = hasBal ? actual - c.billsBefore : null;
     var status;
     if(!hasBal){
       status = '<div class="cover-status neutral">Add your current balance in Settings to compare it against this target.</div>';
     } else {
-      var gap = actual - c.buffer;
-      if(gap >= 0.5) status = '<div class="cover-status ahead">You are ' + formatCurrency(gap) + ' ahead of target.</div>';
-      else if(gap <= -0.5) status = '<div class="cover-status short">You are ' + formatCurrency(-gap) + ' short. Top up to stay covered.</div>';
-      else status = '<div class="cover-status ahead">Right on target.</div>';
+      var gap = projected - c.buffer;
+      var proj = c.billsBefore > 0 ? '<div class="cover-status neutral" style="margin-top:10px;">After ' + formatCurrency(c.billsBefore) + ' of bills before then, your balance should be ' + formatCurrency(projected) + ' on ' + holdLabel + '.</div>' : '';
+      if(gap >= 0.5) status = proj + '<div class="cover-status ahead">You are ' + formatCurrency(gap) + ' ahead of target.</div>';
+      else if(gap <= -0.5) status = proj + '<div class="cover-status short">You are ' + formatCurrency(-gap) + ' short. Top up to stay covered.</div>';
+      else status = proj + '<div class="cover-status ahead">Right on target.</div>';
     }
     var isOpen = !!expandedBillGroups['__wb__'];
     var rows = c.byCat.map(function(r){
@@ -1098,19 +1194,20 @@
       '<div class="cover-card">' +
         '<div class="cover-title">Expenses cover</div>' +
         '<div class="cover-figures">' +
-          '<div class="cover-fig"><div class="cover-fig-label">Set aside each week</div><div class="cover-fig-value num">' + formatCurrency(c.weekly) + '</div></div>' +
-          '<div class="cover-fig"><div class="cover-fig-label">Should hold today</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div></div>' +
+          '<div class="cover-fig"><div class="cover-fig-label">Set aside each week</div><div class="cover-fig-value num">' + formatCurrency(c.weekly) + '</div><div class="cover-fig-note">Weekly average of all bills</div></div>' +
+          '<div class="cover-fig"><div class="cover-fig-label">Should hold as of ' + holdLabel + '</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div><div class="cover-fig-note">Before that week\'s set-aside goes in</div></div>' +
         '</div>' +
+        disposableBox() +
         status +
         '<canvas class="cover-canvas" id="cover-canvas"></canvas>' +
-        '<div class="cover-caption">Target balance over the next 12 weeks' + (hasBal ? '. Dashed line is your current balance.' : '.') + '</div>' +
+        '<div class="cover-caption">Target balance over the next 12 weeks. Weekly top-ups land on ' + ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'][topUpDay()] + ' (change this in Settings)' + (hasBal ? '. Dashed line is your projected balance on ' + holdLabel + '.' : '.') + '</div>' +
         '<button type="button" class="bill-group-head" data-toggle-group="__wb__" aria-expanded="' + isOpen + '">' +
           '<span class="bill-group-chevron' + (isOpen ? ' open' : '') + '">' + iconChevron() + '</span>' +
           '<span class="bill-group-name">Weekly set-aside by category</span>' +
         '</button>' +
         '<div class="bill-group-body' + (isOpen ? ' open' : '') + '"' + (isOpen ? ' style="max-height:none;"' : '') + '>' + rows + '</div>' +
       '</div>';
-    drawCoverChart(document.getElementById('cover-canvas'), c.series, actual);
+    drawCoverChart(document.getElementById('cover-canvas'), c.series, projected, c.holdDate);
   }
 
 
@@ -1448,6 +1545,7 @@
   function renderSettings(){
     document.getElementById('settings-balance').value = state.settings.startingBalance === null ? '' : state.settings.startingBalance;
     document.getElementById('settings-dark-toggle').checked = !!state.settings.darkMode;
+    document.getElementById('settings-topup-day').value = String(topUpDay());
   }
 
   function renderAll(){
@@ -1909,6 +2007,11 @@
     renderDashboard();
     alert('Balance saved.');
   });
+  document.getElementById('settings-topup-day').addEventListener('change', function(){
+    state.settings.topUpDay = parseInt(this.value, 10);
+    saveState();
+    renderDashboard();
+  });
   document.getElementById('settings-dark-toggle').addEventListener('change', function(){
     state.settings.darkMode = this.checked;
     saveState();
@@ -1955,6 +2058,291 @@
     }
   });
 
+
+  /* ---------- Google Drive backup ----------
+     Same approach as the Send Log, which lives on the same site: sign in with
+     Google using the narrow drive.file permission (the app only ever sees files
+     it made itself), save the CSV into a private "Jarful Backups" folder, keep
+     the newest 10. It backs up by itself a few seconds after a change, and when
+     the app is reopened, but only while a sign-in is still valid (about an
+     hour), so it never pops up a Google window on its own. The sign-in is
+     shared with the Send Log. */
+  var GOOGLE_CLIENT_ID = '865694161905-a6f6kdtp9g41r3muq9r020nihpgci0gd.apps.googleusercontent.com';
+  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  var DRIVE_TOKEN_KEY = 'send-log-drive-token';
+  var BACKUP_FOLDER_NAME = 'Jarful Backups';
+  var BACKUP_FOLDER_KEY = 'jarful-backup-folder';
+  var BACKUP_META_KEY = 'jarful-backup-meta';
+  var BACKUP_KEEP = 10;
+  var BACKUP_REMIND_DAYS = 3;
+  var DAY_MS = 86400000;
+
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+  function lsDel(k){ try { localStorage.removeItem(k); } catch(e){} }
+
+  function storedDriveToken(){
+    try {
+      var t = JSON.parse(lsGet(DRIVE_TOKEN_KEY) || 'null');
+      if(t && t.token && t.exp - 60000 > Date.now()) return t.token;
+    } catch(e){}
+    return null;
+  }
+  // Must run straight from a tap (nothing awaited first) or the browser blocks Google's window.
+  function getDriveToken(){
+    var existing = storedDriveToken();
+    if(existing) return Promise.resolve(existing);
+    return new Promise(function(resolve, reject){
+      var oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+      if(!oauth){ reject(new Error("Google sign-in hasn't loaded. Check your connection and try again.")); return; }
+      var client = oauth.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        include_granted_scopes: false,
+        callback: function(resp){
+          if(!resp || resp.error || !resp.access_token){
+            reject(new Error(resp && resp.error === 'access_denied' ? "Google access wasn't allowed, so nothing was backed up." : "Google sign-in didn't finish. Try again."));
+            return;
+          }
+          lsSet(DRIVE_TOKEN_KEY, JSON.stringify({ token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000 }));
+          resolve(resp.access_token);
+        },
+        error_callback: function(err){
+          var type = err && err.type;
+          reject(new Error(type === 'popup_closed' ? 'Google sign-in was closed before it finished.'
+            : type === 'popup_failed_to_open' ? "Google sign-in couldn't open. Allow pop-ups for this site and try again."
+            : "Google sign-in didn't finish. Try again."));
+        }
+      });
+      client.requestAccessToken();
+    });
+  }
+
+  function readBackupMeta(){ try { return JSON.parse(lsGet(BACKUP_META_KEY) || 'null') || {}; } catch(e){ return {}; } }
+  function writeBackupMeta(m){ lsSet(BACKUP_META_KEY, JSON.stringify(m)); renderBackupUI(); }
+  function hashText(s){
+    var h = 0x811c9dc5;
+    for(var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(36) + '-' + s.length;
+  }
+  function backupDirty(){ return readBackupMeta().sig !== hashText(buildCSV()); }
+
+  function backupFetch(token, url, opts, asText){
+    opts = opts || {};
+    var headers = { Authorization: 'Bearer ' + token };
+    for(var k in (opts.headers || {})) headers[k] = opts.headers[k];
+    return fetch(url, { method: opts.method || 'GET', headers: headers, body: opts.body }).then(function(res){
+      if(res.status === 401){
+        lsDel(DRIVE_TOKEN_KEY);
+        var e = new Error('Your Google sign-in has expired. Tap Back up now to sign in again.');
+        e.expired = true;
+        throw e;
+      }
+      if(!res.ok) throw new Error('Google Drive returned an error (' + res.status + '). Try again.');
+      if(res.status === 204) return null;
+      return asText ? res.text() : res.json();
+    });
+  }
+  function ensureBackupFolder(token){
+    var id = lsGet(BACKUP_FOLDER_KEY);
+    var check = id
+      ? backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + id + '?fields=id,trashed')
+          .then(function(f){ return (f && !f.trashed) ? id : null; }, function(e){ if(e.expired) throw e; return null; })
+      : Promise.resolve(null);
+    return check.then(function(ok){
+      if(ok) return ok;
+      var q = encodeURIComponent("name='" + BACKUP_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&spaces=drive').then(function(found){
+        if(found.files && found.files.length) return found.files[0].id;
+        return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?fields=id', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: BACKUP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+        }).then(function(made){ return made.id; });
+      }).then(function(fid){ lsSet(BACKUP_FOLDER_KEY, fid); return fid; });
+    });
+  }
+  function backupFileName(d){
+    function p(n){ return String(n).padStart(2, '0'); }
+    return 'Jarful backup ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + '.csv';
+  }
+  function listBackups(token, folderId){
+    return (folderId ? Promise.resolve(folderId) : ensureBackupFolder(token)).then(function(fid){
+      var q = encodeURIComponent("'" + fid + "' in parents and trashed=false");
+      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,modifiedTime,size)');
+    }).then(function(res){ return res.files || []; });
+  }
+  function pruneBackups(token, folderId){
+    return listBackups(token, folderId).then(function(files){
+      return files.slice(BACKUP_KEEP).reduce(function(p, f){
+        return p.then(function(){
+          return backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + f.id + '?fields=id', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true })
+          });
+        });
+      }, Promise.resolve());
+    });
+  }
+  function localDay(d){ return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+  // Automatic backups update one file per day, so a busy day doesn't use up
+  // all 10 copies. Back up now always makes a new file.
+  var backupInFlight = null;
+  function runBackup(token, force){
+    if(backupInFlight) return backupInFlight;
+    backupInFlight = (function(){
+      var csv = buildCSV(), sig = hashText(csv);
+      if(!force && readBackupMeta().sig === sig) return Promise.resolve({ skipped: true });
+      var now = new Date(), meta = readBackupMeta(), folderId;
+      function body(m){
+        var fd = new FormData();
+        fd.append('metadata', new Blob([JSON.stringify(m)], { type: 'application/json' }));
+        fd.append('file', new Blob([csv], { type: 'text/csv' }));
+        return fd;
+      }
+      return ensureBackupFolder(token).then(function(fid){
+        folderId = fid;
+        if(!force && meta.fileId && meta.day === localDay(now)){
+          return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files/' + meta.fileId + '?uploadType=multipart&fields=id,name,trashed', {
+            method: 'PATCH', body: body({ name: backupFileName(now) })
+          }).then(function(up){ return (up && !up.trashed) ? up : null; }, function(e){ if(e.expired) throw e; return null; });
+        }
+        return null;
+      }).then(function(up){
+        if(up) return up;
+        return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
+          method: 'POST', body: body({ name: backupFileName(now), mimeType: 'text/csv', parents: [folderId] })
+        });
+      }).then(function(up){
+        writeBackupMeta({ at: now.getTime(), sig: sig, name: up.name, fileId: up.id, day: localDay(now) });
+        return pruneBackups(token, folderId).catch(function(){}).then(function(){ return up; });
+      });
+    })();
+    backupInFlight.then(function(){ backupInFlight = null; }, function(){ backupInFlight = null; });
+    return backupInFlight;
+  }
+
+  var backupTimer = null, backupDueAt = 0;
+  function scheduleAutoBackup(delay){
+    delay = delay == null ? 8000 : delay;
+    var due = Date.now() + delay;
+    if(backupTimer && backupDueAt <= due) return;
+    clearTimeout(backupTimer);
+    backupDueAt = due;
+    backupTimer = setTimeout(function(){
+      backupTimer = null;
+      renderBackupUI();
+      var token = storedDriveToken();
+      if(token && backupDirty()) runBackup(token, false).catch(function(){ renderBackupUI(); });
+    }, delay);
+  }
+
+  function formatBackupTime(ms){
+    var d = new Date(ms), h = d.getHours(), ap = h >= 12 ? 'pm' : 'am';
+    h = h % 12 || 12;
+    return formatShortDate(d) + ', ' + h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+  }
+
+  var reminderFlash = null;
+  function renderBackupUI(){
+    var meta = readBackupMeta(), dirty = backupDirty();
+    var st = document.getElementById('drive-status');
+    if(st){
+      st.innerHTML = escapeHTML(meta.at ? 'Last backed up ' + formatBackupTime(meta.at) : 'Not backed up to Drive yet') +
+        (meta.at && dirty ? '<span class="waiting"> · newer changes waiting</span>' : '');
+    }
+    var bar = document.getElementById('backup-reminder');
+    if(!bar) return;
+    var due = dirty && (!meta.at || Date.now() - meta.at > BACKUP_REMIND_DAYS * DAY_MS);
+    if(!due && !reminderFlash){ bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.className = 'backup-reminder' + (reminderFlash ? ' ' + reminderFlash.tone : '');
+    var days = meta.at ? Math.floor((Date.now() - meta.at) / DAY_MS) : null;
+    document.getElementById('backup-reminder-text').textContent = reminderFlash ? reminderFlash.text
+      : days == null ? 'Not backed up to Drive yet' : 'Last Drive backup ' + days + ' days ago';
+    var b = document.getElementById('backup-reminder-btn');
+    b.hidden = !!(reminderFlash && reminderFlash.tone === 'ok');
+    b.disabled = !!(reminderFlash && reminderFlash.tone === 'busy');
+    b.textContent = reminderFlash && reminderFlash.tone === 'busy' ? 'Backing up…' : reminderFlash && reminderFlash.tone === 'bad' ? 'Try again' : 'Back up';
+  }
+
+  function backupNowFromTap(){ return getDriveToken().then(function(t){ return runBackup(t, true); }); }
+
+  document.getElementById('backup-reminder-btn').addEventListener('click', function(){
+    reminderFlash = { tone: 'busy', text: 'Backing up to Drive…' }; renderBackupUI();
+    backupNowFromTap().then(function(){
+      reminderFlash = { tone: 'ok', text: 'Backed up to Drive ✓' }; renderBackupUI();
+      setTimeout(function(){ reminderFlash = null; renderBackupUI(); }, 2500);
+    }, function(e){ reminderFlash = { tone: 'bad', text: e.message }; renderBackupUI(); });
+  });
+
+  function driveMsg(text, tone){
+    var m = document.getElementById('drive-msg');
+    if(!text){ m.hidden = true; return; }
+    m.hidden = false; m.className = 'drive-msg ' + tone; m.textContent = text;
+  }
+  var driveBusy = false, driveFiles = null, driveConfirm = null;
+  function setDriveBusy(which){
+    driveBusy = which;
+    var b = document.getElementById('drive-backup-btn'), r = document.getElementById('drive-restore-btn');
+    b.disabled = !!which; r.disabled = !!which && which !== 'list';
+    b.textContent = which === 'backup' ? 'Backing up…' : 'Back up now';
+    r.textContent = which === 'list' ? 'Loading…' : driveFiles ? 'Close' : 'Restore from Drive';
+  }
+  function renderDriveList(){
+    var el = document.getElementById('drive-list');
+    if(!driveFiles){ el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    if(!driveFiles.length){ el.innerHTML = '<div class="row-sub">No backups in Drive yet.</div>'; return; }
+    el.innerHTML = driveFiles.map(function(f, i){
+      var when = formatBackupTime(new Date(f.modifiedTime).getTime());
+      var size = Math.max(1, Math.round(Number(f.size || 0) / 1024)) + ' KB';
+      var confirming = driveConfirm === f.id;
+      return '<div class="drive-file"><div class="drive-file-row"><span>' + escapeHTML(when) +
+        ' <small>' + (i === 0 ? '· latest · ' : '· ') + size + '</small></span>' +
+        (confirming ? '' : '<button type="button" class="btn" data-drive-pick="' + escapeHTML(f.id) + '">Restore</button>') + '</div>' +
+        (confirming ? '<div class="drive-confirm">This replaces everything in Jarful on this phone with this backup.' +
+          '<div class="field-row"><button type="button" class="btn btn-danger" style="flex:1;" data-drive-restore="' + escapeHTML(f.id) + '">Restore this</button>' +
+          '<button type="button" class="btn" style="flex:1;" data-drive-cancel="1">Cancel</button></div></div>' : '') +
+        '</div>';
+    }).join('');
+  }
+  document.getElementById('drive-backup-btn').addEventListener('click', function(){
+    setDriveBusy('backup'); driveMsg(null);
+    backupNowFromTap().then(function(){
+      setDriveBusy(null); driveMsg('Backed up to Drive ✓', 'ok');
+      setTimeout(function(){ driveMsg(null); }, 3000);
+    }, function(e){ setDriveBusy(null); driveMsg(e.message, 'bad'); });
+  });
+  document.getElementById('drive-restore-btn').addEventListener('click', function(){
+    if(driveFiles){ driveFiles = null; driveConfirm = null; renderDriveList(); setDriveBusy(null); return; }
+    setDriveBusy('list'); driveMsg(null);
+    getDriveToken().then(function(t){ return listBackups(t); }).then(function(list){
+      driveFiles = list; setDriveBusy(null); renderDriveList();
+    }, function(e){ setDriveBusy(null); driveMsg(e.message, 'bad'); });
+  });
+  document.getElementById('drive-list').addEventListener('click', function(e){
+    var t = e.target.closest('button'); if(!t || driveBusy) return;
+    if(t.hasAttribute('data-drive-pick')){ driveConfirm = t.getAttribute('data-drive-pick'); renderDriveList(); return; }
+    if(t.hasAttribute('data-drive-cancel')){ driveConfirm = null; renderDriveList(); return; }
+    var id = t.getAttribute('data-drive-restore'); if(!id) return;
+    var token = storedDriveToken();
+    if(!token){ driveMsg('Your Google sign-in has expired. Tap Restore from Drive again.', 'bad'); driveFiles = null; renderDriveList(); setDriveBusy(null); return; }
+    t.textContent = 'Restoring…'; setDriveBusy('restore');
+    backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {}, true).then(function(text){
+      importCSVText(text);
+      driveFiles = null; driveConfirm = null; renderDriveList(); setDriveBusy(null);
+      driveMsg('Restored ✓', 'ok');
+    }, function(err){ setDriveBusy(null); driveMsg(err.message || "That backup couldn't be read.", 'bad'); });
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') scheduleAutoBackup(2000);
+  });
+  window.addEventListener('storage', function(e){
+    // A Google sign-in from the Send Log in another tab is a chance to back up now.
+    if(e.key === DRIVE_TOKEN_KEY) scheduleAutoBackup(1500);
+  });
+
   /* ---------- Init ---------- */
   function runSplash(){
     var splash = document.getElementById('splash');
@@ -1978,6 +2366,8 @@
   updateTabPill();
   updateHorizonPill();
   updateSegmentPill();
+  renderBackupUI();
+  scheduleAutoBackup(1500);
   runSplash();
 
 })();
