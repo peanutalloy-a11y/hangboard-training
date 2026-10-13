@@ -8782,6 +8782,7 @@ function getDriveToken() {
     const client = oauth.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: DRIVE_SCOPE,
+      include_granted_scopes: false,
       callback: resp => {
         if (!resp || resp.error || !resp.access_token) {
           reject(new Error(resp && resp.error === "access_denied" ? "Google access wasn't allowed, so the photo wasn't saved." : "Google sign-in didn't finish. Try again."));
@@ -8909,7 +8910,8 @@ function getYouTubeToken() {
     oauth.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: YT_SCOPE,
-      include_granted_scopes: true,
+      // Google won't combine YouTube and Drive permissions in one request, so keep each separate.
+      include_granted_scopes: false,
       callback: resp => {
         if (!resp || resp.error || !resp.access_token) {
           reject(new Error(resp && resp.error === "access_denied" ? "YouTube access wasn't allowed, so the video wasn't uploaded." : "Google sign-in didn't finish. Try again."));
