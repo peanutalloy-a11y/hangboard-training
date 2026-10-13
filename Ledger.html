@@ -346,6 +346,10 @@
   .drive-confirm { margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
   .drive-confirm .field-row { gap: 8px; margin-top: 8px; }
 
+  .auto-note { display: flex; align-items: center; gap: 10px; background: var(--green-soft); color: var(--green); border-radius: 14px; padding: 11px 14px; font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
+  .auto-note span { flex: 1; }
+  .auto-note button { border: none; background: none; color: inherit; font-size: 15px; cursor: pointer; padding: 2px 4px; }
+
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
@@ -438,6 +442,7 @@
 
     <!-- DASHBOARD -->
     <section class="view active" id="view-dashboard">
+      <div id="auto-note"></div>
       <div class="balance-card">
         <span class="coin-dot" style="width:16px;height:16px;background:var(--green-soft);top:18px;left:60%;"></span>
         <span class="coin-dot" style="width:10px;height:10px;background:var(--brass);top:52px;left:72%;"></span>
@@ -729,6 +734,7 @@
   state.categories = state.categories || [];
   state.goals = state.goals || [];
   state.transactions = state.transactions || [];
+  normaliseGoals(state.goals);
 
   /* ---------- Theme ---------- */
   function applyTheme(){
@@ -755,7 +761,7 @@
     state.incomes.forEach(function(i){ rows.push(row({RecordType:'INCOME', ID:i.id, Name:i.name, Amount:i.amount, Frequency:i.frequency, AnchorDate:i.anchorDate})); });
     state.bills.forEach(function(b){ rows.push(row({RecordType:'BILL', ID:b.id, Name:b.name, Amount:b.amount, Frequency:b.frequency, IntervalDays:b.intervalDays||'', AnchorDate:b.anchorDate, Category:b.category||'', Notes:(b.paidDates||[]).join('|')})); });
     state.categories.forEach(function(c){ rows.push(row({RecordType:'CATEGORY', ID:c.id, Name:c.name, Amount:c.budget})); });
-    state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||''})); });
+    state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||'', Frequency:g.auto ? 'auto' : 'manual', Date:g.autoThrough||''})); });
     state.transactions.forEach(function(t){ rows.push(row({RecordType:'TRANSACTION', ID:t.id, Name:t.name, Amount:t.amount, Category:t.category||'', Date:t.date})); });
     return rows.map(function(r){ return r.map(csvValue).join(','); }).join('\r\n');
   }
@@ -820,7 +826,7 @@
           next.categories.push({ id:o.ID||uid(), name:o.Name, budget:parseFloat(o.Amount)||0 });
           break;
         case 'GOAL':
-          next.goals.push({ id:o.ID||uid(), name:o.Name, targetAmount:parseFloat(o.TargetAmount)||0, targetDate:o.TargetDate, currentSaved:parseFloat(o.CurrentSaved)||0, startDate:o.AnchorDate||'' });
+          next.goals.push({ id:o.ID||uid(), name:o.Name, targetAmount:parseFloat(o.TargetAmount)||0, targetDate:o.TargetDate, currentSaved:parseFloat(o.CurrentSaved)||0, startDate:o.AnchorDate||'', auto: o.Frequency !== 'manual', autoThrough: o.Frequency === 'auto' ? (o.Date || '') : '' });
           break;
         case 'TRANSACTION':
           next.transactions.push({ id:o.ID||uid(), name:o.Name, amount:parseFloat(o.Amount)||0, category:o.Category||'', date:o.Date });
@@ -828,7 +834,8 @@
       }
     });
     state = next;
-    saveState();
+    normaliseGoals(state.goals);
+    processAutoGoals();
     applyTheme();
     expandedBillGroups = {};
     renderAll();
@@ -919,15 +926,76 @@
     }).reduce(function(sum, t){ return sum + Math.abs(Number(t.amount)); }, 0);
   }
 
-  function goalContribution(goal){
-    var remaining = Math.max(0, Number(goal.targetAmount) - (Number(goal.currentSaved)||0));
+  /* ---------- Goals on the top-up cycle ----------
+     Goal money is planned per top-up day, not per calendar week: a goal's
+     amount is what's left divided by the top-up days still to come before its
+     target date (from its start date, if that's later). Goals set to add
+     automatically get that amount added to "saved" on each top-up day. */
+  function roundCents(v){ return Math.round(v * 100) / 100; }
+  function normaliseGoals(goals){
+    var yesterday = toISODate(addDays(startOfDay(new Date()), -1));
+    goals.forEach(function(g){
+      if(g.auto === undefined) g.auto = true;
+      if(g.auto && !g.autoThrough) g.autoThrough = yesterday;
+    });
+  }
+  // Top-up days strictly after `afterDate`, up to and including `untilDate`.
+  function topUpDatesBetween(afterDate, untilDate){
+    var out = [], d = addDays(startOfDay(afterDate), 1), end = startOfDay(untilDate);
+    var k = (topUpDay() - d.getDay() + 7) % 7;
+    d = addDays(d, k);
+    while(d <= end){ out.push(d); d = addDays(d, 7); }
+    return out;
+  }
+  // The plan for one goal from here: the top-up days left and the amount per top-up.
+  function goalPlan(g){
     var today = startOfDay(new Date());
-    var target = parseISODate(goal.targetDate);
-    var from = (goal.startDate && parseISODate(goal.startDate) > today) ? parseISODate(goal.startDate) : today;
-    var daysLeft = Math.max(1, Math.round((target - from) / 86400000));
-    var perFortnight = remaining / Math.max(1, daysLeft/14);
-    var perMonth = remaining / Math.max(1, daysLeft/30.44);
-    return {remaining:remaining, daysLeft:daysLeft, perFortnight:perFortnight, perMonth:perMonth};
+    var remaining = Math.max(0, roundCents((Number(g.targetAmount) || 0) - (Number(g.currentSaved) || 0)));
+    var after = (g.auto && g.autoThrough) ? parseISODate(g.autoThrough) : addDays(today, -1);
+    if(g.startDate){ var s = addDays(parseISODate(g.startDate), -1); if(s > after) after = s; }
+    var cycles = topUpDatesBetween(after, parseISODate(g.targetDate));
+    return {
+      remaining: remaining,
+      cycles: cycles.length,
+      next: cycles[0] || null,
+      perTopUp: cycles.length ? remaining / cycles.length : remaining,
+      funded: remaining <= 0,
+      dueNow: remaining > 0 && cycles.length === 0
+    };
+  }
+  // Adds each missed top-up day's amount to goals set to add automatically.
+  // Runs when the app opens or comes back into view; catches up any top-up
+  // days that passed while it was closed. Never backfills before a goal was
+  // set to automatic.
+  function processAutoGoals(){
+    var today = startOfDay(new Date()), total = 0, goalsHit = 0, lastDay = null;
+    state.goals.forEach(function(g){
+      if(!g.auto) return;
+      if(!g.autoThrough){ g.autoThrough = toISODate(addDays(today, -1)); }
+      var through = parseISODate(g.autoThrough);
+      if(through >= today) return;
+      var target = parseISODate(g.targetDate);
+      var start = g.startDate ? parseISODate(g.startDate) : null;
+      var added = 0;
+      topUpDatesBetween(through, today).forEach(function(d){
+        if(start && d < start) return;
+        if(d > target) return;
+        var remaining = roundCents((Number(g.targetAmount) || 0) - (Number(g.currentSaved) || 0));
+        if(remaining <= 0) return;
+        var left = topUpDatesBetween(addDays(d, -1), target).length;
+        var amt = left <= 1 ? remaining : roundCents(remaining / left);
+        g.currentSaved = roundCents((Number(g.currentSaved) || 0) + amt);
+        added += amt;
+        if(!lastDay || d > lastDay) lastDay = d;
+      });
+      g.autoThrough = toISODate(today);
+      if(added > 0){ total += added; goalsHit++; }
+    });
+    if(total > 0){
+      state.settings.lastAuto = { date: toISODate(lastDay), total: roundCents(total), goals: goalsHit, dismissed: false };
+    }
+    saveState();
+    return total;
   }
 
   /* ---------- Chart ---------- */
@@ -1223,12 +1291,10 @@
     var billsWeekly = 0;
     state.bills.forEach(function(b){ billsWeekly += weeklyEquivalent(b); });
     var goals = state.goals.filter(goalHasStarted).map(function(g){
-      var remaining = Math.max(0, (Number(g.targetAmount) || 0) - (Number(g.currentSaved) || 0));
-      var daysLeft = Math.round((parseISODate(g.targetDate) - today) / 86400000);
-      var overdue = daysLeft < 1;
-      var weeksLeft = Math.max(1, daysLeft / 7);
-      return { id: g.id, name: g.name, remaining: remaining, targetDate: g.targetDate,
-               weekly: remaining / weeksLeft, funded: remaining <= 0, overdue: overdue && remaining > 0 };
+      var p = goalPlan(g);
+      var overdue = p.remaining > 0 && parseISODate(g.targetDate) < today;
+      return { id: g.id, name: g.name, remaining: p.remaining, targetDate: g.targetDate,
+               weekly: p.perTopUp, cycles: p.cycles, funded: p.funded, overdue: overdue, dueNow: p.dueNow && !overdue, auto: !!g.auto };
     });
     var goalsWeekly = goals.reduce(function(s, g){ return s + g.weekly; }, 0);
     var incomeWeekly = 0;
@@ -1255,9 +1321,10 @@
     var goalRows = c.goals.map(function(g){
       var sub = g.funded ? 'Fully funded'
         : g.overdue ? 'Target date has passed, ' + formatCurrency(g.remaining) + ' still to go'
-        : formatCurrency(g.remaining) + ' to go by ' + formatShortDate(parseISODate(g.targetDate));
+        : g.dueNow ? formatCurrency(g.remaining) + ' to go by ' + formatShortDate(parseISODate(g.targetDate)) + ', before your next top-up'
+        : formatCurrency(g.remaining) + ' to go by ' + formatShortDate(parseISODate(g.targetDate)) + ' · ' + g.cycles + (g.cycles === 1 ? ' top-up left' : ' top-ups left') + (g.auto ? ' · added automatically' : '');
       return '<div class="gc-row"><div><div class="gc-name">' + escapeHTML(g.name) + '</div><div class="gc-sub">' + sub + '</div></div>' +
-        '<div class="gc-amt num">' + formatCurrency(g.weekly) + ' / week</div></div>';
+        '<div class="gc-amt num">' + formatCurrency(g.weekly) + (g.funded || g.overdue || g.dueNow ? '' : ' / top-up') + '</div></div>';
     }).join('');
     var status, leftRow = '';
     if(!hasIncome){
@@ -1283,7 +1350,18 @@
       '</div>';
   }
 
+  function renderAutoNote(){
+    var el = document.getElementById('auto-note');
+    if(!el) return;
+    var a = state.settings.lastAuto;
+    var fresh = a && !a.dismissed && (startOfDay(new Date()) - parseISODate(a.date)) < 7 * 86400000;
+    if(!fresh){ el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="auto-note"><span>Added ' + formatCurrency(a.total) + ' to ' + a.goals + (a.goals === 1 ? ' goal' : ' goals') + ' for your ' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseISODate(a.date).getDay()] + ' ' + formatShortDate(parseISODate(a.date)) + ' top-up. Move it into savings if you haven\'t yet.</span><button type="button" id="auto-note-x" aria-label="Dismiss">✕</button></div>';
+    document.getElementById('auto-note-x').addEventListener('click', function(){ state.settings.lastAuto.dismissed = true; saveState(); renderAutoNote(); });
+  }
+
   function renderDashboard(){
+    renderAutoNote();
     renderCover();
     renderGoalsCover();
     var bal = state.settings.startingBalance;
@@ -1504,7 +1582,11 @@
     }
     list.innerHTML = state.goals.map(function(g){
       var pct = g.targetAmount > 0 ? Math.min(100, ((g.currentSaved||0) / g.targetAmount) * 100) : 0;
-      var c = goalContribution(g);
+      var c = goalPlan(g);
+      var dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][topUpDay()];
+      var plan = c.funded ? 'Fully funded'
+        : c.dueNow ? formatCurrency(c.remaining) + ' still needed before the target date'
+        : (g.auto ? 'Adds ' : 'Needs ') + formatCurrency(c.perTopUp) + ' each ' + dayName + ' top-up · ' + c.cycles + ' left' + (c.next ? ' · next ' + formatShortDate(c.next) : '');
       return '<div class="row" data-id="' + g.id + '" style="display:block;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
         '<div class="row-main"><div class="row-name">' + escapeHTML(g.name) + '</div>' +
@@ -1513,7 +1595,8 @@
         '<button data-edit-goal="' + g.id + '">' + iconEdit() + '</button><button data-del-goal="' + g.id + '">' + iconTrash() + '</button></div>' +
         '</div>' +
         '<div class="progress-track"><div class="progress-fill" data-target="' + pct + '"></div></div>' +
-        '<div class="row-sub" style="margin-top:6px;">' + formatCurrency(g.currentSaved||0) + ' of ' + formatCurrency(g.targetAmount) + ' saved · need ' + formatCurrency(c.perFortnight) + '/fortnight or ' + formatCurrency(c.perMonth) + '/month</div>' +
+        '<div class="row-sub" style="margin-top:6px;">' + formatCurrency(g.currentSaved||0) + ' of ' + formatCurrency(g.targetAmount) + ' saved</div>' +
+        '<div class="row-sub" style="margin-top:2px;">' + (g.auto ? '<span class="chip">Auto</span>' : '') + plan + '</div>' +
         '</div>';
     }).join('');
     animateProgressBars(list);
@@ -1810,6 +1893,8 @@
       '</div>' +
       '<div class="field"><label for="goal-start">Start saving from (optional)</label><input type="date" id="goal-start" value="' + (existing && existing.startDate ? existing.startDate : '') + '"><div class="row-sub" style="margin-top:4px;">Leave blank to start straight away. The goal joins the weekly table on this date.</div></div>' +
       '<div class="field"><label for="goal-saved">Already saved</label><input type="number" id="goal-saved" inputmode="decimal" step="0.01" min="0" value="' + (existing?(existing.currentSaved||0):0) + '"></div>' +
+      '<div class="row" style="margin-bottom:14px;"><div class="row-main"><div class="row-name">Add automatically each top-up day</div><div class="row-sub">Adds this goal\'s share to "saved" every ' + ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][topUpDay()] + ', so you don\'t have to.</div></div>' +
+      '<input type="checkbox" id="goal-auto" style="width:20px;height:20px;"' + (!existing || existing.auto ? ' checked' : '') + '></div>' +
       '<button type="submit" class="btn btn-primary btn-block">' + (isEdit?'Save changes':'Add goal') + '</button>' +
       (isEdit?'<button type="button" class="btn btn-danger btn-block" style="margin-top:10px;" id="goal-delete">Delete</button>':'') +
       '</form>';
@@ -1822,8 +1907,11 @@
         targetAmount: parseFloat(document.getElementById('goal-target').value) || 0,
         targetDate: document.getElementById('goal-date').value,
         startDate: document.getElementById('goal-start').value || '',
-        currentSaved: parseFloat(document.getElementById('goal-saved').value) || 0
+        currentSaved: parseFloat(document.getElementById('goal-saved').value) || 0,
+        auto: document.getElementById('goal-auto').checked
       };
+      // Keep where automatic adding is up to; switching it on starts from today's top-up (if today is one).
+      data.autoThrough = data.auto ? ((existing && existing.auto && existing.autoThrough) || toISODate(addDays(startOfDay(new Date()), -1))) : '';
       if(data.startDate && data.startDate > data.targetDate){
         alert('The start date needs to be before the target date.');
         return;
@@ -1835,7 +1923,7 @@
         state.goals.push(data);
         pendingEnterId = data.id;
       }
-      saveState(); closeModal(); renderGoals();
+      processAutoGoals(); closeModal(); renderGoals(); renderDashboard();
     });
     if(isEdit){
       document.getElementById('goal-delete').addEventListener('click', function(){
@@ -2011,6 +2099,7 @@
     state.settings.topUpDay = parseInt(this.value, 10);
     saveState();
     renderDashboard();
+    renderGoals();
   });
   document.getElementById('settings-dark-toggle').addEventListener('change', function(){
     state.settings.darkMode = this.checked;
@@ -2336,7 +2425,9 @@
   });
 
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible') scheduleAutoBackup(2000);
+    if(document.visibilityState !== 'visible') return;
+    if(processAutoGoals() > 0){ renderGoals(); renderDashboard(); }
+    scheduleAutoBackup(2000);
   });
   window.addEventListener('storage', function(e){
     // A Google sign-in from the Send Log in another tab is a chance to back up now.
@@ -2362,6 +2453,7 @@
     updateHorizonPill();
     updateSegmentPill();
   });
+  processAutoGoals();
   renderAll();
   updateTabPill();
   updateHorizonPill();
