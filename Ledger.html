@@ -350,6 +350,10 @@
   .auto-note span { flex: 1; }
   .auto-note button { border: none; background: none; color: inherit; font-size: 15px; cursor: pointer; padding: 2px 4px; }
 
+  .disc-period { background: var(--paper-raised); border-radius: 14px; padding: 12px 12px 2px; margin-bottom: 10px; }
+  .disc-period-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+  .disc-period-head .link-btn { background: none; border: none; color: var(--rust); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
+
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
@@ -493,6 +497,10 @@
     <section class="view" id="view-goals">
       <div class="section-title">Savings goals<button class="link-btn" id="add-goal">+ Add goal</button></div>
       <div id="goals-list"></div>
+
+      <div class="section-title">Discretionary<button class="link-btn" id="add-disc">+ Add item</button></div>
+      <div class="row-sub" style="margin:-4px 0 10px;">Things you rebuy every so often, like running shoes. Log each purchase as a period to learn what they really cost per week.</div>
+      <div id="disc-list"></div>
     </section>
 
     <!-- ADD -->
@@ -709,6 +717,7 @@
         { id: uid(), name: 'Miscellaneous', budget: 0 }
       ],
       goals: [],
+      discretionary: [],
       transactions: []
     };
   }
@@ -734,6 +743,7 @@
   state.categories = state.categories || [];
   state.goals = state.goals || [];
   state.transactions = state.transactions || [];
+  state.discretionary = state.discretionary || [];
   normaliseGoals(state.goals);
 
   /* ---------- Theme ---------- */
@@ -763,6 +773,10 @@
     state.categories.forEach(function(c){ rows.push(row({RecordType:'CATEGORY', ID:c.id, Name:c.name, Amount:c.budget})); });
     state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||'', Frequency:g.auto ? 'auto' : 'manual', Date:g.autoThrough||''})); });
     state.transactions.forEach(function(t){ rows.push(row({RecordType:'TRANSACTION', ID:t.id, Name:t.name, Amount:t.amount, Category:t.category||'', Date:t.date})); });
+    (state.discretionary || []).forEach(function(i){
+      rows.push(row({RecordType:'DISC', ID:i.id, Name:i.name, Amount:i.saved||0, Frequency:i.included ? 'included' : 'excluded', AnchorDate:i.includedSince||'', Date:i.autoThrough||''}));
+      (i.periods || []).forEach(function(p){ rows.push(row({RecordType:'DISC_PERIOD', ID:p.id, Category:i.id, Amount:p.cost, AnchorDate:p.start, Date:p.end||''})); });
+    });
     return rows.map(function(r){ return r.map(csvValue).join(','); }).join('\r\n');
   }
   function exportCSV(){
@@ -807,7 +821,8 @@
     var header = rows[0];
     var dataRows = rows.slice(1);
     var next = defaultState();
-    next.incomes = []; next.bills = []; next.categories = []; next.goals = []; next.transactions = [];
+    next.incomes = []; next.bills = []; next.categories = []; next.goals = []; next.transactions = []; next.discretionary = [];
+    var discPeriods = [];
     dataRows.forEach(function(r){
       var o = objFromRow(header, r);
       switch(o.RecordType){
@@ -831,7 +846,17 @@
         case 'TRANSACTION':
           next.transactions.push({ id:o.ID||uid(), name:o.Name, amount:parseFloat(o.Amount)||0, category:o.Category||'', date:o.Date });
           break;
+        case 'DISC':
+          next.discretionary.push({ id:o.ID||uid(), name:o.Name, saved:parseFloat(o.Amount)||0, included:o.Frequency === 'included', includedSince:o.AnchorDate||'', autoThrough:o.Date||'', periods:[] });
+          break;
+        case 'DISC_PERIOD':
+          discPeriods.push({ parent:o.Category, p:{ id:o.ID||uid(), start:o.AnchorDate, cost:parseFloat(o.Amount)||0, end:o.Date||'' } });
+          break;
       }
+    });
+    discPeriods.forEach(function(x){
+      var item = next.discretionary.find(function(i){ return i.id === x.parent; });
+      if(item) item.periods.push(x.p);
     });
     state = next;
     normaliseGoals(state.goals);
@@ -967,6 +992,27 @@
   // Runs when the app opens or comes back into view; catches up any top-up
   // days that passed while it was closed. Never backfills before a goal was
   // set to automatic.
+  /* ---------- Discretionary items ----------
+     Each item is a list of periods (purchase date, cost, end date). A finished
+     period has an end date. The item's weekly cost is total spent / total
+     weeks across finished periods, so longer-lasting periods count for more.
+     Nothing is shown until the first period ends. Ticking "include" adds the
+     item to the main table and, from that day, sets its weekly amount aside
+     on each top-up day; a new purchase is paid out of what's been set aside. */
+  function discStats(item){
+    var cost = 0, days = 0, done = 0, open = null;
+    (item.periods || []).forEach(function(p){
+      if(p.end){
+        var d = Math.round((parseISODate(p.end) - parseISODate(p.start)) / 86400000);
+        if(d > 0){ cost += Number(p.cost) || 0; days += d; done++; }
+      } else if(!open || p.start > open.start){ open = p; }
+    });
+    var weekly = days > 0 ? cost / (days / 7) : 0;
+    var avgDays = done ? days / done : 0;
+    return { finished: done, weekly: weekly, avgDays: avgDays, open: open,
+             nextDue: (open && avgDays) ? addDays(parseISODate(open.start), Math.round(avgDays)) : null };
+  }
+
   function processAutoGoals(){
     var today = startOfDay(new Date()), total = 0, goalsHit = 0, lastDay = null;
     state.goals.forEach(function(g){
@@ -989,6 +1035,22 @@
         if(!lastDay || d > lastDay) lastDay = d;
       });
       g.autoThrough = toISODate(today);
+      if(added > 0){ total += added; goalsHit++; }
+    });
+    state.discretionary.forEach(function(item){
+      if(!item.included) return;
+      if(!item.autoThrough){ item.autoThrough = toISODate(addDays(today, -1)); }
+      var through = parseISODate(item.autoThrough);
+      if(through >= today) return;
+      var w = roundCents(discStats(item).weekly), added = 0;
+      if(w > 0){
+        topUpDatesBetween(through, today).forEach(function(d){
+          item.saved = roundCents((Number(item.saved) || 0) + w);
+          added += w;
+          if(!lastDay || d > lastDay) lastDay = d;
+        });
+      }
+      item.autoThrough = toISODate(today);
       if(added > 0){ total += added; goalsHit++; }
     });
     if(total > 0){
@@ -1296,21 +1358,26 @@
       return { id: g.id, name: g.name, remaining: p.remaining, targetDate: g.targetDate,
                weekly: p.perTopUp, cycles: p.cycles, funded: p.funded, overdue: overdue, dueNow: p.dueNow && !overdue, auto: !!g.auto };
     });
-    var goalsWeekly = goals.reduce(function(s, g){ return s + g.weekly; }, 0);
+    var disc = state.discretionary.filter(function(i){ return i.included; }).map(function(i){
+      var s = discStats(i);
+      return { name: i.name, weekly: s.weekly, finished: s.finished };
+    });
+    var goalsWeekly = goals.reduce(function(s, g){ return s + g.weekly; }, 0) +
+      disc.reduce(function(s, d){ return s + d.weekly; }, 0);
     var incomeWeekly = 0;
     state.incomes.forEach(function(i){
       var amt = Number(i.amount) || 0;
       incomeWeekly += i.frequency === 'monthly' ? amt * 12 / 52 : amt / 2;
     });
     var total = billsWeekly + goalsWeekly;
-    return { billsWeekly: billsWeekly, goals: goals, goalsWeekly: goalsWeekly,
+    return { billsWeekly: billsWeekly, goals: goals, disc: disc, goalsWeekly: goalsWeekly,
              incomeWeekly: incomeWeekly, total: total, left: incomeWeekly - total };
   }
 
   function renderGoalsCover(){
     var el = document.getElementById('goals-cover-block');
     if(!el) return;
-    if(!state.goals.length){
+    if(!state.goals.length && !state.discretionary.some(function(i){ return i.included; })){
       el.innerHTML = '<div class="empty-state" style="margin-top:14px;">Add a savings goal in Goals to see what it costs each week alongside your bills.</div>';
       return;
     }
@@ -1342,6 +1409,11 @@
         '<div class="cover-title">Expenses and goals</div>' +
         '<div class="gc-row"><div><div class="gc-name">Bills</div><div class="gc-sub">Weekly set-aside</div></div><div class="gc-amt num">' + formatCurrency(c.billsWeekly) + ' / week</div></div>' +
         goalRows +
+        c.disc.map(function(d){
+          return '<div class="gc-row"><div><div class="gc-name">' + escapeHTML(d.name) + '</div><div class="gc-sub">' +
+            (d.finished ? 'Discretionary · average over ' + d.finished + (d.finished === 1 ? ' period' : ' periods') : 'Discretionary · counts once the first period ends') +
+            '</div></div><div class="gc-amt num">' + formatCurrency(d.weekly) + ' / top-up</div></div>';
+        }).join('') +
         '<div class="gc-row gc-total"><div class="gc-name">Total to set aside</div><div class="gc-amt num">' + formatCurrency(c.total) + ' / week</div></div>' +
         (hasIncome ? '<div class="gc-row gc-income"><div><div class="gc-name">Combined income</div><div class="gc-sub">All pay converted to a weekly amount</div></div><div class="gc-amt num">' + formatCurrency(c.incomeWeekly) + ' / week</div></div>' : '') +
         leftRow +
@@ -1574,7 +1646,37 @@
     applyPendingEnter();
   }
 
+  var discOpen = true;
+  function renderDisc(){
+    var el = document.getElementById('disc-list');
+    if(!el) return;
+    if(!state.discretionary.length){
+      el.innerHTML = '<div class="empty-state">No discretionary items yet.</div>';
+      return;
+    }
+    var rows = state.discretionary.map(function(item){
+      var s = discStats(item);
+      var avgLine = s.finished
+        ? formatCurrency(s.weekly) + ' a week · lasts about ' + Math.max(1, Math.round(s.avgDays / 30.44)) + (Math.round(s.avgDays / 30.44) === 1 ? ' month' : ' months') + ' · ' + s.finished + (s.finished === 1 ? ' period' : ' periods')
+        : 'Average shows once the first period ends';
+      var openLine = s.open
+        ? 'In use since ' + formatShortDate(parseISODate(s.open.start)) + ' (' + formatCurrency(s.open.cost) + ')' + (s.nextDue ? ' · likely needs replacing around ' + formatShortDate(s.nextDue) : '')
+        : 'Nothing in use. Add a period when you buy the next one.';
+      return '<div class="row" data-id="' + item.id + '" style="display:block;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<div class="row-main"><div class="row-name">' + escapeHTML(item.name) + '</div>' +
+          '<div class="row-sub">' + (item.included ? '<span class="chip">In weekly set-aside</span>' : '<span class="chip" style="background:var(--paper);color:var(--ink-soft);">Not included</span>') + avgLine + '</div></div>' +
+          '<div class="row-actions"><button data-edit-disc="' + item.id + '">' + iconEdit() + '</button><button data-del-disc="' + item.id + '">' + iconTrash() + '</button></div>' +
+        '</div>' +
+        '<div class="row-sub" style="margin-top:6px;">' + openLine + '</div>' +
+        (item.included ? '<div class="row-sub" style="margin-top:2px;">Set aside so far: <span class="num">' + formatCurrency(item.saved || 0) + '</span>' + (s.finished ? '' : ' · starts adding once the first period ends') + '</div>' : '') +
+      '</div>';
+    }).join('');
+    el.innerHTML = rows;
+  }
+
   function renderGoals(){
+    renderDisc();
     var list = document.getElementById('goals-list');
     if(!state.goals.length){
       list.innerHTML = '<div class="empty-state">No savings goals yet.</div>';
@@ -1882,6 +1984,95 @@
   document.getElementById('add-category').addEventListener('click', function(e){ openCategoryForm(null, e.currentTarget); });
 
   /* ---------- Goal form ---------- */
+  function discPeriodRow(p, i){
+    return '<div class="disc-period" data-pid="' + escapeHTML(p.id) + '">' +
+      '<div class="disc-period-head"><span>Period ' + (i + 1) + '</span><button type="button" class="link-btn" data-remove-period="' + escapeHTML(p.id) + '">Remove</button></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Purchase date</label><input type="date" class="dp-start" required value="' + (p.start || '') + '"></div>' +
+        '<div class="field"><label>Cost</label><input type="number" class="dp-cost" inputmode="decimal" step="0.01" min="0" required value="' + (p.cost === undefined || p.cost === '' ? '' : p.cost) + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>End date (when it needed replacing)</label><input type="date" class="dp-end" value="' + (p.end || '') + '"><div class="row-sub" style="margin-top:4px;">Leave blank while it\'s still in use.</div></div>' +
+    '</div>';
+  }
+  function openDiscForm(existing, triggerEl){
+    var isEdit = !!existing;
+    var periods = existing ? JSON.parse(JSON.stringify(existing.periods || [])) : [{ id: uid(), start: '', cost: '', end: '' }];
+    var html =
+      '<form id="disc-form">' +
+      '<div class="field"><label for="disc-name">Item</label><input type="text" id="disc-name" required placeholder="e.g. Asics running shoes" value="' + (existing ? escapeHTML(existing.name) : '') + '"></div>' +
+      '<div class="row" style="margin-bottom:14px;"><div class="row-main"><div class="row-name">Include in weekly set-aside</div><div class="row-sub">Adds it to the main table and starts setting its weekly average aside from today.</div></div>' +
+      '<input type="checkbox" id="disc-included" style="width:20px;height:20px;"' + (existing && existing.included ? ' checked' : '') + '></div>' +
+      '<div id="disc-periods"></div>' +
+      '<button type="button" class="btn btn-block" id="disc-add-period" style="margin-bottom:12px;">+ Add period</button>' +
+      '<button type="submit" class="btn btn-primary btn-block">' + (isEdit ? 'Save changes' : 'Add item') + '</button>' +
+      '</form>';
+    openModal(isEdit ? 'Edit item' : 'Add discretionary item', html, triggerEl);
+    var wrap = document.getElementById('disc-periods');
+    function readPeriods(){
+      Array.prototype.forEach.call(wrap.querySelectorAll('.disc-period'), function(row){
+        var p = periods.find(function(x){ return x.id === row.getAttribute('data-pid'); });
+        if(!p) return;
+        p.start = row.querySelector('.dp-start').value;
+        p.cost = row.querySelector('.dp-cost').value;
+        p.end = row.querySelector('.dp-end').value;
+      });
+    }
+    function drawPeriods(){ wrap.innerHTML = periods.map(discPeriodRow).join(''); }
+    drawPeriods();
+    document.getElementById('disc-add-period').addEventListener('click', function(){
+      readPeriods();
+      var last = periods[periods.length - 1];
+      if(last && !last.end){ alert('Put an end date on Period ' + periods.length + ' first.'); return; }
+      periods.push({ id: uid(), start: '', cost: '', end: '' });
+      drawPeriods();
+      var rows = wrap.querySelectorAll('.dp-start');
+      if(rows.length) rows[rows.length - 1].focus();
+    });
+    wrap.addEventListener('click', function(e){
+      var b = e.target.closest('[data-remove-period]');
+      if(!b) return;
+      readPeriods();
+      periods = periods.filter(function(p){ return p.id !== b.getAttribute('data-remove-period'); });
+      drawPeriods();
+    });
+    document.getElementById('disc-form').addEventListener('submit', function(e){
+      e.preventDefault();
+      readPeriods();
+      for(var i = 0; i < periods.length; i++){
+        var p = periods[i];
+        if(!p.start || p.cost === ''){ alert('Period ' + (i + 1) + ' needs a purchase date and a cost.'); return; }
+        if(p.end && p.end <= p.start){ alert('Period ' + (i + 1) + "'s end date needs to be after its purchase date."); return; }
+        if(!p.end && i < periods.length - 1){ alert('Only the latest period can be left without an end date.'); return; }
+      }
+      var included = document.getElementById('disc-included').checked;
+      var today = startOfDay(new Date());
+      var data = {
+        id: existing ? existing.id : uid(),
+        name: document.getElementById('disc-name').value.trim() || 'Item',
+        included: included,
+        saved: existing ? (Number(existing.saved) || 0) : 0,
+        includedSince: included ? ((existing && existing.included && existing.includedSince) || toISODate(today)) : '',
+        autoThrough: included ? ((existing && existing.included && existing.autoThrough) || toISODate(addDays(today, -1))) : '',
+        periods: periods.map(function(p){ return { id: p.id, start: p.start, cost: roundCents(parseFloat(p.cost) || 0), end: p.end || '' }; })
+      };
+      // A purchase logged while the item is set aside is paid out of what's been set aside.
+      if(existing && existing.included && included){
+        var oldIds = (existing.periods || []).map(function(p){ return p.id; });
+        data.periods.forEach(function(p){
+          if(oldIds.indexOf(p.id) === -1 && p.start >= existing.includedSince) data.saved = Math.max(0, roundCents(data.saved - p.cost));
+        });
+      }
+      if(existing){
+        var idx = state.discretionary.findIndex(function(x){ return x.id === existing.id; });
+        state.discretionary[idx] = data;
+      } else {
+        state.discretionary.push(data);
+        pendingEnterId = data.id;
+      }
+      processAutoGoals(); closeModal(); renderGoals(); renderDashboard();
+    });
+  }
+
   function openGoalForm(existing, triggerEl){
     var isEdit = !!existing;
     var html =
@@ -1935,6 +2126,7 @@
     }
   }
   document.getElementById('add-goal').addEventListener('click', function(e){ openGoalForm(null, e.currentTarget); });
+  document.getElementById('add-disc').addEventListener('click', function(e){ openDiscForm(null, e.currentTarget); });
 
   /* ---------- Bill category groups ---------- */
   function toggleBillGroup(buttonEl, key){
@@ -1988,6 +2180,14 @@
       if(confirm('Delete this category?')){
         playRowExit(t.closest('.row'), function(){
           state.categories = state.categories.filter(function(c){return c.id!==id;}); saveState(); renderBudgets(); populateQuickAddCategories();
+        });
+      }
+    }
+    else if((id = t.getAttribute('data-edit-disc'))) openDiscForm(state.discretionary.find(function(x){ return x.id === id; }), t);
+    else if((id = t.getAttribute('data-del-disc'))){
+      if(confirm('Delete this item and all its periods?')){
+        playRowExit(t.closest('.row'), function(){
+          state.discretionary = state.discretionary.filter(function(x){ return x.id !== id; }); saveState(); renderGoals(); renderDashboard();
         });
       }
     }
