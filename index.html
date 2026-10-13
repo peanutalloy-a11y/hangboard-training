@@ -4524,6 +4524,9 @@ function VideoEmbed({
 function climbPhotoUrl(p) {
   if (p.photoLink) {
     const fileId = extractDriveFileId(p.photoLink);
+    // A photo uploaded from this phone in this session shows from the local copy, since Google
+    // takes a little while to generate the thumbnail for a brand-new file.
+    if (fileId && window.__driveLocalPreviews && window.__driveLocalPreviews[fileId]) return window.__driveLocalPreviews[fileId];
     if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
     return null;
   }
@@ -4535,12 +4538,22 @@ function ClimbPhotoThumb({
 }) {
   const url = climbPhotoUrl(p);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retryTimer = useRef(null);
+  useEffect(() => () => clearTimeout(retryTimer.current), []);
+  const onImgError = () => {
+    // New Drive files can take a few seconds to get a thumbnail: retry with growing gaps first.
+    if (url && /^https:/.test(url) && attempt < 4) {
+      retryTimer.current = setTimeout(() => setAttempt(a => a + 1), 1500 * Math.pow(2, attempt));
+    } else setFailed(true);
+  };
+  const src = url && attempt && /^https:/.test(url) ? `${url}&retry=${attempt}` : url;
   if (!url || failed) return null;
   return /*#__PURE__*/React.createElement("img", {
-    src: url,
+    src: src,
     loading: "lazy",
     decoding: "async",
-    onError: () => setFailed(true),
+    onError: onImgError,
     style: {
       width: 32,
       height: 32,
@@ -4556,16 +4569,26 @@ function ClimbPhotoFull({
 }) {
   const url = climbPhotoUrl(p);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retryTimer = useRef(null);
+  useEffect(() => () => clearTimeout(retryTimer.current), []);
+  const onImgError = () => {
+    // New Drive files can take a few seconds to get a thumbnail: retry with growing gaps first.
+    if (url && /^https:/.test(url) && attempt < 4) {
+      retryTimer.current = setTimeout(() => setAttempt(a => a + 1), 1500 * Math.pow(2, attempt));
+    } else setFailed(true);
+  };
+  const src = url && attempt && /^https:/.test(url) ? `${url}&retry=${attempt}` : url;
   if (!url) return null;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
   }, !failed ? /*#__PURE__*/React.createElement("img", {
-    src: url,
+    src: src,
     loading: "lazy",
     decoding: "async",
-    onError: () => setFailed(true),
+    onError: onImgError,
     style: {
       width: "100%",
       height: "auto",
@@ -8801,7 +8824,8 @@ function dataUrlToBlob(dataUrl) {
 function driveUploadPhoto(file, label) {
   const tokenPromise = getDriveToken(); // synchronous sign-in request, kept inside the tap
   return tokenPromise.then(async token => {
-    const blob = dataUrlToBlob(await compressImage(file, 1600, 0.8));
+    const previewUrl = await compressImage(file, 1600, 0.8);
+    const blob = dataUrlToBlob(previewUrl);
     const folderId = await ensureDriveFolder(token);
     const safe = String(label || "climb").replace(/[\\/:*?"<>|]+/g, " ").trim();
     const meta = { name: `${safe}.jpg`, mimeType: "image/jpeg", parents: [folderId] };
@@ -8812,6 +8836,8 @@ function driveUploadPhoto(file, label) {
       method: "POST",
       body
     });
+    window.__driveLocalPreviews = window.__driveLocalPreviews || {};
+    window.__driveLocalPreviews[up.id] = previewUrl;
     await driveFetch(token, `https://www.googleapis.com/drive/v3/files/${up.id}/permissions?fields=id`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
