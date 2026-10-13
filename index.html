@@ -29,6 +29,7 @@
   @keyframes flagWave{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
   @keyframes carabinerClip{0%{transform:rotate(0deg)}25%{transform:rotate(15deg)}50%{transform:rotate(0deg)}75%{transform:rotate(-10deg)}100%{transform:rotate(0deg)}}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div id="root"><div id="boot-loading"><div style="width:28px;height:28px;border:2.5px solid #E8E4DE;border-top-color:#D4663A;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div></div>
@@ -332,7 +333,32 @@ var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
 </script>
-<script>const {
+<script>// Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
+// when a list renders dozens of dates. Reuse one formatter per locale + options instead.
+(function () {
+  const orig = Date.prototype.toLocaleDateString;
+  const cache = new Map();
+  Date.prototype.toLocaleDateString = function (loc, opts) {
+    try {
+      const k = String(loc || "") + "|" + JSON.stringify(opts || {});
+      let f = cache.get(k);
+      if (!f) { f = new Intl.DateTimeFormat(loc, opts); cache.set(k, f); }
+      return f.format(this);
+    } catch (e) {
+      return orig.call(this, loc, opts);
+    }
+  };
+  // Warm up the formatters the app uses once the page is idle, so the first list that shows dates
+  // doesn't pay the one-off setup cost mid-tap.
+  const warm = () => {
+    const d = new Date();
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+    d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+  };
+  (window.requestIdleCallback || (f => setTimeout(f, 800)))(warm);
+})();
+const {
   useState,
   useEffect,
   useCallback,
@@ -881,8 +907,8 @@ const Stagger = ({
   delay = 0
 }) => /*#__PURE__*/React.createElement("div", {
   style: {
-    animation: `fadeUp 0.45s ease both`,
-    animationDelay: `${delay}ms`
+    animation: `fadeUp 0.25s ease both`,
+    animationDelay: `${Math.min(delay, 200) * 0.4}ms`
   }
 }, children);
 const ChalkParticles = () => {
@@ -1353,7 +1379,7 @@ function FingerApp() {
       setView(target);
       setTransitioning(false);
       setAnimKey(k => k + 1);
-    }, 300);
+    }, 150);
   }, [view]);
   const startSession = key => {
     navigateTo("log", () => {
@@ -1840,7 +1866,7 @@ function FingerApp() {
       setView("saved");
       setTransitioning(false);
       setAnimKey(k => k + 1);
-    }, 300);
+    }, 150);
   };
   const deleteEntry = id => {
     const nl = logs.filter(l => l.id !== id);
@@ -2018,7 +2044,7 @@ function FingerApp() {
     return s.reps;
   };
   const slideDir = prevView === "home" && (view === "log" || view === "saved" || view === "sessionForm" || view === "timer") || prevView === "log" && view === "saved" || prevView === "timer" && view === "log" ? "Right" : "Left";
-  const pageAnim = transitioning ? `slideOut${slideDir === "Right" ? "Left" : "Right"} 0.3s ease both` : `slideIn${slideDir} 0.4s ease both`;
+  const pageAnim = transitioning ? `slideOut${slideDir === "Right" ? "Left" : "Right"} 0.15s ease both` : `slideIn${slideDir} 0.25s ease both`;
   if (loading) return /*#__PURE__*/React.createElement("div", {
     style: S.page
   }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
@@ -4512,6 +4538,8 @@ function ClimbPhotoThumb({
   if (!url || failed) return null;
   return /*#__PURE__*/React.createElement("img", {
     src: url,
+    loading: "lazy",
+    decoding: "async",
     onError: () => setFailed(true),
     style: {
       width: 32,
@@ -4535,6 +4563,8 @@ function ClimbPhotoFull({
     }
   }, !failed ? /*#__PURE__*/React.createElement("img", {
     src: url,
+    loading: "lazy",
+    decoding: "async",
     onError: () => setFailed(true),
     style: {
       width: "100%",
@@ -4895,6 +4925,191 @@ function parseClimbCSV(text, existingData) {
     sectorLogs
   };
 }
+// One row in the map screen's sector management list. Tapping the row opens the sector's
+// reset schedule (moved here from the Climbs home screen); Archive stays on the right.
+function SectorManageRow({
+  name,
+  log,
+  isArchived,
+  open,
+  onToggle,
+  toggleSectorArchived,
+  setSectorResetDate,
+  setSectorResetInterval,
+  onHistory
+}) {
+  const interval = Number(log.resetIntervalDays) || 0;
+  const summary = !log.resetDate ? "No reset schedule" : interval ? `Resets every ${interval} days` : "One-off reset";
+  const lbl = {
+    fontFamily: F.m,
+    fontSize: 8,
+    color: "#BBB",
+    marginBottom: 4,
+    letterSpacing: 0.5
+  };
+  const inp = {
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    display: "block",
+    padding: "8px 6px",
+    borderRadius: 6,
+    fontSize: 12,
+    background: "#F5F2ED",
+    border: "1.5px solid #E8E4DE",
+    color: "#2A2520",
+    outline: "none",
+    boxSizing: "border-box"
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FFF",
+      borderRadius: 8,
+      border: "1px solid #E8E4DE",
+      opacity: isArchived ? 0.6 : 1,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      padding: "10px 12px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onToggle,
+    "aria-expanded": open,
+    style: {
+      flex: 1,
+      minWidth: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      cursor: "pointer",
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0,
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: "#2A2520",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      color: "#BBB",
+      letterSpacing: 0.5,
+      marginTop: 2
+    }
+  }, isArchived ? "ARCHIVED · " : "", summary.toUpperCase())), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#CCC",
+      fontSize: 13,
+      transition: "transform 0.2s",
+      transform: open ? "rotate(90deg)" : "none"
+    }
+  }, "\u25B8")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => toggleSectorArchived(name),
+    style: {
+      flexShrink: 0,
+      padding: "6px 12px",
+      borderRadius: 6,
+      fontSize: 10,
+      fontWeight: 700,
+      fontFamily: F.m,
+      cursor: "pointer",
+      background: isArchived ? "#3A8A7A" : "#FFF",
+      border: `1.5px solid ${isArchived ? "#3A8A7A" : "#E8E4DE"}`,
+      color: isArchived ? "#FFF" : "#2A2520",
+      letterSpacing: 0.5
+    }
+  }, isArchived ? "UNARCHIVE" : "ARCHIVE")), open && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "10px 12px 12px",
+      borderTop: "1px solid #F0EDE8",
+      animation: "fadeUp 0.25s ease"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "1 1 0%",
+      minWidth: 0,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: lbl
+  }, "NEXT OR LAST RESET"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: log.resetDate || "",
+    onChange: e => setSectorResetDate(name, e.target.value),
+    style: {
+      ...inp,
+      WebkitAppearance: "none",
+      appearance: "none",
+      fontFamily: F.b
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 76,
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: lbl
+  }, "EVERY (DAYS)"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    inputMode: "numeric",
+    placeholder: "\u2014",
+    value: log.resetIntervalDays || "",
+    onChange: e => setSectorResetInterval(name, e.target.value),
+    style: {
+      ...inp,
+      padding: "8px 8px",
+      fontWeight: 700,
+      fontFamily: F.h
+    }
+  }))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 10,
+      color: "#BBB",
+      margin: "8px 0 0"
+    }
+  }, "Use the next reset date, or the last one if that's what you know. Leave days blank for a one-off."), /*#__PURE__*/React.createElement("button", {
+    onClick: onHistory,
+    style: {
+      width: "100%",
+      marginTop: 12,
+      padding: "9px 0",
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 700,
+      fontFamily: F.m,
+      cursor: "pointer",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      color: "#2A2520",
+      letterSpacing: 1
+    }
+  }, "HISTORY (", log.archivedResets.length, ")")));
+}
 function ClimbApp() {
   const [view, setView] = useState("home");
   // Otherwise the scroll position from whatever view you were on carries over into the new one —
@@ -4920,6 +5135,7 @@ function ClimbApp() {
   const [expandedArchive, setExpandedArchive] = useState(null);
   const [expandedHistoryProblem, setExpandedHistoryProblem] = useState(null);
   const [editingResetSchedule, setEditingResetSchedule] = useState(null);
+  const [scheduleSector, setScheduleSector] = useState(null);
   const [mergeStep, setMergeStep] = useState(null); // null | "pick-first" | "pick-second" | "confirm"
   const [mergeFirst, setMergeFirst] = useState(null);
   const [mergeSecond, setMergeSecond] = useState(null);
@@ -5759,6 +5975,7 @@ function ClimbApp() {
     }, /*#__PURE__*/React.createElement("img", {
       ref: homeImageRef,
       src: data.gymMap,
+      decoding: "async",
       draggable: false,
       style: {
         width: "100%",
@@ -5769,24 +5986,7 @@ function ClimbApp() {
       pin: pin,
       draggable: false,
       onTap: selectPin
-    }))), /*#__PURE__*/React.createElement("button", {
-      onClick: () => {
-        setView("map");
-        setPinEditMode(false);
-      },
-      style: {
-        marginTop: 8,
-        background: "none",
-        border: "none",
-        color: "#3A8A7A",
-        fontSize: 12,
-        fontFamily: F.m,
-        fontWeight: 700,
-        cursor: "pointer",
-        letterSpacing: 1,
-        padding: 0
-      }
-    }, "MANAGE MAP & SECTORS →")) : /*#__PURE__*/React.createElement("button", {
+    })))) : /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("map"),
       style: {
         width: "100%",
@@ -6139,9 +6339,7 @@ function ClimbApp() {
         letterSpacing: 2,
         marginBottom: 20
       }
-    }, "+ LOG PROBLEM")), /*#__PURE__*/React.createElement(Divider, {
-      text: "SECTORS"
-    }), visibleSectorNames.length === 0 && /*#__PURE__*/React.createElement("div", {
+    }, "+ LOG PROBLEM")), visibleSectorNames.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
         padding: "30px 20px"
@@ -6220,7 +6418,7 @@ function ClimbApp() {
           marginTop: 3,
           letterSpacing: 0.3
         }
-      }, "⏱ ", resetOverdue ? "OVERDUE — " : "", resetCountdown), completedBadges.length > 0 && /*#__PURE__*/React.createElement("div", {
+      }, resetOverdue ? "OVERDUE — " : "", resetCountdown), completedBadges.length > 0 && /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 4,
@@ -6325,7 +6523,8 @@ function ClimbApp() {
           (groups[key] = groups[key] || []).push(p);
         });
         const groupKeys = sectorGroupKeys(log.currentProblems, gradeMode);
-        return groupKeys.map(groupKey => {
+        const doneGroups = log.completedGroups || [];
+        return [...groupKeys].sort((a, b) => doneGroups.includes(a) - doneGroups.includes(b)).map(groupKey => {
           const problems = groups[groupKey] || [];
           const colorMeta = HOLD_COLORS.find(c => c.name === groupKey) || HOLD_COLORS[0];
           const cp = problems.filter(p => p.status === "project").length;
@@ -6338,7 +6537,9 @@ function ClimbApp() {
             style: {
               marginTop: 8,
               borderTop: "1px solid #F5F2ED",
-              paddingTop: 8
+              paddingTop: 8,
+              opacity: isGroupComplete ? 0.45 : 1,
+              transition: "opacity 0.25s"
             }
           }, /*#__PURE__*/React.createElement("div", {
             style: {
@@ -6348,6 +6549,40 @@ function ClimbApp() {
               width: "100%"
             }
           }, /*#__PURE__*/React.createElement("button", {
+            onClick: () => toggleGroupComplete(name, groupKey),
+            title: isGroupComplete ? `${groupKey} marked complete, tap to undo` : `Mark all ${groupKey} climbs complete`,
+            "aria-pressed": isGroupComplete,
+            style: {
+              width: 32,
+              height: 32,
+              margin: "-6px -2px -6px -6px",
+              padding: 0,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer"
+            }
+          }, /*#__PURE__*/React.createElement("span", {
+            style: {
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              boxSizing: "border-box",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 800,
+              lineHeight: 1,
+              transition: "all 0.2s",
+              background: gradeMode ? isGroupComplete ? "#3A8A7A" : "#FFF" : colorMeta.hex,
+              border: gradeMode ? `1.5px solid ${isGroupComplete ? "#3A8A7A" : "#DDD8D0"}` : "1.5px solid rgba(0,0,0,0.1)",
+              color: gradeMode ? "#FFF" : colorMeta.text
+            }
+          }, isGroupComplete ? "✓" : "")), /*#__PURE__*/React.createElement("button", {
             onClick: () => setExpandedColorKey(isColorExpanded ? null : colorKey),
             style: {
               display: "flex",
@@ -6361,16 +6596,7 @@ function ClimbApp() {
               textAlign: "left",
               padding: 0
             }
-          }, !gradeMode && /*#__PURE__*/React.createElement("span", {
-            style: {
-              width: 14,
-              height: 14,
-              borderRadius: "50%",
-              background: colorMeta.hex,
-              border: "1.5px solid rgba(0,0,0,0.1)",
-              flexShrink: 0
-            }
-          }), /*#__PURE__*/React.createElement("div", {
+          }, /*#__PURE__*/React.createElement("div", {
             style: {
               flex: 1,
               minWidth: 0
@@ -6413,24 +6639,7 @@ function ClimbApp() {
               transition: "transform 0.2s",
               transform: isColorExpanded ? "rotate(90deg)" : "none"
             }
-          }, "▸")), /*#__PURE__*/React.createElement("button", {
-            onClick: () => toggleGroupComplete(name, groupKey),
-            title: isGroupComplete ? `${groupKey} marked complete — tap to undo` : `Mark all ${groupKey} climbs complete`,
-            style: {
-              width: 24,
-              height: 24,
-              borderRadius: "50%",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              cursor: "pointer",
-              background: isGroupComplete ? "#3A8A7A" : "#FFF",
-              border: `1.5px solid ${isGroupComplete ? "#3A8A7A" : "#E8E4DE"}`,
-              color: isGroupComplete ? "#FFF" : "#DDD"
-            }
-          }, "✓")), isColorExpanded && /*#__PURE__*/React.createElement("div", {
+          }, "▸"))), isColorExpanded && /*#__PURE__*/React.createElement("div", {
             style: {
               marginTop: 10,
               paddingLeft: 24,
@@ -6583,167 +6792,6 @@ function ClimbApp() {
         });
       })(), /*#__PURE__*/React.createElement("div", {
         style: {
-          marginTop: 14,
-          background: "#F5F2ED",
-          borderRadius: 8,
-          padding: 10,
-          overflow: "hidden"
-        }
-      }, log.resetDate && editingResetSchedule !== name ? /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 9,
-          color: "#999",
-          letterSpacing: 1,
-          marginBottom: 3
-        }
-      }, "SECTOR RESET SCHEDULE"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 12,
-          fontWeight: 600,
-          color: isSectorOverdue(log.resetDate, log.resetIntervalDays, log.lastConfirmedDate) ? "#C4453A" : "#2A2520"
-        }
-      }, isSectorOverdue(log.resetDate, log.resetIntervalDays, log.lastConfirmedDate) ? "OVERDUE — " : "", formatResetCountdown(log.resetDate, log.resetIntervalDays), log.resetIntervalDays ? ` · every ${log.resetIntervalDays} days` : " · one-off")), /*#__PURE__*/React.createElement("button", {
-        onClick: () => setEditingResetSchedule(name),
-        style: {
-          flexShrink: 0,
-          padding: "5px 10px",
-          borderRadius: 6,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#2A2520",
-          letterSpacing: 0.5
-        }
-      }, "EDIT")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 9,
-          color: "#999",
-          letterSpacing: 1
-        }
-      }, "SECTOR RESET SCHEDULE"), log.resetDate && /*#__PURE__*/React.createElement("button", {
-        onClick: () => setEditingResetSchedule(null),
-        style: {
-          padding: "3px 8px",
-          borderRadius: 6,
-          fontSize: 9,
-          fontWeight: 700,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: "transparent",
-          border: "1.5px solid #E8E4DE",
-          color: "#999",
-          letterSpacing: 0.5
-        }
-      }, "DONE")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: "1 1 0%",
-          minWidth: 0,
-          overflow: "hidden"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 8,
-          color: "#BBB",
-          marginBottom: 4,
-          letterSpacing: 0.5
-        }
-      }, "NEXT OR LAST RESET"), /*#__PURE__*/React.createElement("input", {
-        type: "date",
-        value: log.resetDate || "",
-        onChange: e => {
-          setEditingResetSchedule(name);
-          setSectorResetDate(name, e.target.value);
-        },
-        style: {
-          WebkitAppearance: "none",
-          appearance: "none",
-          width: "100%",
-          maxWidth: "100%",
-          minWidth: 0,
-          display: "block",
-          padding: "8px 6px",
-          borderRadius: 6,
-          fontSize: 12,
-          fontFamily: F.b,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#2A2520",
-          outline: "none",
-          boxSizing: "border-box"
-        }
-      })), /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 76,
-          flexShrink: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 8,
-          color: "#BBB",
-          marginBottom: 4,
-          letterSpacing: 0.5
-        }
-      }, "EVERY (DAYS)"), /*#__PURE__*/React.createElement("input", {
-        type: "number",
-        min: "1",
-        placeholder: "—",
-        value: log.resetIntervalDays || "",
-        onChange: e => {
-          setEditingResetSchedule(name);
-          setSectorResetInterval(name, e.target.value);
-        },
-        style: {
-          width: "100%",
-          padding: "8px 8px",
-          borderRadius: 6,
-          fontSize: 12,
-          fontWeight: 700,
-          fontFamily: F.h,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#2A2520",
-          outline: "none",
-          boxSizing: "border-box"
-        }
-      }))), /*#__PURE__*/React.createElement("p", {
-        style: {
-          fontFamily: F.b,
-          fontSize: 10,
-          color: "#BBB",
-          margin: "8px 0 0"
-        }
-      }, "Enter the next reset date, or the last one if that's what you know — add a repeat interval if this gym resets on a schedule."))), /*#__PURE__*/React.createElement("div", {
-        style: {
           display: "flex",
           gap: 8,
           marginTop: 14
@@ -6767,25 +6815,7 @@ function ClimbApp() {
           color: "#F5F2ED",
           letterSpacing: 1
         }
-      }, "+ LOG HERE"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          setHistorySector(name);
-          setView("sectorHistory");
-        },
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#2A2520",
-          letterSpacing: 1
-        }
-      }, "HISTORY (", log.archivedResets.length, ")")), resetConfirmSector !== name ? /*#__PURE__*/React.createElement("button", {
+      }, "+ LOG HERE")), (resetOverdue || !log.resetDate) && (resetConfirmSector !== name ? /*#__PURE__*/React.createElement("button", {
         onClick: () => setResetConfirmSector(name),
         style: {
           width: "100%",
@@ -6850,7 +6880,7 @@ function ClimbApp() {
           color: "#666",
           letterSpacing: 1
         }
-      }, "CANCEL"))))));
+      }, "CANCEL")))))));
     })), /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("analytics"),
       style: {
@@ -6981,7 +7011,51 @@ function ClimbApp() {
       style: {
         display: "none"
       }
-    })));
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        margin: "28px 0 16px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#DDD8D0"
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 10,
+        color: "#AAA",
+        letterSpacing: 3
+      }
+    }, "MAP & SECTORS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 1,
+        background: "#DDD8D0"
+      }
+    })), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPinEditMode(false);
+        setView("map");
+      },
+      style: {
+        width: "100%",
+        padding: "12px 0",
+        borderRadius: 8,
+        fontSize: 11,
+        fontWeight: 700,
+        fontFamily: F.m,
+        cursor: "pointer",
+        letterSpacing: 1,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        color: "#2A2520"
+      }
+    }, data.gymMap ? "MANAGE MAP & SECTORS" : "ADD GYM MAP")));
   }
 
   // ═══════════ ADD / EDIT PROBLEM ═══════════
@@ -7011,7 +7085,7 @@ function ClimbApp() {
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
-        setView("home");
+        setView("map");
         setHistorySector(null);
         setExpandedArchive(null);
         setExpandedHistoryProblem(null);
@@ -8049,7 +8123,7 @@ function ClimbApp() {
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
-        setView("home");
+        setView("settings");
         setPinEditMode(false);
         setNewPinDraft(null);
         setActivePinId(null);
@@ -8112,6 +8186,7 @@ function ClimbApp() {
     }, /*#__PURE__*/React.createElement("img", {
       ref: imageRef,
       src: data.gymMap,
+      decoding: "async",
       draggable: false,
       onClick: handleImageClick,
       style: {
@@ -8364,7 +8439,7 @@ function ClimbApp() {
         color: "#BBB",
         margin: "0 0 12px"
       }
-    }, "Archive a sector to hide it from your everyday list without losing its history — Analytics still sees everything. Merge two sectors if the gym combines walls or renames one."), allSectorNames.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    }, "Tap a sector to set its reset schedule. Archive hides a sector from your everyday list without losing its history. Merge two sectors if the gym combines walls or renames one."), allSectorNames.length === 0 ? /*#__PURE__*/React.createElement("p", {
       style: {
         fontFamily: F.m,
         fontSize: 11,
@@ -8383,56 +8458,21 @@ function ClimbApp() {
     }, allSectorNames.map(name => {
       const log = data.sectorLogs[name] || emptySectorLog();
       const isArchived = !!log.archived;
-      return /*#__PURE__*/React.createElement("div", {
+      return /*#__PURE__*/React.createElement(SectorManageRow, {
         key: name,
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          padding: "10px 12px",
-          background: "#FFF",
-          borderRadius: 8,
-          border: "1px solid #E8E4DE",
-          opacity: isArchived ? 0.6 : 1
+        name: name,
+        log: log,
+        isArchived: isArchived,
+        open: scheduleSector === name,
+        onToggle: () => setScheduleSector(scheduleSector === name ? null : name),
+        toggleSectorArchived: toggleSectorArchived,
+        setSectorResetDate: setSectorResetDate,
+        setSectorResetInterval: setSectorResetInterval,
+        onHistory: () => {
+          setHistorySector(name);
+          setView("sectorHistory");
         }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 13,
-          fontWeight: 600,
-          color: "#2A2520",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
-        }
-      }, name), isArchived && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 9,
-          color: "#BBB",
-          letterSpacing: 0.5,
-          marginTop: 2
-        }
-      }, "ARCHIVED")), /*#__PURE__*/React.createElement("button", {
-        onClick: () => toggleSectorArchived(name),
-        style: {
-          flexShrink: 0,
-          padding: "6px 12px",
-          borderRadius: 6,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: isArchived ? "#3A8A7A" : "#FFF",
-          border: `1.5px solid ${isArchived ? "#3A8A7A" : "#E8E4DE"}`,
-          color: isArchived ? "#FFF" : "#2A2520",
-          letterSpacing: 0.5
-        }
-      }, isArchived ? "UNARCHIVE" : "ARCHIVE"));
+      });
     })), mergeStep === null && allSectorNames.length >= 2 && /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         setMergeStep("pick-first");
@@ -8648,6 +8688,139 @@ function ClimbApp() {
 }
 
 // ─── Add/Edit Problem Form ───────────────────────────
+// ═══════════════════════════════════════════════════
+// ─── GOOGLE DRIVE PHOTO UPLOAD ───────────────────────
+// Signs in with Google (only when needed), saves a climb photo into a "Send Log Photos" folder in
+// the user's Drive, shares it as "anyone with the link", and hands back the share link. Uses the
+// narrow drive.file permission, so the app can only ever see files it created itself.
+// ═══════════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = "865694161905-a6f6kdtp9g41r3muq9r020nihpgci0gd.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_FOLDER_NAME = "Send Log Photos";
+const DRIVE_TOKEN_KEY = "send-log-drive-token";
+const DRIVE_FOLDER_KEY = "send-log-drive-folder";
+
+function storedDriveToken() {
+  try {
+    const t = JSON.parse(localStorage.getItem(DRIVE_TOKEN_KEY) || "null");
+    // Treat it as expired a minute early so an upload never starts on a token about to lapse.
+    if (t && t.token && t.exp - 60000 > Date.now()) return t.token;
+  } catch (e) {}
+  return null;
+}
+function clearDriveToken() {
+  try { localStorage.removeItem(DRIVE_TOKEN_KEY); } catch (e) {}
+}
+
+// Must be called straight from a tap (no awaits before it), or the browser blocks Google's sign-in window.
+function getDriveToken() {
+  const existing = storedDriveToken();
+  if (existing) return Promise.resolve(existing);
+  return new Promise((resolve, reject) => {
+    const oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+    if (!oauth) {
+      reject(new Error("Google sign-in hasn't loaded. Check your connection and try again."));
+      return;
+    }
+    const client = oauth.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: resp => {
+        if (!resp || resp.error || !resp.access_token) {
+          reject(new Error(resp && resp.error === "access_denied" ? "Google access wasn't allowed, so the photo wasn't saved." : "Google sign-in didn't finish. Try again."));
+          return;
+        }
+        try {
+          localStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify({
+            token: resp.access_token,
+            exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000
+          }));
+        } catch (e) {}
+        resolve(resp.access_token);
+      },
+      error_callback: err => {
+        const type = err && err.type;
+        reject(new Error(type === "popup_closed" ? "Google sign-in was closed before it finished." : type === "popup_failed_to_open" ? "Google sign-in couldn't open. Allow pop-ups for this site and try again." : "Google sign-in didn't finish. Try again."));
+      }
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function driveFetch(token, url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) }
+  });
+  if (res.status === 401) {
+    clearDriveToken();
+    throw new Error("Your Google sign-in has expired. Tap Save to Drive again.");
+  }
+  if (!res.ok) throw new Error(`Drive didn't accept the photo (error ${res.status}). Try again.`);
+  return res.json();
+}
+
+async function ensureDriveFolder(token) {
+  let id = null;
+  try { id = localStorage.getItem(DRIVE_FOLDER_KEY); } catch (e) {}
+  if (id) {
+    // Make sure the remembered folder still exists and isn't in the bin.
+    try {
+      const f = await driveFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
+      if (f && !f.trashed) return id;
+    } catch (e) {
+      if (/expired/.test(e.message)) throw e;
+    }
+  }
+  const q = encodeURIComponent(`name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await driveFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+  if (found.files && found.files.length) {
+    id = found.files[0].id;
+  } else {
+    const made = await driveFetch(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
+    });
+    id = made.id;
+  }
+  try { localStorage.setItem(DRIVE_FOLDER_KEY, id); } catch (e) {}
+  return id;
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(",");
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// Returns the photo's Drive share link. Call it straight from the tap on "Save to Drive".
+function driveUploadPhoto(file, label) {
+  const tokenPromise = getDriveToken(); // synchronous sign-in request, kept inside the tap
+  return tokenPromise.then(async token => {
+    const blob = dataUrlToBlob(await compressImage(file, 1600, 0.8));
+    const folderId = await ensureDriveFolder(token);
+    const safe = String(label || "climb").replace(/[\\/:*?"<>|]+/g, " ").trim();
+    const meta = { name: `${safe}.jpg`, mimeType: "image/jpeg", parents: [folderId] };
+    const body = new FormData();
+    body.append("metadata", new Blob([JSON.stringify(meta)], { type: "application/json" }));
+    body.append("file", blob);
+    const up = await driveFetch(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+      method: "POST",
+      body
+    });
+    await driveFetch(token, `https://www.googleapis.com/drive/v3/files/${up.id}/permissions?fields=id`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" })
+    });
+    return `https://drive.google.com/file/d/${up.id}/view?usp=sharing`;
+  });
+}
+
 function ProblemForm({
   initial,
   initialSector,
@@ -8664,6 +8837,7 @@ function ProblemForm({
   const [photoLink, setPhotoLink] = useState(initial?.photoLink || "");
   const [capturedPhoto, setCapturedPhoto] = useState(null); // { file, url } once the camera/picker hands back a photo
   const [photoShareState, setPhotoShareState] = useState(null);
+  const [driveState, setDriveState] = useState(null); // null | { status: "uploading" } | { status: "error", msg }
   const photoCaptureInputRef = useRef(null);
   const [videoLink, setVideoLink] = useState(initial?.videoLink || "");
   const [capturedVideo, setCapturedVideo] = useState(null); // { file, url } once native camera hands back a clip
@@ -8737,6 +8911,21 @@ function ProblemForm({
     if (capturedPhoto?.url) URL.revokeObjectURL(capturedPhoto.url);
     setCapturedPhoto(null);
     setPhotoShareState(null);
+    setDriveState(null);
+  };
+  const uploadCapturedPhoto = () => {
+    if (!capturedPhoto || driveState?.status === "uploading") return;
+    setDriveState({
+      status: "uploading"
+    });
+    const label = `${sector.trim() || "Climb"} ${color} ${new Date().toISOString().slice(0, 10)}`;
+    driveUploadPhoto(capturedPhoto.file, label).then(link => {
+      setPhotoLink(link);
+      closePhotoReview();
+    }).catch(err => setDriveState({
+      status: "error",
+      msg: err && err.message || "Couldn't save to Drive. Try again."
+    }));
   };
   const shareCapturedPhoto = async () => {
     if (!capturedPhoto) return;
@@ -9367,7 +9556,8 @@ function ProblemForm({
       letterSpacing: 1
     }
   }, "CHOOSE DIFFERENT"), /*#__PURE__*/React.createElement("button", {
-    onClick: shareCapturedPhoto,
+    onClick: uploadCapturedPhoto,
+    disabled: driveState?.status === "uploading",
     style: {
       flex: 2,
       padding: "14px 0",
@@ -9375,13 +9565,14 @@ function ProblemForm({
       fontSize: 12,
       fontWeight: 800,
       fontFamily: F.m,
-      cursor: "pointer",
+      cursor: driveState?.status === "uploading" ? "default" : "pointer",
       background: "#D4663A",
+      opacity: driveState?.status === "uploading" ? 0.7 : 1,
       border: "none",
       color: "#FFF",
       letterSpacing: 1
     }
-  }, "SHARE / SAVE ↗")), /*#__PURE__*/React.createElement("button", {
+  }, driveState?.status === "uploading" ? "SAVING TO DRIVE…" : "SAVE TO DRIVE")), /*#__PURE__*/React.createElement("button", {
     onClick: closePhotoReview,
     style: {
       width: "100%",
@@ -9396,15 +9587,15 @@ function ProblemForm({
       color: "#999",
       letterSpacing: 1
     }
-  }, "DONE"), /*#__PURE__*/React.createElement("p", {
+  }, "CANCEL"), /*#__PURE__*/React.createElement("p", {
     style: {
-      color: "#999",
+      color: driveState?.status === "error" ? "#E8907A" : "#999",
       fontFamily: F.b,
       fontSize: 11,
       textAlign: "center",
       marginTop: 12
     }
-  }, photoShareState === "saved" ? "Saved — now upload it to Google Drive, share as \"Anyone with the link\", then paste the link back here." : "Tap Share, choose Drive, upload it, then paste the resulting link back here."))));
+  }, driveState?.status === "error" ? driveState.msg : driveState?.status === "uploading" ? "Saving to your Send Log Photos folder in Google Drive…" : storedDriveToken() ? "Saves to your Send Log Photos folder in Google Drive and adds the link for you." : "Saves to your Send Log Photos folder in Google Drive. Google will ask you to sign in."))));
 }
 const CS = {
   page: {
@@ -11495,7 +11686,11 @@ function StretchApp() {
   return null;
 }
 function RootApp() {
-  const [page, setPage] = useState("fingers");
+  const [page, setPageRaw] = useState("fingers");
+  const setPage = p => {
+    if (p !== page) window.scrollTo(0, 0);
+    setPageRaw(p);
+  };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       position: "sticky",
@@ -11561,7 +11756,19 @@ function RootApp() {
       border: `1.5px solid ${page === "stretch" ? "#2A2520" : "#E8E4DE"}`,
       color: page === "stretch" ? "#F5F2ED" : "#999"
     }
-  }, "STRETCH"))), page === "fingers" ? /*#__PURE__*/React.createElement(FingerApp, null) : page === "climbs" ? /*#__PURE__*/React.createElement(ClimbApp, null) : /*#__PURE__*/React.createElement(StretchApp, null));
+  }, "STRETCH"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: page === "fingers" ? "block" : "none"
+    }
+  }, /*#__PURE__*/React.createElement(FingerApp, null)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: page === "climbs" ? "block" : "none"
+    }
+  }, /*#__PURE__*/React.createElement(ClimbApp, null)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: page === "stretch" ? "block" : "none"
+    }
+  }, /*#__PURE__*/React.createElement(StretchApp, null)));
 }
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(/*#__PURE__*/React.createElement(RootApp, null));</script>
