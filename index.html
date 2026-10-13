@@ -8881,6 +8881,101 @@ function driveUploadPhoto(file, label) {
   });
 }
 
+// ─── YOUTUBE VIDEO UPLOAD (test) ─────────────────────
+// Uploads a clip to the signed-in user's YouTube channel as Unlisted and reports back what
+// privacy YouTube actually applied, since Google may force uploads from personal, unverified
+// projects to Private.
+const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+const YT_TOKEN_KEY = "send-log-youtube-token";
+
+function storedYouTubeToken() {
+  try {
+    const t = JSON.parse(localStorage.getItem(YT_TOKEN_KEY) || "null");
+    if (t && t.token && t.exp - 60000 > Date.now()) return t.token;
+  } catch (e) {}
+  return null;
+}
+
+// Must be called straight from a tap so Google's sign-in window isn't blocked.
+function getYouTubeToken() {
+  const existing = storedYouTubeToken();
+  if (existing) return Promise.resolve(existing);
+  return new Promise((resolve, reject) => {
+    const oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+    if (!oauth) {
+      reject(new Error("Google sign-in hasn't loaded. Check your connection and try again."));
+      return;
+    }
+    oauth.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: YT_SCOPE,
+      include_granted_scopes: true,
+      callback: resp => {
+        if (!resp || resp.error || !resp.access_token) {
+          reject(new Error(resp && resp.error === "access_denied" ? "YouTube access wasn't allowed, so the video wasn't uploaded." : "Google sign-in didn't finish. Try again."));
+          return;
+        }
+        try {
+          localStorage.setItem(YT_TOKEN_KEY, JSON.stringify({
+            token: resp.access_token,
+            exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000
+          }));
+        } catch (e) {}
+        resolve(resp.access_token);
+      },
+      error_callback: err => {
+        const type = err && err.type;
+        reject(new Error(type === "popup_closed" ? "Google sign-in was closed before it finished." : type === "popup_failed_to_open" ? "Google sign-in couldn't open. Allow pop-ups for this site and try again." : "Google sign-in didn't finish. Try again."));
+      }
+    }).requestAccessToken();
+  });
+}
+
+function youtubeUploadVideo(file, title, onProgress) {
+  const tokenPromise = getYouTubeToken(); // kept inside the tap
+  return tokenPromise.then(async token => {
+    const meta = {
+      snippet: { title: String(title || "Climb").slice(0, 95), description: "Logged with Send Log", categoryId: "17" },
+      status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false }
+    };
+    const start = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": file.type || "video/mp4",
+        "X-Upload-Content-Length": String(file.size)
+      },
+      body: JSON.stringify(meta)
+    });
+    if (start.status === 401) {
+      try { localStorage.removeItem(YT_TOKEN_KEY); } catch (e) {}
+      throw new Error("Your Google sign-in has expired. Tap Save to YouTube again.");
+    }
+    if (!start.ok) {
+      let detail = "";
+      try { const j = await start.json(); detail = j && j.error && j.error.message ? `: ${j.error.message}` : ""; } catch (e) {}
+      throw new Error(`YouTube didn't accept the upload (error ${start.status}${detail}).`);
+    }
+    const uploadUrl = start.headers.get("Location");
+    if (!uploadUrl) throw new Error("YouTube didn't return an upload address. Try again.");
+    const video = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100)); };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error("Upload finished but YouTube's reply couldn't be read.")); }
+        } else reject(new Error(`YouTube upload failed (error ${xhr.status}). Try again.`));
+      };
+      xhr.onerror = () => reject(new Error("The upload was interrupted. Check your connection and try again."));
+      xhr.send(file);
+    });
+    return { id: video.id, privacy: video.status && video.status.privacyStatus || "unknown" };
+  });
+}
+
 function ProblemForm({
   initial,
   initialSector,
@@ -8902,6 +8997,7 @@ function ProblemForm({
   const [videoLink, setVideoLink] = useState(initial?.videoLink || "");
   const [capturedVideo, setCapturedVideo] = useState(null); // { file, url } once native camera hands back a clip
   const [captureShareState, setCaptureShareState] = useState(null);
+  const [ytState, setYtState] = useState(null); // null | uploading {pct} | done {privacy} | error {msg}
   const videoCaptureInputRef = useRef(null);
   const handleVideoCapture = e => {
     const file = e.target.files[0];
@@ -8924,6 +9020,31 @@ function ProblemForm({
     if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
     setCapturedVideo(null);
     setCaptureShareState(null);
+    setYtState(null);
+  };
+  const uploadCapturedVideo = () => {
+    if (!capturedVideo || ytState?.status === "uploading") return;
+    setYtState({
+      status: "uploading",
+      pct: 0
+    });
+    const title = `${sector.trim() || "Climb"} ${color} ${new Date().toISOString().slice(0, 10)}`;
+    youtubeUploadVideo(capturedVideo.file, title, pct => setYtState({
+      status: "uploading",
+      pct
+    })).then(({
+      id,
+      privacy
+    }) => {
+      setVideoLink(`https://youtu.be/${id}`);
+      setYtState({
+        status: "done",
+        privacy
+      });
+    }).catch(err => setYtState({
+      status: "error",
+      msg: err && err.message || "Couldn't upload to YouTube. Try again."
+    }));
   };
   const shareCapturedVideo = async () => {
     if (!capturedVideo) return;
@@ -9527,7 +9648,8 @@ function ProblemForm({
       letterSpacing: 1
     }
   }, "RETAKE"), /*#__PURE__*/React.createElement("button", {
-    onClick: shareCapturedVideo,
+    onClick: ytState?.status === "done" ? closeVideoReview : uploadCapturedVideo,
+    disabled: ytState?.status === "uploading",
     style: {
       flex: 2,
       padding: "14px 0",
@@ -9535,13 +9657,14 @@ function ProblemForm({
       fontSize: 12,
       fontWeight: 800,
       fontFamily: F.m,
-      cursor: "pointer",
-      background: "#D4663A",
+      cursor: ytState?.status === "uploading" ? "default" : "pointer",
+      background: ytState?.status === "done" ? "#3A8A7A" : "#D4663A",
+      opacity: ytState?.status === "uploading" ? 0.7 : 1,
       border: "none",
       color: "#FFF",
       letterSpacing: 1
     }
-  }, "SHARE / SAVE ↗")), /*#__PURE__*/React.createElement("button", {
+  }, ytState?.status === "uploading" ? `UPLOADING ${ytState.pct || 0}%` : ytState?.status === "done" ? "DONE ✓" : "SAVE TO YOUTUBE")), /*#__PURE__*/React.createElement("button", {
     onClick: closeVideoReview,
     style: {
       width: "100%",
@@ -9556,15 +9679,15 @@ function ProblemForm({
       color: "#999",
       letterSpacing: 1
     }
-  }, "DONE"), /*#__PURE__*/React.createElement("p", {
+  }, ytState?.status === "done" ? "CLOSE" : "CANCEL"), /*#__PURE__*/React.createElement("p", {
     style: {
-      color: "#999",
+      color: ytState?.status === "error" ? "#E8907A" : ytState?.status === "done" ? ytState.privacy === "unlisted" ? "#7FD1A8" : "#E8C34A" : "#999",
       fontFamily: F.b,
       fontSize: 11,
       textAlign: "center",
       marginTop: 12
     }
-  }, captureShareState === "saved" ? "Saved — now upload it to YouTube as Unlisted, then paste the link back here." : "Tap Share, choose YouTube, upload as Unlisted, then paste the link back here."))), capturedPhoto && /*#__PURE__*/React.createElement("div", {
+  }, ytState?.status === "error" ? ytState.msg : ytState?.status === "uploading" ? "Keep the app open until the upload finishes." : ytState?.status === "done" ? ytState.privacy === "unlisted" ? "Uploaded and kept as Unlisted. The link has been added." : `Uploaded, but YouTube set it to ${String(ytState.privacy).toUpperCase()}. The link has been added. Check it in the YouTube app.` : storedYouTubeToken() ? "Uploads to your YouTube channel as Unlisted and adds the link." : "Uploads to your YouTube channel as Unlisted. Google will ask you to allow YouTube access."))), capturedPhoto && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
