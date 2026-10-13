@@ -4534,7 +4534,8 @@ function climbPhotoUrl(p) {
   return null;
 }
 function ClimbPhotoThumb({
-  p
+  p,
+  lazy
 }) {
   const url = climbPhotoUrl(p);
   const [failed, setFailed] = useState(false);
@@ -4551,7 +4552,7 @@ function ClimbPhotoThumb({
   if (!url || failed) return null;
   return /*#__PURE__*/React.createElement("img", {
     src: src,
-    loading: "lazy",
+    loading: lazy ? "lazy" : "eager",
     decoding: "async",
     onError: onImgError,
     style: {
@@ -4565,7 +4566,8 @@ function ClimbPhotoThumb({
   });
 }
 function ClimbPhotoFull({
-  p
+  p,
+  lazy
 }) {
   const url = climbPhotoUrl(p);
   const [failed, setFailed] = useState(false);
@@ -4586,7 +4588,7 @@ function ClimbPhotoFull({
     }
   }, !failed ? /*#__PURE__*/React.createElement("img", {
     src: src,
-    loading: "lazy",
+    loading: lazy ? "lazy" : "eager",
     decoding: "async",
     onError: onImgError,
     style: {
@@ -5181,6 +5183,37 @@ function ClimbApp() {
   });
   const imageRef = useRef(null);
   const homeImageRef = useRef(null);
+  // Fetch and decode every current-set climb photo in the background once the app is idle, and hold
+  // on to them, so expanding a sector or scrolling shows photos instantly. Past sets (History) stay
+  // load-on-scroll, since there are many more of them and they're rarely viewed.
+  useEffect(() => {
+    const cache = window.__climbPhotoCache = window.__climbPhotoCache || {};
+    const urls = [];
+    Object.values(data.sectorLogs || {}).forEach(log => {
+      if (!log || log.archived) return;
+      (log.currentProblems || []).forEach(p => {
+        const u = climbPhotoUrl(p);
+        if (u && /^https:/.test(u) && !cache[u]) urls.push(u);
+      });
+    });
+    if (!urls.length) return;
+    const idle = window.requestIdleCallback || (f => setTimeout(f, 300));
+    const handle = idle(() => {
+      urls.forEach(u => {
+        if (cache[u]) return;
+        const img = new Image();
+        img.decoding = "async";
+        img.src = u;
+        cache[u] = img;
+        if (img.decode) img.decode().catch(() => {
+          delete cache[u];
+        });
+      });
+    });
+    return () => {
+      if (window.cancelIdleCallback && typeof handle === "number") window.cancelIdleCallback(handle);
+    };
+  }, [data.sectorLogs]);
   const dragPosRef = useRef({
     x: 0,
     y: 0
@@ -7374,7 +7407,8 @@ function ClimbApp() {
             animation: "fadeUp 0.25s ease"
           }
         }, /*#__PURE__*/React.createElement(ClimbPhotoFull, {
-          p: p
+          p: p,
+          lazy: true
         }), p.videoLink && /*#__PURE__*/React.createElement(VideoEmbed, {
           link: p.videoLink
         }), p.notes && /*#__PURE__*/React.createElement("p", {
