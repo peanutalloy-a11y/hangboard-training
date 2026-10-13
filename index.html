@@ -333,7 +333,8 @@ var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
 </script>
-<script>// Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
+<script>const APP_VERSION = "13 Oct 2026, build 5";
+// Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
   const orig = Date.prototype.toLocaleDateString;
@@ -4474,11 +4475,28 @@ function VideoEmbed({
 }) {
   const info = videoEmbedInfo(link);
   if (!info) return null;
+  // A clip uploaded from this phone in this session plays from the local copy, since YouTube
+  // takes a minute or two to process a new upload before its player will show it.
+  const ytId = extractYouTubeId(link);
+  const localUrl = ytId && window.__ytLocalVideos && window.__ytLocalVideos[ytId];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, localUrl ? /*#__PURE__*/React.createElement("video", {
+    src: localUrl,
+    controls: true,
+    playsInline: true,
+    preload: "metadata",
+    style: {
+      width: "100%",
+      maxHeight: "70vh",
+      display: "block",
+      borderRadius: 8,
+      background: "#000",
+      border: "1px solid #E8E4DE"
+    }
+  }) : /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
       width: "100%",
@@ -7111,7 +7129,15 @@ function ClimbApp() {
         border: "1.5px solid #E8E4DE",
         color: "#2A2520"
       }
-    }, data.gymMap ? "MANAGE MAP & SECTORS" : "ADD GYM MAP")));
+    }, data.gymMap ? "MANAGE MAP & SECTORS" : "ADD GYM MAP"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.b,
+        fontSize: 10,
+        color: "#BBB",
+        textAlign: "center",
+        marginTop: 28
+      }
+    }, "App version: ", APP_VERSION)));
   }
 
   // ═══════════ ADD / EDIT PROBLEM ═══════════
@@ -8950,14 +8976,26 @@ function youtubeUploadVideo(file, title, onProgress) {
       },
       body: JSON.stringify(meta)
     });
-    if (start.status === 401) {
-      try { localStorage.removeItem(YT_TOKEN_KEY); } catch (e) {}
-      throw new Error("Your Google sign-in has expired. Tap Save to YouTube again.");
-    }
     if (!start.ok) {
-      let detail = "";
-      try { const j = await start.json(); detail = j && j.error && j.error.message ? `: ${j.error.message}` : ""; } catch (e) {}
-      throw new Error(`YouTube didn't accept the upload (error ${start.status}${detail}).`);
+      // Read YouTube's own reason so the message says what's actually wrong, not just "expired".
+      let reason = "", message = "";
+      try {
+        const j = await start.json();
+        const e0 = j && j.error && j.error.errors && j.error.errors[0];
+        reason = e0 && e0.reason || "";
+        message = j && j.error && j.error.message || "";
+      } catch (e) {}
+      if (reason === "youtubeSignupRequired") {
+        throw new Error("This Google account doesn't have a YouTube channel yet. Open the YouTube app, tap your profile picture, choose Create a channel, then try again.");
+      }
+      if (start.status === 401) {
+        try { localStorage.removeItem(YT_TOKEN_KEY); } catch (e) {}
+        throw new Error(`YouTube didn't accept the sign-in${reason ? ` (${reason})` : ""}${message ? `: ${message}` : ""}. Tap Save to YouTube to try again.`);
+      }
+      if (reason === "accessNotConfigured" || /has not been used|is disabled/i.test(message)) {
+        throw new Error("The YouTube Data API isn't switched on in Google Cloud yet. Enable it under APIs & Services > Library, wait a minute, then try again.");
+      }
+      throw new Error(`YouTube didn't accept the upload (error ${start.status}${reason ? `, ${reason}` : ""})${message ? `: ${message}` : ""}.`);
     }
     const uploadUrl = start.headers.get("Location");
     if (!uploadUrl) throw new Error("YouTube didn't return an upload address. Try again.");
@@ -9001,9 +9039,13 @@ function ProblemForm({
   const [captureShareState, setCaptureShareState] = useState(null);
   const [ytState, setYtState] = useState(null); // null | uploading {pct} | done {privacy} | error {msg}
   const videoCaptureInputRef = useRef(null);
+  const videoLibraryInputRef = useRef(null);
+  const [videoPickerOpen, setVideoPickerOpen] = useState(false);
   const handleVideoCapture = e => {
     const file = e.target.files[0];
     e.target.value = "";
+    setVideoPickerOpen(false);
+    setYtState(null);
     if (!file) return; // user backed out of the native camera — nothing to do
     if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
     setCapturedVideo({
@@ -9030,7 +9072,17 @@ function ProblemForm({
       status: "uploading",
       pct: 0
     });
-    const title = `${sector.trim() || "Climb"} ${color} ${new Date().toISOString().slice(0, 10)}`;
+    const resultLabel = {
+      flash: "Flash",
+      sent: "Sent",
+      project: "Project"
+    }[status] || "";
+    const day = new Date().toLocaleDateString("en-AU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+    const title = [sector.trim() || "Climb", `${color}${grade.trim() ? ` ${grade.trim()}` : ""}`, resultLabel, day].filter(Boolean).join(" · ");
     youtubeUploadVideo(capturedVideo.file, title, pct => setYtState({
       status: "uploading",
       pct
@@ -9038,6 +9090,8 @@ function ProblemForm({
       id,
       privacy
     }) => {
+      window.__ytLocalVideos = window.__ytLocalVideos || {};
+      window.__ytLocalVideos[id] = URL.createObjectURL(capturedVideo.file);
       setVideoLink(`https://youtu.be/${id}`);
       setYtState({
         status: "done",
@@ -9501,8 +9555,9 @@ function ProblemForm({
       boxSizing: "border-box"
     }
   }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => videoCaptureInputRef.current?.click(),
-    title: "Record with Camera",
+    onClick: () => setVideoPickerOpen(o => !o),
+    title: "Add a video",
+    "aria-expanded": videoPickerOpen,
     style: {
       width: 40,
       height: 40,
@@ -9517,7 +9572,7 @@ function ProblemForm({
       alignItems: "center",
       justifyContent: "center"
     }
-  }, "📷"), /*#__PURE__*/React.createElement("input", {
+  }, "🎥"), /*#__PURE__*/React.createElement("input", {
     ref: videoCaptureInputRef,
     type: "file",
     accept: "video/*",
@@ -9526,7 +9581,52 @@ function ProblemForm({
     style: {
       display: "none"
     }
-  })), videoLink.trim() && (videoEmbedInfo(videoLink) ? /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("input", {
+    ref: videoLibraryInputRef,
+    type: "file",
+    accept: "video/*",
+    onChange: handleVideoCapture,
+    style: {
+      display: "none"
+    }
+  })), videoPickerOpen && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 8,
+      animation: "fadeUp 0.2s ease"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => videoCaptureInputRef.current?.click(),
+    style: {
+      flex: 1,
+      padding: "10px 0",
+      borderRadius: 8,
+      fontSize: 11,
+      fontWeight: 700,
+      fontFamily: F.m,
+      cursor: "pointer",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      color: "#2A2520",
+      letterSpacing: 0.5
+    }
+  }, "RECORD VIDEO"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => videoLibraryInputRef.current?.click(),
+    style: {
+      flex: 1,
+      padding: "10px 0",
+      borderRadius: 8,
+      fontSize: 11,
+      fontWeight: 700,
+      fontFamily: F.m,
+      cursor: "pointer",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      color: "#2A2520",
+      letterSpacing: 0.5
+    }
+  }, "CHOOSE FROM LIBRARY")), videoLink.trim() && (videoEmbedInfo(videoLink) ? /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10
     }
@@ -9548,7 +9648,7 @@ function ProblemForm({
       marginTop: 8,
       marginBottom: 0
     }
-  }, "Upload as \"Unlisted\" so it's only viewable by link, not public.")), /*#__PURE__*/React.createElement("div", {
+  }, "Tap 🎥 to record or choose a clip. It uploads to your YouTube channel as Unlisted, so it's only viewable by link.")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF",
       borderRadius: 10,
