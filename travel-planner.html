@@ -58,7 +58,7 @@
     padding-bottom:calc(84px + env(safe-area-inset-bottom,0px));
     min-height:100vh;
   }
-  .num{font-family:'Baloo 2',sans-serif;font-weight:700;}
+  .num{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;}
   header.app-header{
     background:linear-gradient(135deg, var(--sun) 0%, var(--coral) 100%);
     color:#fff;
@@ -74,7 +74,7 @@
     pointer-events:none;
   }
   header.app-header .back-row, header.app-header .title, header.app-header .sub{position:relative;z-index:1;}
-  header.app-header .title{font-family:'Baloo 2';font-weight:800;font-size:20px;letter-spacing:.2px;}
+  header.app-header .title{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:800;font-size:20px;letter-spacing:.2px;}
   header.app-header .sub{font-size:13px;color:rgba(255,255,255,.88);margin-top:2px;}
   .back-row{display:flex;align-items:center;gap:10px;}
   .back-btn{background:none;border:none;color:#fff;font-size:15px;padding:0;cursor:pointer;font-family:inherit;}
@@ -92,14 +92,14 @@
     display:flex;justify-content:space-between;align-items:center;cursor:pointer;
     box-shadow:0 4px 14px rgba(30,58,58,.08);border-color:transparent;
   }
-  .trip-card .name{font-family:'Baloo 2';font-weight:700;font-size:17px;color:var(--ink);}
+  .trip-card .name{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;font-size:17px;color:var(--ink);}
   .trip-card .dates{font-size:13px;color:var(--muted);margin-top:3px;}
   .trip-card .chev{color:var(--coral);font-size:20px;}
 
   .empty{
     text-align:center;padding:48px 20px;color:var(--muted);
   }
-  .empty .big{font-family:'Baloo 2';font-weight:700;color:var(--ink);font-size:17px;margin-bottom:6px;}
+  .empty .big{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;color:var(--ink);font-size:17px;margin-bottom:6px;}
 
   .fab{
     position:fixed;right:18px;bottom:calc(92px + env(safe-area-inset-bottom,0px));
@@ -123,7 +123,7 @@
   }
   nav.tabbar button{
     position:relative;z-index:1;
-    flex:1;background:none;border:none;font-family:'Nunito Sans';font-size:11.5px;
+    flex:1;background:none;border:none;font-family:'Nunito Sans',-apple-system,sans-serif;font-size:11.5px;
     color:var(--muted);padding:8px 2px;cursor:pointer;font-weight:600;border-radius:14px;
   }
   nav.tabbar button.active{color:var(--coral);}
@@ -163,7 +163,7 @@
   .cal-hour-row:first-child{border-top:none;}
   .cal-hour-label{
     position:absolute;top:-7px;left:6px;width:38px;font-size:10.5px;color:var(--muted);
-    background:var(--panel);padding-right:2px;font-family:'Nunito Sans';
+    background:var(--panel);padding-right:2px;font-family:'Nunito Sans',-apple-system,sans-serif;
   }
   .cal-event{
     position:absolute;border-radius:6px;padding:4px 7px;overflow:hidden;box-sizing:border-box;
@@ -178,14 +178,14 @@
   .cal-event.travel.mode-bicycling{background:var(--mode-bicycling-bg);border-color:var(--mode-bicycling);}
   .cal-event.flight{background:var(--flight-bg);border-color:var(--flight);}
   .cal-event.stay{background:var(--accom-bg);border-color:var(--accom);cursor:default;}
-  .cal-event-time{font-size:10px;font-weight:700;color:var(--ink);line-height:1.2;font-family:'Baloo 2';}
+  .cal-event-time{font-size:10px;font-weight:700;color:var(--ink);line-height:1.2;font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;}
   .cal-event-name{font-size:11.5px;color:var(--body);line-height:1.25;font-weight:500;}
 
   .item{
     display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);
     border-radius:14px;padding:12px 14px;margin-bottom:10px;
   }
-  .item .time{font-family:'Baloo 2';font-weight:700;font-size:14px;color:var(--ink);min-width:52px;padding-top:1px;}
+  .item .time{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;font-size:14px;color:var(--ink);min-width:52px;padding-top:1px;}
   .item .bar{width:3px;border-radius:2px;flex:0 0 3px;}
   .item.meal .bar{background:var(--meal);} .item.activity .bar{background:var(--activity);}
   .item.travel .bar{background:var(--travel);} .item.stay .bar{background:var(--accom);}
@@ -218,15 +218,50 @@
   }
   .item .actions .del{color:var(--danger);}
 
-  .section-title{font-family:'Baloo 2';font-weight:700;color:var(--ink);font-size:15px;margin:18px 0 8px;}
+  .section-title{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;color:var(--ink);font-size:15px;margin:18px 0 8px;}
   .section-title:first-child{margin-top:0;}
 
   .pack-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
   .pack-row:last-child{border-bottom:none;}
-  .pack-row input[type=checkbox]{width:19px;height:19px;accent-color:var(--activity);}
-  .pack-row .pname{flex:1;font-size:15px;}
+  .pack-row input[type=checkbox]{width:19px;height:19px;flex:0 0 auto;accent-color:var(--activity);}
+  .pack-row .pname{flex:1;min-width:0;font-size:15px;}
   .pack-row.done .pname{text-decoration:line-through;color:var(--muted);}
-  .pack-row .del{background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer;}
+  .pack-row .edit{background:none;border:none;color:var(--travel);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 2px;}
+  .pack-row .del{background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer;padding:4px 2px;}
+
+  /* ---- Packing categories: collapsible groups ---- */
+  .pack-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 2px 12px;}
+  .pack-toolbar .pack-summary{font-size:13px;color:var(--muted);font-weight:600;}
+  .pack-toolbar .tool-btns{display:flex;gap:14px;}
+  .text-btn{background:none;border:none;padding:4px 0;font-family:inherit;font-size:13px;font-weight:700;color:var(--coral);cursor:pointer;}
+  .pack-cat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;}
+  .pack-cat-head{display:flex;align-items:center;}
+  .pack-cat-toggle{
+    flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;
+    background:none;border:none;padding:13px 6px 13px 16px;cursor:pointer;font-family:inherit;color:var(--ink);
+  }
+  .pack-cat-toggle .chev{
+    flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--sun-bg);color:var(--coral);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+    transition:transform .2s ease;
+  }
+  .pack-cat.collapsed .pack-cat-toggle .chev{transform:rotate(-90deg);}
+  .pack-cat-name{flex:1;min-width:0;font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;font-size:16px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pack-cat-count{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:999px;padding:3px 9px;}
+  .pack-cat-count.complete{color:var(--activity);background:var(--activity-bg);}
+  .pack-cat-edit{flex:0 0 auto;background:none;border:none;padding:13px 16px 13px 8px;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--travel);cursor:pointer;}
+  .pack-cat-body{padding:0 16px 6px;border-top:1px solid var(--line);}
+  .pack-cat.collapsed .pack-cat-body{display:none;}
+  .pack-cat-empty{font-size:13px;color:var(--muted);padding:12px 0 6px;}
+  .pack-add-in{
+    display:block;width:100%;text-align:left;background:none;border:none;border-top:1px dashed var(--line);
+    padding:11px 0 8px;margin-top:2px;font-family:inherit;font-size:13px;font-weight:700;color:var(--coral);cursor:pointer;
+  }
+  .pack-cat-body .pack-row:last-of-type{border-bottom:none;}
+  .pack-end-spacer{height:72px;}
+  .btn:disabled{opacity:.45;cursor:default;}
+  .sheet .btn.danger-outline{background:#fff;color:var(--danger);border:1px solid var(--line);box-shadow:none;margin-top:10px;}
+  .sheet .field-note{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4;}
 
   .row{display:flex;gap:8px;}
   .row > *{flex:1;}
@@ -281,7 +316,7 @@
   .sheet.closing{ animation:sheetUnpop .2s ease both; }
   @keyframes sheetPop{from{transform:scale(.15);opacity:0;}to{transform:scale(1);opacity:1;}}
   @keyframes sheetUnpop{from{transform:scale(1);opacity:1;}to{transform:scale(.15);opacity:0;}}
-  .sheet h3{font-family:'Baloo 2';font-weight:700;color:var(--ink);margin:0 0 4px;font-size:19px;}
+  .sheet h3{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;color:var(--ink);margin:0 0 4px;font-size:19px;}
   .sheet .close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;}
   .sheet-wrap{position:relative;}
 
@@ -334,6 +369,7 @@
   @media (prefers-reduced-motion: reduce){
     main, .item, .card, .pack-row{ animation:none !important; }
     .sheet, .sheet-backdrop, .fab{ animation:none !important; transition:none !important; }
+    .pack-cat-toggle .chev{ transition:none; }
   }
 </style>
 </head>
@@ -368,6 +404,72 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'),1800);
 }
 function getTrip(id){ return DATA.trips.find(t=>t.id===id); }
+
+/* ---------- packing categories ----------
+   Each trip keeps an ordered list of packing categories ({id, name}); each
+   packing item points at one through p.cat ('' means no category, shown as
+   "Other"). Items saved before categories existed have no p.cat at all. They
+   are migrated once: a name written as "Category: item" (the style of the
+   CSV-built Tasmania list) is split into that category plus the item name.
+   The prefix must start with a letter and be followed by ": " so names such
+   as "Taxi at 4:05am" are never split. */
+const PACK_PREFIX_RE = /^([A-Za-z][A-Za-z &'\/-]{0,23}):\s+(\S.*)$/;
+function findPackCatByName(t, name){
+  const n = (name||'').trim().toLowerCase();
+  return (t.packingCategories||[]).find(c => c.name.trim().toLowerCase() === n);
+}
+/* Returns the id of the category with this name, creating it if needed. */
+function ensurePackCat(t, name){
+  name = (name||'').trim();
+  if(!name) return '';
+  if(!Array.isArray(t.packingCategories)) t.packingCategories = [];
+  const found = findPackCatByName(t, name);
+  if(found) return found.id;
+  const c = { id:uid(), name };
+  t.packingCategories.push(c);
+  return c.id;
+}
+/* Brings a trip's packing data up to the current shape. Returns true if
+   anything changed, so the caller knows to save. */
+function ensurePackingModel(t){
+  let changed = false;
+  if(!Array.isArray(t.packingCategories)){ t.packingCategories = []; changed = true; }
+  if(!Array.isArray(t.packing)){ t.packing = []; changed = true; }
+  t.packing.forEach(p => {
+    if(p.cat === undefined){
+      const m = (p.name||'').match(PACK_PREFIX_RE);
+      if(m){ p.cat = ensurePackCat(t, m[1]); p.name = m[2].trim(); }
+      else p.cat = '';
+      changed = true;
+    } else if(p.cat && !t.packingCategories.some(c => c.id === p.cat)){
+      p.cat = ''; changed = true; // category no longer exists
+    }
+  });
+  return changed;
+}
+(function migratePacking(){
+  let changed = false;
+  DATA.trips.forEach(t => { if(ensurePackingModel(t)) changed = true; });
+  if(changed) save(DATA);
+})();
+
+/* Which category groups are collapsed: a per-device convenience, so it lives
+   in its own localStorage key (never in the trip data or CSV) and every read
+   or write is guarded in case storage is unavailable. */
+const PACK_COLLAPSE_KEY = 'waypointPackCollapsed';
+let PACK_COLLAPSED = (function(){
+  try{ return JSON.parse(localStorage.getItem(PACK_COLLAPSE_KEY)) || {}; }
+  catch(e){ return {}; }
+})();
+function savePackCollapsed(){
+  try{ localStorage.setItem(PACK_COLLAPSE_KEY, JSON.stringify(PACK_COLLAPSED)); }catch(e){}
+}
+function isPackCollapsed(tripId, key){ return !!PACK_COLLAPSED[tripId+'|'+key]; }
+function setPackCollapsed(tripId, key, collapsed){
+  const k = tripId+'|'+key;
+  if(collapsed) PACK_COLLAPSED[k] = true; else delete PACK_COLLAPSED[k];
+  savePackCollapsed();
+}
 
 /* ---------- date helpers ---------- */
 function fmtDate(d){ // d = 'YYYY-MM-DD'
@@ -922,7 +1024,7 @@ function renderAccommodation(t){
   if(!list.length) return `<div class="empty"><div class="big">No stays added</div>Tap + to add where you're staying.</div>`;
   return list.map(a=>`
     <div class="card" data-stay-id="${a.id}">
-      <div class="name" style="font-family:'Baloo 2';font-weight:700;color:var(--ink);font-size:15.5px;">${esc(a.name)}</div>
+      <div class="name" style="font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;color:var(--ink);font-size:15.5px;">${esc(a.name)}</div>
       <div class="dates" style="margin-bottom:6px;">${fmtRange(a.checkIn,a.checkOut)}</div>
       ${a.address?`<div style="font-size:13.5px;color:var(--body);margin-bottom:4px;">${esc(a.address)}</div>`:''}
       ${a.confirmation?`<div style="font-size:12.5px;color:var(--muted);">Confirmation: ${esc(a.confirmation)}</div>`:''}
@@ -941,15 +1043,110 @@ function deleteStay(tripId,id){
 }
 
 /* ---- Packing ---- */
-function renderPacking(t){
-  const list=t.packing||[];
-  if(!list.length) return `<div class="empty"><div class="big">Packing list is empty</div>Tap + to add items.</div>`;
-  return `<div class="card">${list.map(p=>`
+/* Groups a trip's packing items by category, in the category order the
+   person set, with uncategorised items last under "Other". Every category is
+   included even when empty, so a newly created one shows up straight away. */
+function packGroups(t){
+  const groups = (t.packingCategories||[]).map(c => ({ key:c.id, id:c.id, name:c.name, items:[] }));
+  const byId = {};
+  groups.forEach(g => { byId[g.id] = g; });
+  const other = { key:'_none', id:'', name:'Other', items:[] };
+  (t.packing||[]).forEach(p => { ((p.cat && byId[p.cat]) || other).items.push(p); });
+  if(other.items.length) groups.push(other);
+  return groups;
+}
+function packRowHtml(t, p){
+  return `
     <div class="pack-row ${p.packed?'done':''}" data-pack-id="${p.id}">
-      <input type="checkbox" ${p.packed?'checked':''} onchange="togglePack('${t.id}','${p.id}')">
+      <input type="checkbox" ${p.packed?'checked':''} onchange="togglePack('${t.id}','${p.id}')" aria-label="Packed: ${attr(p.name)}">
       <div class="pname">${esc(p.name)}</div>
-      <button class="del" onclick="deletePack('${t.id}','${p.id}')">✕</button>
-    </div>`).join('')}</div>`;
+      <button class="edit" onclick="openSheet('editPack','${t.id}','${p.id}')">Edit</button>
+      <button class="del" onclick="deletePack('${t.id}','${p.id}')" aria-label="Delete ${attr(p.name)}">✕</button>
+    </div>`;
+}
+function packCountHtml(items){
+  const done = items.filter(p => p.packed).length;
+  const complete = items.length > 0 && done === items.length;
+  return `<span class="pack-cat-count${complete?' complete':''}">${done}/${items.length}</span>`;
+}
+function renderPacking(t){
+  ensurePackingModel(t);
+  const list = t.packing;
+  const hasCats = t.packingCategories.length > 0;
+  if(!list.length && !hasCats){
+    return `<div class="empty"><div class="big">Packing list is empty</div>Tap + to add items, or start with a category.
+      <div style="margin-top:14px;"><button class="text-btn" onclick="openSheet('addPackCat','${t.id}')">New category</button></div></div>`;
+  }
+  const groups = packGroups(t);
+  const packed = list.filter(p => p.packed).length;
+  const allCollapsed = hasCats && groups.every(g => isPackCollapsed(t.id, g.key));
+  const toolbar = `
+    <div class="pack-toolbar">
+      <span class="pack-summary">${packed} of ${list.length} packed</span>
+      <div class="tool-btns">
+        ${hasCats ? `<button class="text-btn" onclick="setAllPackCollapsed('${t.id}', ${allCollapsed?'false':'true'})">${allCollapsed?'Expand all':'Collapse all'}</button>` : ''}
+        <button class="text-btn" onclick="openSheet('addPackCat','${t.id}')">New category</button>
+      </div>
+    </div>`;
+  // No categories yet: keep the simple single list.
+  if(!hasCats) return toolbar + `<div class="card">${list.map(p => packRowHtml(t,p)).join('')}</div><div class="pack-end-spacer" aria-hidden="true"></div>`;
+  return toolbar + groupsHtml(t, groups) + `<div class="pack-end-spacer" aria-hidden="true"></div>`;
+}
+function groupsHtml(t, groups){
+  return groups.map(g => {
+    const collapsed = isPackCollapsed(t.id, g.key);
+    return `
+    <section class="pack-cat${collapsed?' collapsed':''}" data-cat-key="${g.key}">
+      <div class="pack-cat-head">
+        <button class="pack-cat-toggle" aria-expanded="${collapsed?'false':'true'}" onclick="togglePackCat('${t.id}','${g.key}')">
+          <span class="chev" aria-hidden="true">▾</span>
+          <span class="pack-cat-name">${esc(g.name)}</span>
+          ${packCountHtml(g.items)}
+        </button>
+        ${g.id ? `<button class="pack-cat-edit" onclick="openSheet('editPackCat','${t.id}','${g.id}')" aria-label="Edit category ${attr(g.name)}">Edit</button>` : ''}
+      </div>
+      <div class="pack-cat-body">
+        ${g.items.length ? g.items.map(p => packRowHtml(t,p)).join('') : `<div class="pack-cat-empty">Nothing in here yet.</div>`}
+        <button class="pack-add-in" onclick="openSheet('addPack','${t.id}','${g.id}')">+ Add to ${esc(g.name)}</button>
+      </div>
+    </section>`;
+  }).join('');
+}
+/* Collapsing a group toggles it in place rather than re-rendering, so the
+   page doesn't jump or lose its scroll position. */
+function togglePackCat(tripId, key){
+  const now = !isPackCollapsed(tripId, key);
+  setPackCollapsed(tripId, key, now);
+  const sec = document.querySelector(`.pack-cat[data-cat-key="${key}"]`);
+  if(sec){
+    sec.classList.toggle('collapsed', now);
+    const btn = sec.querySelector('.pack-cat-toggle');
+    if(btn) btn.setAttribute('aria-expanded', now ? 'false' : 'true');
+  }
+  refreshPackToolbar(tripId);
+}
+function setAllPackCollapsed(tripId, collapsed){
+  const t = getTrip(tripId);
+  packGroups(t).forEach(g => setPackCollapsed(tripId, g.key, collapsed));
+  render();
+}
+/* Keeps the "x of y packed", per-category counts and Collapse/Expand label
+   in step after an in-place change. */
+function refreshPackToolbar(tripId){
+  const t = getTrip(tripId);
+  if(!t) return;
+  const summary = document.querySelector('.pack-toolbar .pack-summary');
+  if(summary) summary.textContent = `${t.packing.filter(p=>p.packed).length} of ${t.packing.length} packed`;
+  packGroups(t).forEach(g => {
+    const count = document.querySelector(`.pack-cat[data-cat-key="${g.key}"] .pack-cat-count`);
+    if(count) count.outerHTML = packCountHtml(g.items);
+  });
+  const allBtn = [...document.querySelectorAll('.pack-toolbar .text-btn')].find(b => /all$/.test(b.textContent));
+  if(allBtn){
+    const all = packGroups(t).every(g => isPackCollapsed(tripId, g.key));
+    allBtn.textContent = all ? 'Expand all' : 'Collapse all';
+    allBtn.setAttribute('onclick', `setAllPackCollapsed('${tripId}', ${all?'false':'true'})`);
+  }
 }
 /* Toggling packed state updates the DOM directly (no full render()) so the
    pop animation isn't cut short by an immediate DOM rebuild. */
@@ -959,10 +1156,68 @@ function togglePack(tripId,id){
   const row = document.querySelector(`[data-pack-id="${id}"]`);
   if(row){
     row.classList.toggle('done', p.packed);
+    const cb = row.querySelector('input[type=checkbox]');
+    if(cb) cb.checked = p.packed;
     row.classList.remove('just-toggled');
     void row.offsetWidth;
     row.classList.add('just-toggled');
   }
+  refreshPackToolbar(tripId);
+}
+function submitPackCat(e, tripId, catId){
+  e.preventDefault();
+  const t = getTrip(tripId);
+  ensurePackingModel(t);
+  const name = document.getElementById('f_catname').value.trim();
+  if(!name) return false;
+  const clash = findPackCatByName(t, name);
+  if(catId){
+    const c = t.packingCategories.find(x => x.id === catId);
+    if(!c) return false;
+    if(clash && clash.id !== catId){ toast(`There's already a category called ${clash.name}`); return false; }
+    c.name = name;
+  } else {
+    if(clash){ toast(`There's already a category called ${clash.name}`); return false; }
+    const newId = ensurePackCat(t, name);
+    setPackCollapsed(tripId, newId, false);
+    STATE.lastPackCat = newId;
+  }
+  save(DATA); closeSheet(); render();
+  return false;
+}
+/* Deleting a category never deletes its items: they move to "Other". */
+function deletePackCat(tripId, catId){
+  const t = getTrip(tripId);
+  const c = t.packingCategories.find(x => x.id === catId);
+  if(!c) return;
+  const n = t.packing.filter(p => p.cat === catId).length;
+  if(n && !confirm(`Delete "${c.name}"? Its ${n} item${n===1?'':'s'} will move to Other.`)) return;
+  t.packing.forEach(p => { if(p.cat === catId) p.cat = ''; });
+  t.packingCategories = t.packingCategories.filter(x => x.id !== catId);
+  if(STATE.lastPackCat === catId) STATE.lastPackCat = '';
+  setPackCollapsed(tripId, catId, false);
+  save(DATA); closeSheet(); render();
+}
+function movePackCat(tripId, catId, dir){
+  const t = getTrip(tripId);
+  const i = t.packingCategories.findIndex(x => x.id === catId);
+  const j = i + dir;
+  if(i < 0 || j < 0 || j >= t.packingCategories.length) return;
+  const cats = t.packingCategories;
+  [cats[i], cats[j]] = [cats[j], cats[i]];
+  save(DATA); render();
+  // Keep the sheet open for further moves: refresh its contents in place
+  // (re-opening it would replay the pop animation on every tap).
+  document.querySelectorAll('.fab').forEach(f => f.classList.add('fab-hidden'));
+  const sheet = document.querySelector('#sheetHost .sheet');
+  if(sheet) sheet.innerHTML = `<button class="close" onclick="closeSheet()">✕</button>${sheetBody('editPackCat', tripId, catId)}`;
+}
+function onPackCatSelect(sel){
+  const wrap = document.getElementById('newCatWrap');
+  if(!wrap) return;
+  const isNew = sel.value === '__new';
+  wrap.style.display = isNew ? 'block' : 'none';
+  if(isNew){ const inp = document.getElementById('f_newcat'); if(inp) inp.focus(); }
 }
 function deletePack(tripId,id){
   animateThenRun(`[data-pack-id="${id}"]`, ()=>{
@@ -1003,7 +1258,7 @@ function deleteTrip(id){
    endDate is only used by accommodation rows (check-out date) so it never
    collides with endTime (an activity's end time or a stay's check-out time).
    travellers is a serialized "Name:Seat|Name:Seat" list (see (de)serializeTravellers). */
-const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','checkInTime','boardingTime','depTerminal','arrTerminal','depGate','arrGate','travellers','bookingLink'];
+const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','checkInTime','boardingTime','depTerminal','arrTerminal','depGate','arrGate','travellers','bookingLink','category'];
 function csvEscape(v){
   v = (v===undefined||v===null) ? '' : String(v);
   if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
@@ -1050,8 +1305,16 @@ function exportCSV(tripId){
         mode:a.mode||'', notes:a.notes||'' }));
     }
   });
+  // Categories go first, in order, so empty ones and the person's ordering
+  // survive a round trip; each item then names its category.
+  ensurePackingModel(t);
+  const catName = {};
+  (t.packingCategories||[]).forEach(c=>{
+    catName[c.id] = c.name;
+    rows.push(csvRow({ type:'packcat', name:c.name }));
+  });
   (t.packing||[]).forEach(p=>{
-    rows.push(csvRow({ type:'packing', name:p.name, packed:p.packed?'true':'false' }));
+    rows.push(csvRow({ type:'packing', name:p.name, packed:p.packed?'true':'false', category:catName[p.cat]||'' }));
   });
   const meta = `# trip:${csvEscape(t.name)} start:${t.startDate} end:${t.endDate}\n`;
   const blob = new Blob([meta+rows.join('\n')], {type:'text/csv'});
@@ -1094,7 +1357,8 @@ function applyCSVToTrip(t, text){
   const header=allRows[0];
   if(header.indexOf('type')===-1) throw new Error("That doesn't look like a Waypoint CSV export (no \"type\" column found).");
   const idx=c=>header.indexOf(c);
-  t.accommodations=[]; t.agenda=[]; t.packing=[];
+  const hasCatCol = idx('category') >= 0;
+  t.accommodations=[]; t.agenda=[]; t.packing=[]; t.packingCategories=[];
   for(let i=1;i<allRows.length;i++){
     const cols=allRows[i];
     const get=c=> idx(c)>=0 ? (cols[idx(c)]||'') : '';
@@ -1103,8 +1367,15 @@ function applyCSVToTrip(t, text){
       t.accommodations.push({ id:uid(), name:get('name'), address:get('location'),
         checkIn:get('date'), checkInTime:get('time'), checkOut:get('endDate'), checkOutTime:get('endTime'),
         confirmation:get('confirmation'), notes:get('notes') });
+    } else if(type==='packcat'){
+      ensurePackCat(t, get('name'));
     } else if(type==='packing'){
-      t.packing.push({ id:uid(), name:get('name'), packed:get('packed')==='true' });
+      // With a category column, an empty cell means "no category". Without
+      // one (a CSV from before categories), leave cat unset so the
+      // "Category: item" name migration in ensurePackingModel can apply.
+      const item = { id:uid(), name:get('name'), packed:get('packed')==='true' };
+      if(hasCatCol) item.cat = ensurePackCat(t, get('category'));
+      t.packing.push(item);
     } else if(type==='flight'){
       // depTerminal/depGate fall back to the old single terminal/gate columns,
       // and travellers falls back to the old single seat column, so a CSV
@@ -1125,6 +1396,7 @@ function applyCSVToTrip(t, text){
         destination:get('destination'), duration:get('duration'), mode:get('mode')||'driving', notes:get('notes') });
     }
   }
+  ensurePackingModel(t); // migrate "Category: item" names from older CSVs
 }
 function importCSV(tripId){
   const f=document.getElementById('importFile').files[0];
@@ -1198,12 +1470,50 @@ function sheetBody(kind, tripId, itemId){
     </form>`;
   }
 
-  if(kind==='addPack'){
+  if(kind==='addPack' || kind==='editPack'){
+    ensurePackingModel(t);
+    const p = kind==='editPack' ? t.packing.find(x => x.id === itemId) : null;
+    // Preselect: the item's own category when editing; the group whose
+    // "+ Add to …" was tapped (passed as itemId); else the last one used.
+    const selected = p ? (p.cat || '')
+      : (typeof itemId === 'string' ? itemId : (STATE.lastPackCat || ''));
+    const opts = t.packingCategories.map(c =>
+      `<option value="${c.id}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')
+      + `<option value="" ${selected===''?'selected':''}>No category (Other)</option>`
+      + `<option value="__new">+ New category…</option>`;
     return `
-    <h3>Add packing item</h3>
-    <form onsubmit="return submitPack(event,'${tripId}')">
-      <label>Item</label><input type="text" id="f_name" required placeholder="e.g. Passport" autofocus>
-      <button class="btn" type="submit">Add item</button>
+    <h3>${p ? 'Edit item' : 'Add packing item'}</h3>
+    <form onsubmit="return submitPack(event,'${tripId}','${p ? p.id : ''}')">
+      <label>Item</label><input type="text" id="f_name" required value="${attr(p && p.name)}" placeholder="e.g. Passport">
+      <label>Category</label>
+      <select id="f_cat" onchange="onPackCatSelect(this)">${opts}</select>
+      <div id="newCatWrap" style="display:none">
+        <label>New category name</label><input type="text" id="f_newcat" placeholder="e.g. Toiletries">
+      </div>
+      <button class="btn" type="submit">${p ? 'Save changes' : 'Add item'}</button>
+      ${p ? `<button type="button" class="btn danger-outline" onclick="closeSheet(); deletePack('${tripId}','${p.id}')">Delete item</button>` : ''}
+    </form>`;
+  }
+
+  if(kind==='addPackCat' || kind==='editPackCat'){
+    ensurePackingModel(t);
+    const c = kind==='editPackCat' ? t.packingCategories.find(x => x.id === itemId) : null;
+    const idx = c ? t.packingCategories.indexOf(c) : -1;
+    const n = c ? t.packing.filter(p => p.cat === c.id).length : 0;
+    const last = t.packingCategories.length - 1;
+    return `
+    <h3>${c ? 'Edit category' : 'New category'}</h3>
+    <form onsubmit="return submitPackCat(event,'${tripId}','${c ? c.id : ''}')">
+      <label>Category name</label><input type="text" id="f_catname" required value="${attr(c && c.name)}" placeholder="e.g. Clothes">
+      ${c && last > 0 ? `
+      <label>Position</label>
+      <div class="row">
+        <button type="button" class="btn secondary" style="margin-top:0;" ${idx===0?'disabled':''} onclick="movePackCat('${tripId}','${c.id}',-1)">Move up</button>
+        <button type="button" class="btn secondary" style="margin-top:0;" ${idx===last?'disabled':''} onclick="movePackCat('${tripId}','${c.id}',1)">Move down</button>
+      </div>` : ''}
+      <button class="btn" type="submit">${c ? 'Save name' : 'Create category'}</button>
+      ${c ? `<button type="button" class="btn danger-outline" onclick="deletePackCat('${tripId}','${c.id}')">Delete category</button>
+      <div class="field-note">${n ? `Its ${n} item${n===1?'':'s'} will move to Other. Nothing gets deleted.` : 'This category has no items.'}</div>` : ''}
     </form>`;
   }
 
@@ -1382,15 +1692,31 @@ function submitStay(e,tripId,itemId){
   return false;
 }
 
-function submitPack(e,tripId){
+function submitPack(e,tripId,itemId){
   e.preventDefault();
   const name=document.getElementById('f_name').value.trim();
   if(!name) return false;
   const t=getTrip(tripId);
-  const newId = uid();
-  t.packing.push({id:newId, name, packed:false});
+  ensurePackingModel(t);
+  const sel = document.getElementById('f_cat');
+  let cat = sel ? sel.value : (STATE.lastPackCat || '');
+  if(cat === '__new'){
+    const newName = document.getElementById('f_newcat').value.trim();
+    if(!newName){ toast('Give the new category a name first'); return false; }
+    cat = ensurePackCat(t, newName);
+  }
+  if(cat && !t.packingCategories.some(c => c.id === cat)) cat = '';
+  STATE.lastPackCat = cat;
+  setPackCollapsed(tripId, cat || '_none', false); // make sure the item is visible after saving
+  if(itemId){
+    const p = t.packing.find(x => x.id === itemId);
+    if(p){ p.name = name; p.cat = cat; }
+  } else {
+    const newId = uid();
+    t.packing.push({id:newId, name, packed:false, cat});
+    _justAddedId = newId;
+  }
   save(DATA); closeSheet();
-  _justAddedId = newId;
   render();
   return false;
 }
@@ -1466,20 +1792,24 @@ function esc(s){
 }
 function attachHomeHandlers(){}
 
-/* App-open splash: hold on the bounced pin briefly, then fade it out to
-   reveal the loaded app underneath. Respects prefers-reduced-motion by
-   skipping straight to the reveal. The fade transition is attached here,
-   right before triggering it — never present beforehand — so the splash
-   cannot be caught mid-transition at load and misread as fading in. */
+/* App-open splash: hold on the pin until its drop-and-bounce has finished
+   (900ms), then fade it out to reveal the app underneath. The fade
+   transition is attached here, right before triggering it — never present
+   beforehand — so the splash can't be caught mid-transition at load.
+
+   With Reduce Motion on (iOS Settings > Accessibility > Motion), the pin
+   doesn't bounce, but the splash still holds briefly and fades. It used to
+   vanish instantly with no hold, which showed as a one-frame flash. */
+const SPLASH_HOLD_MS = 1000;
+const SPLASH_HOLD_REDUCED_MS = 700;
 function runSplash(){
   const splash = document.getElementById('splash');
   if(!splash) return;
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const holdMs = reduced ? 0 : 700;
   setTimeout(()=>{
-    splash.style.transition = reduced ? 'none' : 'opacity .45s ease';
+    splash.style.transition = reduced ? 'opacity .3s ease' : 'opacity .45s ease';
     splash.classList.add('splash-hide');
-  }, holdMs);
+  }, reduced ? SPLASH_HOLD_REDUCED_MS : SPLASH_HOLD_MS);
 }
 
 render();
