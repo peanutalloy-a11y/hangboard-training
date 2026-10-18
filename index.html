@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 13";
+<script>const APP_VERSION = "19 Oct 2026, build 14";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -9932,7 +9932,7 @@ function InAppCamera({
       });
     };
     recRef.current = rec;
-    rec.start();
+    rec.start(1000);
     startedAtRef.current = performance.now();
     setElapsed(0);
     setSizeLabel(portrait ? `${short} × ${long}` : `${long} × ${short}`);
@@ -9945,9 +9945,6 @@ function InAppCamera({
     const rec = recRef.current;
     if (!rec || rec.state === "inactive") return;
     setState("saving");
-    try {
-      rec.requestData();
-    } catch (e) {}
     rec.stop();
   };
   const close = () => {
