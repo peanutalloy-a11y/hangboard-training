@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 11";
+<script>const APP_VERSION = "19 Oct 2026, build 12";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -4605,86 +4605,258 @@ function VideoEmbed({
 // embedding was broken by Google's own third-party cookie changes, so this is the current
 // working alternative), falling back to a legacy embedded photo from before the switch to Drive
 // links, if one is present from an older save.
+// ═══════════════════════════════════════════════════
+// ─── CLIMB PHOTOS FROM DRIVE ─────────────────────────
+// Google rate-limits its Drive thumbnail address when lots of photos load at once (e.g. straight
+// after a restore), and the image then shows as a broken "?" box. So each photo now tries a
+// chain of sources: Google's image server, then the Drive thumbnail, with a few spaced-out retries,
+// and finally a signed-in download straight from your Drive (always works for photos the app saved).
+// Photos also load a few at a time instead of all at once.
+// ═══════════════════════════════════════════════════
+window.__photoGood = window.__photoGood || {}; // fileId -> the address that worked this session
+window.__drivePhotoBlobs = window.__drivePhotoBlobs || {}; // fileId -> local copy downloaded via the Drive API
+const PHOTO_RETRY_EVENT = "sendlog-photo-retry";
+function photoFileId(p) {
+  return p && p.photoLink ? extractDriveFileId(p.photoLink) : null;
+}
+function photoCandidates(p) {
+  if (!p) return [];
+  if (!p.photoLink) return p.photo ? [p.photo] : [];
+  const id = photoFileId(p);
+  if (!id) return [];
+  if (window.__driveLocalPreviews && window.__driveLocalPreviews[id]) return [window.__driveLocalPreviews[id]];
+  if (window.__drivePhotoBlobs[id]) return [window.__drivePhotoBlobs[id]];
+  const list = [`https://lh3.googleusercontent.com/d/${id}=w1000`, `https://drive.google.com/thumbnail?id=${id}&sz=w1000`];
+  const good = window.__photoGood[id];
+  return good ? [good, ...list.filter(u => u !== good)] : list;
+}
+// Kept for anything else that wants a single address for a photo.
 function climbPhotoUrl(p) {
-  if (p.photoLink) {
-    const fileId = extractDriveFileId(p.photoLink);
-    // A photo uploaded from this phone in this session shows from the local copy, since Google
-    // takes a little while to generate the thumbnail for a brand-new file.
-    if (fileId && window.__driveLocalPreviews && window.__driveLocalPreviews[fileId]) return window.__driveLocalPreviews[fileId];
-    if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-    return null;
+  return photoCandidates(p)[0] || null;
+}
+function withRetryParam(url, round) {
+  if (!round || !/^https:/.test(url)) return url;
+  return url + (url.includes("?") ? "&" : "?") + "r=" + round;
+}
+const drivePhotoFetches = {};
+function fetchDrivePhotoViaApi(id) {
+  if (window.__drivePhotoBlobs[id]) return Promise.resolve(window.__drivePhotoBlobs[id]);
+  const token = storedDriveToken();
+  if (!token) return Promise.reject(new Error("signed-out"));
+  if (!drivePhotoFetches[id]) {
+    drivePhotoFetches[id] = fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }).then(res => {
+      if (res.status === 401) clearDriveToken();
+      if (!res.ok) throw new Error(`drive-${res.status}`);
+      return res.blob();
+    }).then(blob => {
+      const url = URL.createObjectURL(blob);
+      window.__drivePhotoBlobs[id] = url;
+      return url;
+    }).finally(() => {
+      delete drivePhotoFetches[id];
+    });
   }
-  if (p.photo) return p.photo;
-  return null;
+  return drivePhotoFetches[id];
+}
+
+// Works through the sources for one photo. Returns what the <img> should show and its handlers.
+function usePhotoSource(p) {
+  const id = photoFileId(p);
+  const local = !!(id && window.__driveLocalPreviews && window.__driveLocalPreviews[id]);
+  const key = `${id || ""}|${local ? 1 : 0}|${p && p.photo ? p.photo.length : 0}`;
+  // Fixed per photo, so reordering after a success never restarts a photo that's already showing.
+  const candidates = React.useMemo(() => photoCandidates(p), [key]);
+  const [st, setSt] = useState({
+    idx: 0,
+    round: 0,
+    failed: false,
+    loaded: false,
+    apiUrl: null,
+    apiTried: false
+  });
+  const timer = useRef(null);
+  useEffect(() => {
+    setSt({
+      idx: 0,
+      round: 0,
+      failed: false,
+      loaded: false,
+      apiUrl: null,
+      apiTried: false
+    });
+    return () => clearTimeout(timer.current);
+  }, [key]);
+  const scheduleRetry = round => {
+    // Spread the retries out so a rate limit has time to clear.
+    const wait = 1500 * Math.pow(2, round) + Math.random() * 800;
+    timer.current = setTimeout(() => setSt(s => ({
+      ...s,
+      idx: 0,
+      round: s.round + 1
+    })), wait);
+  };
+  const tryApi = (onFail = () => setSt(s => ({
+    ...s,
+    failed: true
+  }))) => {
+    if (!id) return onFail();
+    setSt(s => ({
+      ...s,
+      apiTried: true
+    }));
+    fetchDrivePhotoViaApi(id).then(url => setSt(s => ({
+      ...s,
+      apiUrl: url,
+      failed: false,
+      loaded: false
+    }))).catch(onFail);
+  };
+  // When you sign in to Google from one failed photo, the others try again too.
+  useEffect(() => {
+    if (!st.failed) return;
+    const h = () => tryApi();
+    window.addEventListener(PHOTO_RETRY_EVENT, h);
+    return () => window.removeEventListener(PHOTO_RETRY_EVENT, h);
+  }, [st.failed, id]);
+  const onError = () => {
+    if (st.apiUrl) return setSt(s => ({
+      ...s,
+      failed: true
+    }));
+    if (st.idx < candidates.length - 1) return setSt(s => ({
+      ...s,
+      idx: s.idx + 1
+    }));
+    const remote = candidates.some(u => /^https:/.test(u));
+    const canRetry = remote && st.round < 3;
+    // Signed in to Google already? Downloading straight from Drive is the surest route.
+    if (!st.apiTried && storedDriveToken()) return tryApi(() => canRetry ? scheduleRetry(st.round) : setSt(s => ({
+      ...s,
+      failed: true
+    })));
+    if (canRetry) return scheduleRetry(st.round);
+    if (!st.apiTried) return tryApi();
+    setSt(s => ({
+      ...s,
+      failed: true
+    }));
+  };
+  const src = st.apiUrl || (candidates.length ? withRetryParam(candidates[st.idx] || candidates[0], st.round) : null);
+  const onLoad = () => {
+    if (id && !st.apiUrl && /^https:/.test(candidates[st.idx] || "")) window.__photoGood[id] = candidates[st.idx];
+    setSt(s => ({
+      ...s,
+      loaded: true
+    }));
+  };
+  const loadFromDrive = () => {
+    // Straight from the tap, so Google's sign-in window is allowed to open.
+    getDriveToken().then(() => {
+      setSt(s => ({
+        ...s,
+        failed: false
+      }));
+      tryApi();
+      window.dispatchEvent(new Event(PHOTO_RETRY_EVENT));
+    }).catch(() => {});
+  };
+  return {
+    src,
+    failed: st.failed,
+    loaded: st.loaded,
+    onError,
+    onLoad,
+    loadFromDrive,
+    hasPhoto: candidates.length > 0
+  };
 }
 function ClimbPhotoThumb({
   p,
   lazy
 }) {
-  const url = climbPhotoUrl(p);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const retryTimer = useRef(null);
-  useEffect(() => () => clearTimeout(retryTimer.current), []);
-  const onImgError = () => {
-    // New Drive files can take a few seconds to get a thumbnail: retry with growing gaps first.
-    if (url && /^https:/.test(url) && attempt < 4) {
-      retryTimer.current = setTimeout(() => setAttempt(a => a + 1), 1500 * Math.pow(2, attempt));
-    } else setFailed(true);
-  };
-  const src = url && attempt && /^https:/.test(url) ? `${url}&retry=${attempt}` : url;
-  if (!url || failed) return null;
-  return /*#__PURE__*/React.createElement("img", {
-    src: src,
-    loading: lazy ? "lazy" : "eager",
-    decoding: "async",
-    onError: onImgError,
+  const ph = usePhotoSource(p);
+  if (!ph.hasPhoto || ph.failed) return null;
+  return /*#__PURE__*/React.createElement("span", {
     style: {
       width: 32,
       height: 32,
       borderRadius: 6,
-      objectFit: "cover",
       flexShrink: 0,
-      border: "1px solid #E8E4DE"
+      border: "1px solid #E8E4DE",
+      background: "#F0ECE6",
+      overflow: "hidden",
+      display: "inline-block"
     }
-  });
+  }, /*#__PURE__*/React.createElement("img", {
+    src: ph.src,
+    loading: lazy ? "lazy" : "eager",
+    decoding: "async",
+    onError: ph.onError,
+    onLoad: ph.onLoad,
+    alt: "",
+    style: {
+      width: 32,
+      height: 32,
+      objectFit: "cover",
+      display: "block",
+      opacity: ph.loaded ? 1 : 0,
+      transition: "opacity 0.2s"
+    }
+  }));
 }
 function ClimbPhotoFull({
   p,
   lazy
 }) {
-  const url = climbPhotoUrl(p);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const retryTimer = useRef(null);
-  useEffect(() => () => clearTimeout(retryTimer.current), []);
-  const onImgError = () => {
-    // New Drive files can take a few seconds to get a thumbnail: retry with growing gaps first.
-    if (url && /^https:/.test(url) && attempt < 4) {
-      retryTimer.current = setTimeout(() => setAttempt(a => a + 1), 1500 * Math.pow(2, attempt));
-    } else setFailed(true);
-  };
-  const src = url && attempt && /^https:/.test(url) ? `${url}&retry=${attempt}` : url;
-  if (!url) return null;
+  const ph = usePhotoSource(p);
+  if (!ph.hasPhoto) return null;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
-  }, !failed ? /*#__PURE__*/React.createElement("img", {
-    src: src,
+  }, !ph.failed ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      minHeight: ph.loaded ? 0 : 160,
+      borderRadius: 8,
+      background: ph.loaded ? "transparent" : "#F5F2ED"
+    }
+  }, !ph.loaded && /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#BBB"
+    }
+  }, "Loading photo\u2026"), /*#__PURE__*/React.createElement("img", {
+    src: ph.src,
     loading: lazy ? "lazy" : "eager",
     decoding: "async",
-    onError: onImgError,
+    onError: ph.onError,
+    onLoad: ph.onLoad,
+    alt: "",
     style: {
       width: "100%",
       height: "auto",
       display: "block",
       borderRadius: 8,
-      border: "1px solid #E8E4DE"
+      border: "1px solid #E8E4DE",
+      opacity: ph.loaded ? 1 : 0,
+      transition: "opacity 0.2s",
+      position: ph.loaded ? "static" : "absolute",
+      inset: 0
     }
-  }) : /*#__PURE__*/React.createElement("div", {
+  })) : /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "20px 12px",
+      padding: "18px 12px",
       textAlign: "center",
       background: "#F5F2ED",
       borderRadius: 8,
@@ -4694,10 +4866,24 @@ function ClimbPhotoFull({
     style: {
       fontFamily: F.b,
       fontSize: 11,
-      color: "#BBB",
-      margin: 0
+      color: "#999",
+      margin: "0 0 10px"
     }
-  }, "Couldn't load a preview.")), p.photoLink && /*#__PURE__*/React.createElement("a", {
+  }, "Google didn't send the preview."), p.photoLink && /*#__PURE__*/React.createElement("button", {
+    onClick: ph.loadFromDrive,
+    style: {
+      padding: "8px 14px",
+      borderRadius: 8,
+      border: "1.5px solid #E8E4DE",
+      background: "#FFF",
+      color: "#2A2520",
+      fontFamily: F.m,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: 1,
+      cursor: "pointer"
+    }
+  }, "LOAD FROM DRIVE")), p.photoLink && /*#__PURE__*/React.createElement("a", {
     href: p.photoLink,
     target: "_blank",
     rel: "noopener noreferrer",
@@ -4711,7 +4897,49 @@ function ClimbPhotoFull({
       letterSpacing: 0.5,
       textDecoration: "none"
     }
-  }, "Open in Drive ↗"));
+  }, "Open in Drive \u2197"));
+}
+
+// Warms up the current set's photos a few at a time, so Google doesn't refuse a burst of requests.
+let photoPreloadQueue = [];
+let photoPreloadActive = 0;
+const PHOTO_PRELOAD_CONCURRENCY = 3;
+function preloadClimbPhotos(problems) {
+  const cache = window.__climbPhotoCache = window.__climbPhotoCache || {};
+  problems.forEach(p => {
+    const id = photoFileId(p);
+    if (!id || cache[id] || window.__drivePhotoBlobs[id] || window.__driveLocalPreviews && window.__driveLocalPreviews[id]) return;
+    cache[id] = "queued";
+    photoPreloadQueue.push(id);
+  });
+  pumpPhotoPreload();
+}
+function pumpPhotoPreload() {
+  while (photoPreloadActive < PHOTO_PRELOAD_CONCURRENCY && photoPreloadQueue.length) {
+    const id = photoPreloadQueue.shift();
+    photoPreloadActive++;
+    const urls = photoCandidates({
+      photoLink: `https://drive.google.com/file/d/${id}/view`
+    });
+    const attempt = i => {
+      if (i >= urls.length) return done(false);
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        window.__photoGood[id] = urls[i];
+        window.__climbPhotoCache[id] = img;
+        done(true);
+      };
+      img.onerror = () => attempt(i + 1);
+      img.src = urls[i];
+    };
+    const done = ok => {
+      if (!ok) delete window.__climbPhotoCache[id];
+      photoPreloadActive--;
+      setTimeout(pumpPhotoPreload, 150);
+    };
+    attempt(0);
+  }
 }
 
 // Records a clip directly in the browser (no separate Camera app needed), then hands it off via the
@@ -5275,29 +5503,16 @@ function ClimbApp() {
   // on to them, so expanding a sector or scrolling shows photos instantly. Past sets (History) stay
   // load-on-scroll, since there are many more of them and they're rarely viewed.
   useEffect(() => {
-    const cache = window.__climbPhotoCache = window.__climbPhotoCache || {};
-    const urls = [];
+    const problems = [];
     Object.values(data.sectorLogs || {}).forEach(log => {
       if (!log || log.archived) return;
       (log.currentProblems || []).forEach(p => {
-        const u = climbPhotoUrl(p);
-        if (u && /^https:/.test(u) && !cache[u]) urls.push(u);
+        if (p.photoLink) problems.push(p);
       });
     });
-    if (!urls.length) return;
+    if (!problems.length) return;
     const idle = window.requestIdleCallback || (f => setTimeout(f, 300));
-    const handle = idle(() => {
-      urls.forEach(u => {
-        if (cache[u]) return;
-        const img = new Image();
-        img.decoding = "async";
-        img.src = u;
-        cache[u] = img;
-        if (img.decode) img.decode().catch(() => {
-          delete cache[u];
-        });
-      });
-    });
+    const handle = idle(() => preloadClimbPhotos(problems));
     return () => {
       if (window.cancelIdleCallback && typeof handle === "number") window.cancelIdleCallback(handle);
     };
