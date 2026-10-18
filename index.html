@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 8";
+<script>const APP_VERSION = "19 Oct 2026, build 9";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -9168,7 +9168,8 @@ function TrimmableVideo({
   url,
   trim,
   onTrim,
-  locked
+  locked,
+  knownDuration
 }) {
   const videoRef = useRef(null);
   const trackRef = useRef(null);
@@ -9177,7 +9178,8 @@ function TrimmableVideo({
   const dur = trim && isFinite(trim.duration) && trim.duration > 0 ? trim.duration : 0;
   const canTrim = dur > MIN_TRIM_SECONDS + 0.2;
   const onMeta = e => {
-    const d = e.currentTarget.duration;
+    const raw = e.currentTarget.duration;
+    const d = isFinite(raw) && raw > 0 ? raw : knownDuration || NaN;
     if (isFinite(d) && d > 0 && (!trim || trim.duration !== d)) onTrim({
       start: 0,
       end: d,
@@ -9371,6 +9373,446 @@ function TrimmableVideo({
   }, "RESET")), /*#__PURE__*/React.createElement("span", null, formatClipTime(trim.end)))));
 }
 
+// ═══════════════════════════════════════════════════
+// ─── IN-APP CAMERA ───────────────────────────────────
+// iOS hands web apps a heavily compressed clip when they record through its own camera screen,
+// so this records straight from the camera instead, at 1080p.
+//
+// The picture is redrawn onto a canvas and the canvas is what gets recorded. Recent iOS versions
+// write portrait recordings on their side when recording the camera directly, so recording what's
+// actually on screen keeps the clip upright whichever way the phone is held.
+// ═══════════════════════════════════════════════════
+const CAMERA_BITRATE = 10000000; // 10 Mbps, about what the iPhone camera uses for 1080p
+
+function pickRecorderType() {
+  if (typeof MediaRecorder === "undefined") return null;
+  const candidates = ["video/mp4;codecs=avc1.640028,mp4a.40.2",
+  // H.264 High first: Baseline looks soft
+  "video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.4d002a,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  for (const t of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    } catch (e) {}
+  }
+  return "";
+}
+
+// Works out whether the picture the <video> element actually shows is tall or wide, by drawing it
+// at its natural size into a tiny canvas and seeing which corners get painted. The track's own
+// reported size can't be trusted on iOS.
+function detectPortrait(video) {
+  const w = video.videoWidth,
+    h = video.videoHeight;
+  if (!w || !h) return null;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 16;
+    const ctx = c.getContext("2d", {
+      willReadFrequently: true
+    });
+    ctx.fillStyle = "rgba(0,0,0,0)";
+    ctx.clearRect(0, 0, 16, 16);
+    const k = 16 / Math.max(w, h);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.drawImage(video, 0, 0);
+    const px = (x, y) => ctx.getImageData(x, y, 1, 1).data[3] > 0;
+    const bottomLeft = px(1, 14),
+      topRight = px(14, 1);
+    if (bottomLeft && !topRight) return true;
+    if (topRight && !bottomLeft) return false;
+  } catch (e) {}
+  return h > w;
+}
+function cameraErrorMessage(e) {
+  const n = e && e.name;
+  if (n === "NotAllowedError" || n === "SecurityError") return "Camera access was blocked. Allow the camera for this app in Settings, or use the iPhone camera instead.";
+  if (n === "NotFoundError" || n === "OverconstrainedError") return "No camera was found.";
+  if (n === "NotReadableError") return "The camera is busy in another app. Close it and try again.";
+  return "The camera couldn't start.";
+}
+function InAppCamera({
+  onDone,
+  onCancel,
+  onFallback
+}) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const recRef = useRef(null);
+  const chunksRef = useRef([]);
+  const drawRef = useRef(null);
+  const wakeRef = useRef(null);
+  const startedAtRef = useRef(0);
+  const sizeRef = useRef(null);
+  const [state, setState] = useState("starting"); // starting | ready | recording | saving | error
+  const [error, setError] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [sizeLabel, setSizeLabel] = useState("");
+  const stopDrawing = () => {
+    if (drawRef.current) drawRef.current.stop = true;
+    drawRef.current = null;
+  };
+  const releaseAll = () => {
+    stopDrawing();
+    try {
+      if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop();
+    } catch (e) {}
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    if (wakeRef.current) wakeRef.current.release().catch(() => {});
+    wakeRef.current = null;
+  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || pickRecorderType() === null) {
+        setError("This phone's browser can't record from the camera inside the app.");
+        setState("error");
+        return;
+      }
+      // Ask in landscape numbers: iOS then picks its 1080p mode and turns the picture to match
+      // how the phone is held. Asking for portrait numbers makes it fall back to a sideways mode.
+      const video = {
+        facingMode: {
+          ideal: "environment"
+        },
+        width: {
+          ideal: 1920
+        },
+        height: {
+          ideal: 1080
+        },
+        frameRate: {
+          ideal: 30
+        }
+      };
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video,
+          audio: true
+        });
+      } catch (e) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video,
+            audio: false
+          }); // no microphone: record silent
+        } catch (e2) {
+          if (!cancelled) {
+            setError(cameraErrorMessage(e2));
+            setState("error");
+          }
+          return;
+        }
+      }
+      if (cancelled) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+      streamRef.current = stream;
+      const v = videoRef.current;
+      v.srcObject = stream;
+      try {
+        await v.play();
+      } catch (e) {}
+      // Give iOS a moment to settle on the real camera mode before reading the picture size.
+      const waitForFrame = () => new Promise(res => {
+        const t0 = performance.now();
+        const tick = () => v.videoWidth && performance.now() - t0 > 500 || performance.now() - t0 > 3000 ? res() : setTimeout(tick, 60);
+        tick();
+      });
+      await waitForFrame();
+      if (cancelled) return;
+      setState("ready");
+    })();
+    return () => {
+      cancelled = true;
+      releaseAll();
+    };
+  }, []);
+
+  // Recording stops by itself if the app is sent to the background, keeping what was filmed.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden" && recRef.current && recRef.current.state === "recording") stopRecording();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
+  useEffect(() => {
+    if (state !== "recording") return;
+    const id = setInterval(() => setElapsed((performance.now() - startedAtRef.current) / 1000), 250);
+    return () => clearInterval(id);
+  }, [state]);
+  const startRecording = async () => {
+    const v = videoRef.current;
+    const stream = streamRef.current;
+    if (!v || !stream) return;
+    const portrait = detectPortrait(v);
+    const long = Math.max(v.videoWidth, v.videoHeight) || 1920;
+    const short = Math.min(v.videoWidth, v.videoHeight) || 1080;
+    const w = portrait ? short : long;
+    const h = portrait ? long : short;
+    sizeRef.current = {
+      w,
+      h
+    };
+    const canvas = canvasRef.current;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", {
+      alpha: false
+    });
+    ctx.drawImage(v, 0, 0, w, h);
+    const loop = {
+      stop: false
+    };
+    drawRef.current = loop;
+    const draw = () => {
+      if (loop.stop) return;
+      ctx.drawImage(v, 0, 0, w, h);
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw);else requestAnimationFrame(draw);
+    };
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw);else requestAnimationFrame(draw);
+    const out = canvas.captureStream(30);
+    stream.getAudioTracks().forEach(t => out.addTrack(t));
+    const type = pickRecorderType();
+    let rec;
+    try {
+      rec = new MediaRecorder(out, {
+        ...(type ? {
+          mimeType: type
+        } : {}),
+        videoBitsPerSecond: CAMERA_BITRATE,
+        audioBitsPerSecond: 128000
+      });
+    } catch (e) {
+      rec = new MediaRecorder(out);
+    }
+    chunksRef.current = [];
+    rec.ondataavailable = e => {
+      if (e.data && e.data.size) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      stopDrawing();
+      const mime = (rec.mimeType || type || "video/mp4").split(";")[0];
+      const ext = mime.includes("webm") ? "webm" : "mp4";
+      const blob = new Blob(chunksRef.current, {
+        type: mime
+      });
+      const duration = (performance.now() - startedAtRef.current) / 1000;
+      const file = new File([blob], `climb-${Date.now()}.${ext}`, {
+        type: mime
+      });
+      releaseAll();
+      onDone({
+        file,
+        duration
+      });
+    };
+    recRef.current = rec;
+    rec.start(1000);
+    startedAtRef.current = performance.now();
+    setElapsed(0);
+    setSizeLabel(`${w} × ${h}`);
+    setState("recording");
+    try {
+      if (navigator.wakeLock) wakeRef.current = await navigator.wakeLock.request("screen");
+    } catch (e) {}
+  };
+  const stopRecording = () => {
+    const rec = recRef.current;
+    if (!rec || rec.state === "inactive") return;
+    setState("saving");
+    try {
+      rec.requestData();
+    } catch (e) {}
+    rec.stop();
+  };
+  const close = () => {
+    releaseAll();
+    onCancel();
+  };
+  const mm = Math.floor(elapsed / 60);
+  const ss = Math.floor(elapsed % 60);
+  const recording = state === "recording";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#000",
+      zIndex: 1100,
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      flex: 1,
+      minHeight: 0
+    }
+  }, /*#__PURE__*/React.createElement("video", {
+    ref: videoRef,
+    playsInline: true,
+    muted: true,
+    autoPlay: true,
+    style: {
+      position: "absolute",
+      inset: 0,
+      width: "100%",
+      height: "100%",
+      objectFit: "contain",
+      background: "#000"
+    }
+  }), /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef,
+    style: {
+      display: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "calc(env(safe-area-inset-top, 0px) + 14px)",
+      left: 16,
+      right: 16,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, !recording && state !== "saving" ? /*#__PURE__*/React.createElement("button", {
+    onClick: close,
+    "aria-label": "Close camera",
+    style: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      border: "none",
+      background: "rgba(0,0,0,0.5)",
+      color: "#FFF",
+      fontSize: 18,
+      cursor: "pointer"
+    }
+  }, "\u2715") : /*#__PURE__*/React.createElement("span", null), recording && /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: "6px 12px",
+      borderRadius: 14,
+      background: "rgba(196,69,58,0.9)",
+      color: "#FFF",
+      fontFamily: F.m,
+      fontSize: 13,
+      fontWeight: 700,
+      letterSpacing: 1
+    }
+  }, "\u25CF ", mm, ":", String(ss).padStart(2, "0")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: "6px 10px",
+      borderRadius: 14,
+      background: "rgba(0,0,0,0.5)",
+      color: "#DDD",
+      fontFamily: F.m,
+      fontSize: 10,
+      letterSpacing: 1,
+      minWidth: 40,
+      textAlign: "center"
+    }
+  }, recording && sizeLabel ? sizeLabel : "1080p")), state === "starting" && /*#__PURE__*/React.createElement("p", {
+    style: {
+      position: "absolute",
+      top: "45%",
+      left: 0,
+      right: 0,
+      textAlign: "center",
+      color: "#999",
+      fontFamily: F.b,
+      fontSize: 13
+    }
+  }, "Starting camera\u2026"), state === "error" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "30%",
+      left: 24,
+      right: 24,
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#E8907A",
+      fontFamily: F.b,
+      fontSize: 14,
+      lineHeight: 1.45,
+      marginBottom: 18
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      releaseAll();
+      onFallback();
+    },
+    style: {
+      padding: "13px 20px",
+      borderRadius: 10,
+      border: "none",
+      background: "#D4663A",
+      color: "#FFF",
+      fontFamily: F.m,
+      fontSize: 12,
+      fontWeight: 800,
+      letterSpacing: 1,
+      cursor: "pointer"
+    }
+  }, "USE IPHONE CAMERA INSTEAD"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#777",
+      fontFamily: F.b,
+      fontSize: 11,
+      marginTop: 10
+    }
+  }, "Records at a lower quality."))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "18px 20px calc(env(safe-area-inset-bottom, 0px) + 22px)",
+      background: "#000",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: recording ? stopRecording : startRecording,
+    disabled: state !== "ready" && state !== "recording",
+    "aria-label": recording ? "Stop recording" : "Start recording",
+    style: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      border: "4px solid #FFF",
+      background: "transparent",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      opacity: state === "ready" || recording ? 1 : 0.4,
+      padding: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      width: recording ? 28 : 60,
+      height: recording ? 28 : 60,
+      borderRadius: recording ? 6 : 30,
+      background: "#E5483A",
+      transition: "all 0.2s"
+    }
+  })), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#888",
+      fontFamily: F.b,
+      fontSize: 11,
+      margin: 0,
+      minHeight: 14
+    }
+  }, state === "saving" ? "Saving clip…" : recording ? "Tap to stop" : state === "ready" ? "Prop your phone up, then tap to record" : "")));
+}
+
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
 // never used as its grade or in analytics.
 function OthersGradeLine({
@@ -9416,7 +9858,8 @@ function ProblemForm({
   const videoCaptureInputRef = useRef(null);
   const videoLibraryInputRef = useRef(null);
   const [videoPickerOpen, setVideoPickerOpen] = useState(false);
-  const [videoTrim, setVideoTrim] = useState(null); // { start, end, duration } in seconds, set once the clip loads
+  const [videoTrim, setVideoTrim] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false); // the app's own 1080p camera // { start, end, duration } in seconds, set once the clip loads
   const handleVideoCapture = e => {
     const file = e.target.files[0];
     e.target.value = "";
@@ -9437,7 +9880,7 @@ function ProblemForm({
     setCaptureShareState(null);
     setVideoTrim(null);
     setYtState(null);
-    videoCaptureInputRef.current?.click();
+    setCameraOpen(true);
   };
   const closeVideoReview = () => {
     if (capturedVideo?.url) URL.revokeObjectURL(capturedVideo.url);
@@ -10042,7 +10485,10 @@ function ProblemForm({
       animation: "fadeUp 0.2s ease"
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => videoCaptureInputRef.current?.click(),
+    onClick: () => {
+      setVideoPickerOpen(false);
+      setCameraOpen(true);
+    },
     style: {
       flex: 1,
       padding: "10px 0",
@@ -10143,7 +10589,27 @@ function ProblemForm({
       color: sector.trim() ? "#F5F2ED" : "#BBB",
       letterSpacing: 3
     }
-  }, initial ? "SAVE CHANGES" : "LOG PROBLEM")), capturedVideo && /*#__PURE__*/React.createElement("div", {
+  }, initial ? "SAVE CHANGES" : "LOG PROBLEM")), cameraOpen && /*#__PURE__*/React.createElement(InAppCamera, {
+    onDone: ({
+      file,
+      duration
+    }) => {
+      setCameraOpen(false);
+      setYtState(null);
+      setVideoTrim(null);
+      setCaptureShareState(null);
+      setCapturedVideo({
+        file,
+        url: URL.createObjectURL(file),
+        duration
+      });
+    },
+    onCancel: () => setCameraOpen(false),
+    onFallback: () => {
+      setCameraOpen(false);
+      videoCaptureInputRef.current?.click();
+    }
+  }), capturedVideo && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -10162,6 +10628,7 @@ function ProblemForm({
     url: capturedVideo.url,
     trim: videoTrim,
     onTrim: setVideoTrim,
+    knownDuration: capturedVideo.duration,
     locked: !!ytState && ytState.status !== "error"
   })), /*#__PURE__*/React.createElement("div", {
     style: {
