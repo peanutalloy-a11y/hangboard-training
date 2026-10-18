@@ -439,6 +439,37 @@
     .item.retimed .time{animation:none;}
     .undo-toast{transition:none;}
   }
+
+  /* ---- Budget ---- */
+  .bud-cat-titles{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .bud-cat-titles .pack-cat-name{flex:none;}
+  .bud-cat-sub{font-size:12px;color:var(--muted);font-weight:600;}
+  .bud-cat-total{flex:0 0 auto;font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;font-size:15.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .bud-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
+  .pack-cat-body .bud-row:last-of-type{border-bottom:none;}
+  .bud-name{flex:1;min-width:0;background:none;border:none;padding:4px 0;text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;}
+  .bud-label{display:block;font-size:15px;line-height:1.3;}
+  .bud-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .bud-diff{font-weight:700;}
+  .bud-diff.over{color:var(--danger);}
+  .bud-diff.under, .bud-diff.even{color:var(--activity);}
+  .bud-amt{flex:0 0 auto;display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 8px;cursor:text;}
+  .bud-amt span{color:var(--muted);font-weight:700;font-size:15px;}
+  .bud-amt input{width:84px;border:none;background:transparent;padding:8px 0;margin:0;font-family:inherit;font-size:16px;font-weight:700;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;outline:none;box-shadow:none;}
+  .bud-amt:focus-within{border-color:var(--sun);background:var(--panel);box-shadow:0 0 0 3px var(--sun-bg);}
+  .bud-amt input.invalid{color:var(--danger);}
+  .bud-fill{margin:-4px 2px 12px;font-size:13px;}
+  .bud-fill-note{color:var(--muted);}
+  .pack-toolbar .text-btn{white-space:nowrap;}
+  .bud-amt input::placeholder{color:#A9BDB6;font-weight:600;}
+  .bud-total-card{
+    background:linear-gradient(135deg, var(--sun), var(--coral));color:#fff;border-radius:var(--radius);
+    padding:16px 18px;margin-top:4px;box-shadow:0 8px 20px rgba(232,115,92,.28);
+  }
+  .bud-total-label{font-size:13px;font-weight:700;opacity:.92;}
+  .bud-total-amt{font-family:'Baloo 2',ui-rounded,-apple-system,sans-serif;font-weight:700;font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums;}
+  .bud-total-note{font-size:13px;margin-top:4px;opacity:.95;}
+  .bud-total-card .bud-diff{background:rgba(255,255,255,.92);border-radius:999px;padding:1px 8px;}
 </style>
 </head>
 <body>
@@ -682,7 +713,7 @@ function render(){
   // entrance animation for whichever item was just added, if it's on screen
   if(_justAddedId){
     const justAdded = document.querySelector(
-      `[data-item-id="${_justAddedId}"], [data-stay-id="${_justAddedId}"], [data-pack-id="${_justAddedId}"]`
+      `[data-item-id="${_justAddedId}"], [data-stay-id="${_justAddedId}"], [data-pack-id="${_justAddedId}"], [data-budget-id="${_justAddedId}"]`
     );
     if(justAdded) playEntrance(justAdded, 'itemEnter', 260);
     _justAddedId = null;
@@ -799,6 +830,7 @@ function renderTrip(t){
   if(STATE.tab==='timetable') tabContent = renderTimetable(t);
   else if(STATE.tab==='stay') tabContent = renderAccommodation(t);
   else if(STATE.tab==='pack') tabContent = renderPacking(t);
+  else if(STATE.tab==='budget') tabContent = renderBudget(t);
   else if(STATE.tab==='data') tabContent = renderData(t);
 
   return `
@@ -813,11 +845,13 @@ function renderTrip(t){
     ${STATE.tab==='timetable' ? `<button class="fab" onclick="openSheet('addItem','${t.id}')">+</button>` : ''}
     ${STATE.tab==='stay' ? `<button class="fab" onclick="openSheet('addStay','${t.id}')">+</button>` : ''}
     ${STATE.tab==='pack' ? `<button class="fab" onclick="openSheet('addPack','${t.id}')">+</button>` : ''}
+    ${STATE.tab==='budget' ? `<button class="fab" onclick="openSheet('addBudget','${t.id}')" aria-label="Add a cost">+</button>` : ''}
     <nav class="tabbar">
       <div class="tab-pill"></div>
       <button class="${STATE.tab==='timetable'?'active':''}" onclick="setTab('timetable')">Timetable</button>
       <button class="${STATE.tab==='stay'?'active':''}" onclick="setTab('stay')">Stays</button>
       <button class="${STATE.tab==='pack'?'active':''}" onclick="setTab('pack')">Packing</button>
+      <button class="${STATE.tab==='budget'?'active':''}" onclick="setTab('budget')">Budget</button>
       <button class="${STATE.tab==='data'?'active':''}" onclick="setTab('data')">Data</button>
     </nav>
   `;
@@ -1621,6 +1655,343 @@ function deletePack(tripId,id){
   });
 }
 
+/* ---- Budget ----
+   Built like Packing: an ordered list of categories ({id, name}) and cost
+   lines ({id, name, cat, planned, actual}). Amounts are stored as whole
+   cents (or null when blank) so totals never pick up floating-point
+   rounding. One list, two amounts per line: "Planned" before the trip,
+   "Actual" after it, with the difference worked out per line, per category
+   and for the whole trip. */
+const BUDGET_SUGGESTED = ['Flights','Accommodation','Car rental','Food & drink','Activities','Other spending'];
+function ensureBudgetModel(t){
+  if(!Array.isArray(t.budgetCategories)) t.budgetCategories = [];
+  if(!Array.isArray(t.budget)) t.budget = [];
+  t.budget.forEach(b => { if(b.cat && !t.budgetCategories.some(c => c.id === b.cat)) b.cat = ''; });
+}
+function findBudgetCatByName(t, name){
+  const n = (name||'').trim().toLowerCase();
+  return (t.budgetCategories||[]).find(c => c.name.trim().toLowerCase() === n);
+}
+function ensureBudgetCat(t, name){
+  name = (name||'').trim();
+  if(!name) return '';
+  if(!Array.isArray(t.budgetCategories)) t.budgetCategories = [];
+  const found = findBudgetCatByName(t, name);
+  if(found) return found.id;
+  const c = { id:uid(), name };
+  t.budgetCategories.push(c);
+  return c.id;
+}
+/* "$1,234.50", "1234.5", "  80 " → cents; blank → null; nonsense → NaN. */
+function parseMoney(str){
+  const s = String(str==null?'':str).replace(/[$,\s]/g,'').replace(/^AUD/i,'');
+  if(s==='') return null;
+  if(!/^-?(\d+\.?\d{0,2}|\.\d{1,2})$/.test(s)) return NaN;
+  return Math.round(parseFloat(s)*100);
+}
+function fmtMoney(cents){
+  if(cents==null || isNaN(cents)) return '';
+  const neg = cents < 0, v = Math.abs(cents)/100;
+  return (neg?'−':'') + '$' + v.toLocaleString('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function moneyInputValue(cents){ return cents==null ? '' : (cents/100).toFixed(2); }
+function budgetMode(t){
+  if(STATE.budgetMode) return STATE.budgetMode;
+  // Once the trip is over, open on Actual — that's when the receipts come out.
+  return (t.endDate && todayStr() > t.endDate) ? 'actual' : 'planned';
+}
+function setBudgetMode(mode){
+  STATE.budgetMode = mode; render();
+  playEntrance(document.querySelector('#app main'), 'contentFadeIn', 220);
+}
+function budgetGroups(t){
+  const groups = (t.budgetCategories||[]).map(c => ({ key:'b:'+c.id, id:c.id, name:c.name, items:[] }));
+  const byId = {}; groups.forEach(g => { byId[g.id] = g; });
+  const other = { key:'b:_none', id:'', name:'Other', items:[] };
+  (t.budget||[]).forEach(b => { ((b.cat && byId[b.cat]) || other).items.push(b); });
+  if(other.items.length) groups.push(other);
+  return groups;
+}
+/* Totals for a set of lines. actualEntered counts lines with an actual
+   amount, so a half-filled-in Actual view can say so instead of reading as
+   wildly under budget. */
+function budgetTotals(items){
+  let planned = 0, actual = 0, entered = 0, plannedOfEntered = 0;
+  items.forEach(b => {
+    planned += b.planned || 0;
+    if(b.actual != null){ actual += b.actual; entered++; plannedOfEntered += b.planned || 0; }
+  });
+  return { planned, actual, entered, count:items.length, plannedOfEntered };
+}
+/* "$12.00 over" / "$5.00 under" / "On budget", with a class for colour. */
+function diffHtml(actual, planned, cls, suffix){
+  const d = actual - planned, sfx = suffix ? ' ' + suffix : '';
+  if(d === 0) return `<span class="${cls} even">On budget${sfx}</span>`;
+  return `<span class="${cls} ${d>0?'over':'under'}">${fmtMoney(Math.abs(d))} ${d>0?'over':'under'}${sfx}</span>`;
+}
+function budgetRowHtml(t, b, mode){
+  const field = mode==='actual' ? 'actual' : 'planned';
+  const val = b[field];
+  let sub = '';
+  if(mode==='actual'){
+    const plannedStr = b.planned!=null ? `Planned ${fmtMoney(b.planned)}` : 'Not planned';
+    sub = `<div class="bud-sub">${plannedStr}${b.actual!=null && b.planned!=null ? ' · ' + diffHtml(b.actual, b.planned, 'bud-diff') : ''}</div>`;
+  }
+  return `
+    <div class="bud-row" data-budget-id="${b.id}">
+      <button class="bud-name" onclick="openSheet('editBudget','${t.id}','${b.id}')" aria-label="Edit ${attr(b.name)}">
+        <span class="bud-label">${esc(b.name)}</span>${sub}
+      </button>
+      <label class="bud-amt">
+        <span aria-hidden="true">$</span>
+        <input type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" value="${moneyInputValue(val)}"
+          placeholder="${mode==='actual'?'—':'0.00'}" aria-label="${mode==='actual'?'Actual':'Planned'} cost: ${attr(b.name)}"
+          oninput="budgetAmountInput('${t.id}','${b.id}','${field}',this)"
+          onchange="budgetAmountCommit('${t.id}','${b.id}','${field}',this)"
+          onkeydown="if(event.key==='Enter') this.blur()">
+      </label>
+    </div>`;
+}
+function budgetCatTotalHtml(items, mode){
+  const tot = budgetTotals(items);
+  if(mode==='actual'){
+    return `<span class="bud-cat-total">${fmtMoney(tot.actual)}</span>`;
+  }
+  return `<span class="bud-cat-total">${fmtMoney(tot.planned)}</span>`;
+}
+function budgetCatSubHtml(items, mode){
+  if(mode!=='actual' || !items.length) return '';
+  const tot = budgetTotals(items);
+  if(!tot.entered) return `<span class="bud-cat-sub">Planned ${fmtMoney(tot.planned)}</span>`;
+  const partial = tot.entered < tot.count;
+  return `<span class="bud-cat-sub">Planned ${fmtMoney(tot.planned)} · ${diffHtml(tot.actual, tot.plannedOfEntered, 'bud-diff', partial ? 'so far' : '')}</span>`;
+}
+function budgetSummaryHtml(t, mode){
+  const tot = budgetTotals(t.budget||[]);
+  const n = tot.count;
+  if(mode==='planned'){
+    return `<div class="bud-total-card">
+      <div class="bud-total-label">Planned total</div>
+      <div class="bud-total-amt">${fmtMoney(tot.planned)}</div>
+      <div class="bud-total-note">${n} cost${n===1?'':'s'}${tot.actual||tot.entered ? ` · ${fmtMoney(tot.actual)} actual so far` : ''}</div>
+    </div>`;
+  }
+  const partial = tot.entered < n;
+  const left = n - tot.entered, leftPlanned = tot.planned - tot.plannedOfEntered;
+  return `<div class="bud-total-card">
+    <div class="bud-total-label">Actual total${partial && tot.entered ? ' so far' : ''}</div>
+    <div class="bud-total-amt">${fmtMoney(tot.actual)}</div>
+    <div class="bud-total-note">Planned ${fmtMoney(tot.planned)}${tot.entered ? ' · ' + diffHtml(tot.actual, partial ? tot.plannedOfEntered : tot.planned, 'bud-diff', partial ? 'so far' : '') : ''}</div>
+    ${partial ? `<div class="bud-total-note">${left} cost${left===1?'':'s'} still to enter${leftPlanned ? ` (planned ${fmtMoney(leftPlanned)})` : ''}.</div>` : ''}
+  </div>`;
+}
+function renderBudget(t){
+  ensureBudgetModel(t);
+  const mode = budgetMode(t);
+  const hasCats = t.budgetCategories.length > 0;
+  const toggle = `<div class="cal-toggle">
+    <div class="toggle-pill"></div>
+    <button class="${mode==='planned'?'active':''}" onclick="setBudgetMode('planned')">Planned</button>
+    <button class="${mode==='actual'?'active':''}" onclick="setBudgetMode('actual')">Actual</button>
+  </div>`;
+  if(!t.budget.length && !hasCats){
+    return toggle + `<div class="empty"><div class="big">No costs yet</div>Tap + to add a cost, or start with some categories.
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;align-items:center;">
+        <button class="text-btn" onclick="addSuggestedBudgetCats('${t.id}')">Add suggested categories</button>
+        <button class="text-btn" onclick="openSheet('addBudgetCat','${t.id}')">New category</button>
+      </div></div>`;
+  }
+  const groups = budgetGroups(t);
+  const allCollapsed = groups.length && groups.every(g => isPackCollapsed(t.id, g.key));
+  const blanks = t.budget.filter(b => b.actual==null && b.planned!=null).length;
+  const toolbar = `
+    <div class="pack-toolbar">
+      <span class="pack-summary">${budgetToolbarSummary(t, mode)}</span>
+      <div class="tool-btns">
+        ${groups.length > 1 ? `<button class="text-btn" onclick="setAllBudgetCollapsed('${t.id}', ${allCollapsed?'false':'true'})">${allCollapsed?'Expand all':'Collapse all'}</button>` : ''}
+        <button class="text-btn" onclick="openSheet('addBudgetCat','${t.id}')">New category</button>
+      </div>
+    </div>
+    ${mode==='actual' && blanks ? `<div class="bud-fill"><button class="text-btn" onclick="fillActualsFromPlanned('${t.id}')">Copy planned amounts into ${blanks} blank${blanks===1?'':'s'}</button> <span class="bud-fill-note">handy for prepaid bookings</span></div>` : ''}`;
+  const sections = groups.map(g => {
+    const collapsed = isPackCollapsed(t.id, g.key);
+    return `
+    <section class="pack-cat bud-cat${collapsed?' collapsed':''}" data-cat-key="${g.key}">
+      <div class="pack-cat-head">
+        <button class="pack-cat-toggle" aria-expanded="${collapsed?'false':'true'}" onclick="toggleBudgetCat('${t.id}','${g.key}')">
+          <span class="chev" aria-hidden="true">▾</span>
+          <span class="bud-cat-titles"><span class="pack-cat-name">${esc(g.name)}</span>${budgetCatSubHtml(g.items, mode)}</span>
+          ${budgetCatTotalHtml(g.items, mode)}
+        </button>
+        ${g.id ? `<button class="pack-cat-edit" onclick="openSheet('editBudgetCat','${t.id}','${g.id}')" aria-label="Edit category ${attr(g.name)}">Edit</button>` : ''}
+      </div>
+      <div class="pack-cat-body">
+        ${g.items.length ? g.items.map(b => budgetRowHtml(t, b, mode)).join('') : `<div class="pack-cat-empty">No costs in here yet.</div>`}
+        <button class="pack-add-in" onclick="openSheet('addBudget','${t.id}','${g.id}')">+ Add to ${esc(g.name)}</button>
+      </div>
+    </section>`;
+  }).join('');
+  return toggle + toolbar + sections + budgetSummaryHtml(t, mode) + `<div class="pack-end-spacer" aria-hidden="true"></div>`;
+}
+function budgetToolbarSummary(t, mode){
+  const tot = budgetTotals(t.budget||[]);
+  if(mode==='actual') return `${tot.entered} of ${tot.count} entered`;
+  return `${tot.count} cost${tot.count===1?'':'s'}`;
+}
+function toggleBudgetCat(tripId, key){
+  const now = !isPackCollapsed(tripId, key);
+  setPackCollapsed(tripId, key, now);
+  const sec = document.querySelector(`.bud-cat[data-cat-key="${key}"]`);
+  if(sec){
+    sec.classList.toggle('collapsed', now);
+    const btn = sec.querySelector('.pack-cat-toggle');
+    if(btn) btn.setAttribute('aria-expanded', now ? 'false' : 'true');
+  }
+  const t = getTrip(tripId);
+  const allBtn = [...document.querySelectorAll('.pack-toolbar .text-btn')].find(b => /all$/.test(b.textContent));
+  if(allBtn && t){
+    const all = budgetGroups(t).every(g => isPackCollapsed(tripId, g.key));
+    allBtn.textContent = all ? 'Expand all' : 'Collapse all';
+    allBtn.setAttribute('onclick', `setAllBudgetCollapsed('${tripId}', ${all?'false':'true'})`);
+  }
+}
+function setAllBudgetCollapsed(tripId, collapsed){
+  const t = getTrip(tripId);
+  budgetGroups(t).forEach(g => setPackCollapsed(tripId, g.key, collapsed));
+  render();
+}
+/* Typing an amount updates the totals as you go, without re-rendering (which
+   would close the keyboard). The value is saved when the field is left. */
+function budgetAmountInput(tripId, id, field, input){
+  const t = getTrip(tripId); const b = t && t.budget.find(x => x.id === id);
+  if(!b) return;
+  const v = parseMoney(input.value);
+  input.classList.toggle('invalid', Number.isNaN(v));
+  if(Number.isNaN(v)) return;
+  b[field] = v;
+  refreshBudgetTotals(tripId);
+}
+function budgetAmountCommit(tripId, id, field, input){
+  const t = getTrip(tripId); const b = t && t.budget.find(x => x.id === id);
+  if(!b) return;
+  const v = parseMoney(input.value);
+  if(Number.isNaN(v)){ toast('Enter an amount like 120 or 120.50'); input.value = moneyInputValue(b[field]); input.classList.remove('invalid'); return; }
+  b[field] = v;
+  input.value = moneyInputValue(v);
+  save(DATA);
+  refreshBudgetTotals(tripId);
+}
+function refreshBudgetTotals(tripId){
+  const t = getTrip(tripId); if(!t) return;
+  const mode = budgetMode(t);
+  budgetGroups(t).forEach(g => {
+    const sec = document.querySelector(`.bud-cat[data-cat-key="${g.key}"]`);
+    if(!sec) return;
+    const tot = sec.querySelector('.bud-cat-total');
+    if(tot) tot.outerHTML = budgetCatTotalHtml(g.items, mode);
+    const titles = sec.querySelector('.bud-cat-titles');
+    if(titles) titles.innerHTML = `<span class="pack-cat-name">${esc(g.name)}</span>${budgetCatSubHtml(g.items, mode)}`;
+    if(mode==='actual') g.items.forEach(b => {
+      const sub = sec.querySelector(`[data-budget-id="${b.id}"] .bud-sub`);
+      if(sub) sub.innerHTML = (b.planned!=null ? `Planned ${fmtMoney(b.planned)}` : 'Not planned')
+        + (b.actual!=null && b.planned!=null ? ' · ' + diffHtml(b.actual, b.planned, 'bud-diff') : '');
+    });
+  });
+  const card = document.querySelector('.bud-total-card');
+  if(card) card.outerHTML = budgetSummaryHtml(t, mode);
+  const sum = document.querySelector('.pack-toolbar .pack-summary');
+  if(sum) sum.textContent = budgetToolbarSummary(t, mode);
+}
+function fillActualsFromPlanned(tripId){
+  const t = getTrip(tripId);
+  let n = 0;
+  t.budget.forEach(b => { if(b.actual==null && b.planned!=null){ b.actual = b.planned; n++; } });
+  save(DATA); render();
+  toast(`Filled in ${n} actual cost${n===1?'':'s'}`);
+}
+function addSuggestedBudgetCats(tripId){
+  const t = getTrip(tripId); ensureBudgetModel(t);
+  BUDGET_SUGGESTED.forEach(n => ensureBudgetCat(t, n));
+  save(DATA); render();
+}
+function submitBudget(e, tripId, itemId){
+  e.preventDefault();
+  const t = getTrip(tripId); ensureBudgetModel(t);
+  const name = document.getElementById('f_name').value.trim();
+  if(!name) return false;
+  const planned = parseMoney(document.getElementById('f_planned').value);
+  const actual = parseMoney(document.getElementById('f_actual').value);
+  if(Number.isNaN(planned) || Number.isNaN(actual)){ toast('Enter amounts like 120 or 120.50'); return false; }
+  let cat = document.getElementById('f_cat').value;
+  if(cat === '__new'){
+    const newName = (document.getElementById('f_newcat').value||'').trim();
+    if(!newName){ toast('Give the new category a name first'); return false; }
+    cat = ensureBudgetCat(t, newName);
+  }
+  if(cat) setPackCollapsed(tripId, 'b:'+cat, false);
+  STATE.lastBudgetCat = cat;
+  if(itemId){
+    const b = t.budget.find(x => x.id === itemId);
+    if(b){ b.name = name; b.cat = cat; b.planned = planned; b.actual = actual; }
+  } else {
+    const b = { id:uid(), name, cat, planned, actual };
+    t.budget.push(b);
+    _justAddedId = b.id;
+  }
+  save(DATA); closeSheet(); render();
+  return false;
+}
+function deleteBudget(tripId, id){
+  animateThenRun(`[data-budget-id="${id}"]`, ()=>{
+    const t = getTrip(tripId); t.budget = t.budget.filter(b => b.id !== id);
+    save(DATA); render();
+  });
+}
+function submitBudgetCat(e, tripId, catId){
+  e.preventDefault();
+  const t = getTrip(tripId); ensureBudgetModel(t);
+  const name = document.getElementById('f_catname').value.trim();
+  if(!name) return false;
+  const clash = findBudgetCatByName(t, name);
+  if(catId){
+    const c = t.budgetCategories.find(x => x.id === catId);
+    if(!c) return false;
+    if(clash && clash.id !== catId){ toast(`There's already a category called ${clash.name}`); return false; }
+    c.name = name;
+  } else {
+    if(clash){ toast(`There's already a category called ${clash.name}`); return false; }
+    const id = ensureBudgetCat(t, name);
+    setPackCollapsed(tripId, 'b:'+id, false);
+    STATE.lastBudgetCat = id;
+  }
+  save(DATA); closeSheet(); render();
+  return false;
+}
+/* Deleting a category never deletes its costs: they move to "Other". */
+function deleteBudgetCat(tripId, catId){
+  const t = getTrip(tripId);
+  const c = t.budgetCategories.find(x => x.id === catId);
+  if(!c) return;
+  const n = t.budget.filter(b => b.cat === catId).length;
+  if(n && !confirm(`Delete "${c.name}"? Its ${n} cost${n===1?'':'s'} will move to Other.`)) return;
+  t.budget.forEach(b => { if(b.cat === catId) b.cat = ''; });
+  t.budgetCategories = t.budgetCategories.filter(x => x.id !== catId);
+  if(STATE.lastBudgetCat === catId) STATE.lastBudgetCat = '';
+  setPackCollapsed(tripId, 'b:'+catId, false);
+  save(DATA); closeSheet(); render();
+}
+function moveBudgetCat(tripId, catId, dir){
+  const t = getTrip(tripId);
+  const cats = t.budgetCategories;
+  const i = cats.findIndex(x => x.id === catId), j = i + dir;
+  if(i < 0 || j < 0 || j >= cats.length) return;
+  [cats[i], cats[j]] = [cats[j], cats[i]];
+  save(DATA); render();
+  document.querySelectorAll('.fab').forEach(f => f.classList.add('fab-hidden'));
+  const sheet = document.querySelector('#sheetHost .sheet');
+  if(sheet) sheet.innerHTML = `<button class="close" onclick="closeSheet()">✕</button>${sheetBody('editBudgetCat', tripId, catId)}`;
+}
+
 /* ---- Data / Export-Import ---- */
 function renderData(t){
   return `
@@ -1655,7 +2026,7 @@ function deleteTrip(id){
    endDate is only used by accommodation rows (check-out date) so it never
    collides with endTime (an activity's end time or a stay's check-out time).
    travellers is a serialized "Name:Seat|Name:Seat" list (see (de)serializeTravellers). */
-const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','checkInTime','boardingTime','depTerminal','arrTerminal','depGate','arrGate','travellers','bookingLink','category'];
+const CSV_COLS = ['type','date','time','endDate','endTime','mealSlot','name','location','origin','destination','duration','mode','confirmation','notes','packed','airline','flightNumber','depAirport','arrAirport','checkInTime','boardingTime','depTerminal','arrTerminal','depGate','arrGate','travellers','bookingLink','category','planned','actual'];
 function csvEscape(v){
   v = (v===undefined||v===null) ? '' : String(v);
   if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
@@ -1712,6 +2083,17 @@ function buildTripCSV(t){
   });
   (t.packing||[]).forEach(p=>{
     rows.push(csvRow({ type:'packing', name:p.name, packed:p.packed?'true':'false', category:catName[p.cat]||'' }));
+  });
+  // Budget: categories first (so order and empty ones survive), then costs.
+  ensureBudgetModel(t);
+  const budCatName = {};
+  t.budgetCategories.forEach(c=>{
+    budCatName[c.id] = c.name;
+    rows.push(csvRow({ type:'budgetcat', name:c.name }));
+  });
+  t.budget.forEach(b=>{
+    rows.push(csvRow({ type:'budget', name:b.name, category:budCatName[b.cat]||'',
+      planned:moneyInputValue(b.planned), actual:moneyInputValue(b.actual) }));
   });
   const meta = `# trip:${csvEscape(t.name)} start:${t.startDate} end:${t.endDate}\n`;
   return meta + rows.join('\n');
@@ -1792,6 +2174,7 @@ function applyCSVToTrip(t, text){
   const idx=c=>header.indexOf(c);
   const hasCatCol = idx('category') >= 0;
   t.accommodations=[]; t.agenda=[]; t.packing=[]; t.packingCategories=[];
+  t.budget=[]; t.budgetCategories=[];
   for(let i=1;i<allRows.length;i++){
     const cols=allRows[i];
     const get=c=> idx(c)>=0 ? (cols[idx(c)]||'') : '';
@@ -1800,6 +2183,12 @@ function applyCSVToTrip(t, text){
       t.accommodations.push({ id:uid(), name:get('name'), address:get('location'),
         checkIn:get('date'), checkInTime:get('time'), checkOut:get('endDate'), checkOutTime:get('endTime'),
         confirmation:get('confirmation'), notes:get('notes') });
+    } else if(type==='budgetcat'){
+      ensureBudgetCat(t, get('name'));
+    } else if(type==='budget'){
+      const pl = parseMoney(get('planned')), ac = parseMoney(get('actual'));
+      t.budget.push({ id:uid(), name:get('name'), cat:ensureBudgetCat(t, get('category')),
+        planned: Number.isNaN(pl) ? null : pl, actual: Number.isNaN(ac) ? null : ac });
     } else if(type==='packcat'){
       ensurePackCat(t, get('name'));
     } else if(type==='packing'){
@@ -1949,6 +2338,55 @@ function sheetBody(kind, tripId, itemId){
       <button class="btn" type="submit">${c ? 'Save name' : 'Create category'}</button>
       ${c ? `<button type="button" class="btn danger-outline" onclick="deletePackCat('${tripId}','${c.id}')">Delete category</button>
       <div class="field-note">${n ? `Its ${n} item${n===1?'':'s'} will move to Other. Nothing gets deleted.` : 'This category has no items.'}</div>` : ''}
+    </form>`;
+  }
+
+  if(kind==='addBudget' || kind==='editBudget'){
+    ensureBudgetModel(t);
+    const b = kind==='editBudget' ? t.budget.find(x => x.id === itemId) : null;
+    const selected = b ? (b.cat || '')
+      : (typeof itemId === 'string' ? itemId : (STATE.lastBudgetCat || ''));
+    const opts = t.budgetCategories.map(c =>
+      `<option value="${c.id}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')
+      + `<option value="" ${selected===''?'selected':''}>No category (Other)</option>`
+      + `<option value="__new">+ New category…</option>`;
+    return `
+    <h3>${b ? 'Edit cost' : 'Add a cost'}</h3>
+    <form onsubmit="return submitBudget(event,'${tripId}','${b ? b.id : ''}')">
+      <label>What it's for</label><input type="text" id="f_name" required value="${attr(b && b.name)}" placeholder="e.g. Base rental cost">
+      <label>Category</label>
+      <select id="f_cat" onchange="onPackCatSelect(this)">${opts}</select>
+      <div id="newCatWrap" style="display:none">
+        <label>New category name</label><input type="text" id="f_newcat" placeholder="e.g. Car rental">
+      </div>
+      <div class="row">
+        <div><label>Planned ($)</label><input type="text" inputmode="decimal" id="f_planned" value="${b ? moneyInputValue(b.planned) : ''}" placeholder="0.00"></div>
+        <div><label>Actual ($)</label><input type="text" inputmode="decimal" id="f_actual" value="${b ? moneyInputValue(b.actual) : ''}" placeholder="After the trip"></div>
+      </div>
+      <button class="btn" type="submit">${b ? 'Save changes' : 'Add cost'}</button>
+      ${b ? `<button type="button" class="btn danger-outline" onclick="closeSheet(); deleteBudget('${tripId}','${b.id}')">Delete cost</button>` : ''}
+    </form>`;
+  }
+
+  if(kind==='addBudgetCat' || kind==='editBudgetCat'){
+    ensureBudgetModel(t);
+    const c = kind==='editBudgetCat' ? t.budgetCategories.find(x => x.id === itemId) : null;
+    const idx = c ? t.budgetCategories.indexOf(c) : -1;
+    const n = c ? t.budget.filter(b => b.cat === c.id).length : 0;
+    const last = t.budgetCategories.length - 1;
+    return `
+    <h3>${c ? 'Edit category' : 'New budget category'}</h3>
+    <form onsubmit="return submitBudgetCat(event,'${tripId}','${c ? c.id : ''}')">
+      <label>Category name</label><input type="text" id="f_catname" required value="${attr(c && c.name)}" placeholder="e.g. Car rental">
+      ${c && last > 0 ? `
+      <label>Position</label>
+      <div class="row">
+        <button type="button" class="btn secondary" style="margin-top:0;" ${idx===0?'disabled':''} onclick="moveBudgetCat('${tripId}','${c.id}',-1)">Move up</button>
+        <button type="button" class="btn secondary" style="margin-top:0;" ${idx===last?'disabled':''} onclick="moveBudgetCat('${tripId}','${c.id}',1)">Move down</button>
+      </div>` : ''}
+      <button class="btn" type="submit">${c ? 'Save name' : 'Create category'}</button>
+      ${c ? `<button type="button" class="btn danger-outline" onclick="deleteBudgetCat('${tripId}','${c.id}')">Delete category</button>
+      <div class="field-note">${n ? `Its ${n} cost${n===1?'':'s'} will move to Other. Nothing gets deleted.` : 'This category has no costs.'}</div>` : ''}
     </form>`;
   }
 
