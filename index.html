@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 14";
+<script>const APP_VERSION = "19 Oct 2026, build 15";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -9702,7 +9702,8 @@ function TrimmableVideo({
 // portrait recordings on their side, so the app notes which way the picture looked on screen and
 // the review screen turns the clip upright (with a rotate button as a manual backup).
 // ═══════════════════════════════════════════════════
-const CAMERA_BITRATE = 8000000; // 8 Mbps: sharp at 1080p without making the phone work too hard
+const CAMERA_BITRATE = 8000000; // 8 Mbps: sharp at 1080p30 without making the phone work too hard
+const CAMERA_BITRATE_60 = 12000000; // 12 Mbps for 1080p60
 
 function pickRecorderType() {
   if (typeof MediaRecorder === "undefined") return null;
@@ -9762,6 +9763,8 @@ function InAppCamera({
   const wakeRef = useRef(null);
   const startedAtRef = useRef(0);
   const sizeRef = useRef(null);
+  const fpsRef = useRef(30);
+  const [fpsLabel, setFpsLabel] = useState("1080p");
   const [state, setState] = useState("starting"); // starting | ready | recording | saving | error
   const [error, setError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -9785,9 +9788,10 @@ function InAppCamera({
       }
       // Ask in landscape numbers: iOS then picks its 1080p mode and turns the picture to match
       // how the phone is held. Asking for portrait numbers makes it fall back to a sideways mode.
-      // Hold the camera at a steady 30 frames a second. Left to itself, iOS drops to around 15 in
-      // dim light (like most gyms) to brighten the picture, which makes movement look jumpy.
-      const steady = {
+      // Ask for a locked 60 frames a second first, then a locked 30, then whatever the camera gives.
+      // Locking matters: left to itself, iOS drops to around 15 in dim light (like most gyms) to
+      // brighten the picture, which makes movement look jumpy.
+      const base = {
         facingMode: {
           ideal: "environment"
         },
@@ -9796,29 +9800,31 @@ function InAppCamera({
         },
         height: {
           ideal: 1080
-        },
+        }
+      };
+      const fps60 = {
+        ...base,
+        frameRate: {
+          ideal: 60,
+          min: 60
+        }
+      };
+      const fps30 = {
+        ...base,
         frameRate: {
           ideal: 30,
           min: 30
         }
       };
       const loose = {
-        facingMode: {
-          ideal: "environment"
-        },
-        width: {
-          ideal: 1920
-        },
-        height: {
-          ideal: 1080
-        },
+        ...base,
         frameRate: {
           ideal: 30
         }
       };
       let stream = null;
       let lastErr = null;
-      for (const [video, audio] of [[steady, true], [loose, true], [steady, false], [loose, false]]) {
+      for (const [video, audio] of [[fps60, true], [fps30, true], [loose, true], [fps60, false], [fps30, false], [loose, false]]) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video,
@@ -9853,6 +9859,11 @@ function InAppCamera({
         return;
       }
       streamRef.current = stream;
+      try {
+        const fr = stream.getVideoTracks()[0].getSettings().frameRate;
+        if (fr) fpsRef.current = Math.round(fr);
+      } catch (e) {}
+      if (!cancelled) setFpsLabel(fpsRef.current >= 50 ? "1080p60" : "1080p30");
       const v = videoRef.current;
       v.srcObject = stream;
       try {
@@ -9900,11 +9911,13 @@ function InAppCamera({
     const type = pickRecorderType();
     let rec;
     try {
+      // 60 fps needs more data per second to stay sharp.
+      const bitrate = fpsRef.current >= 50 ? CAMERA_BITRATE_60 : CAMERA_BITRATE;
       rec = new MediaRecorder(stream, {
         ...(type ? {
           mimeType: type
         } : {}),
-        videoBitsPerSecond: CAMERA_BITRATE,
+        videoBitsPerSecond: bitrate,
         audioBitsPerSecond: 128000
       });
     } catch (e) {
@@ -10028,7 +10041,7 @@ function InAppCamera({
       minWidth: 40,
       textAlign: "center"
     }
-  }, recording && sizeLabel ? sizeLabel : "1080p")), state === "starting" && /*#__PURE__*/React.createElement("p", {
+  }, recording && sizeLabel ? `${sizeLabel} · ${fpsRef.current >= 50 ? 60 : 30}fps` : fpsLabel)), state === "starting" && /*#__PURE__*/React.createElement("p", {
     style: {
       position: "absolute",
       top: "45%",
