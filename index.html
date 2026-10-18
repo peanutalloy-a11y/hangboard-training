@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 9";
+<script>const APP_VERSION = "19 Oct 2026, build 10";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -9117,7 +9117,10 @@ function loadTrimLib() {
   }
   return trimLibPromise;
 }
-async function trimVideoFile(file, start, end) {
+
+// start/end of null keeps the whole clip; rotate adds a turn (degrees clockwise) via the file's
+// rotation setting, so nothing is re-encoded.
+async function trimVideoFile(file, start, end, rotate = 0) {
   const T = await loadTrimLib();
   const input = new T.Input({
     source: new T.BlobSource(file),
@@ -9133,10 +9136,17 @@ async function trimVideoFile(file, start, end) {
     input,
     output,
     tracks: "primary",
-    trim: {
-      start,
-      end
-    },
+    ...(start != null && end != null ? {
+      trim: {
+        start,
+        end
+      }
+    } : {}),
+    ...(rotate ? {
+      video: {
+        rotate
+      }
+    } : {}),
     // Copy only, never re-encode. "expand" keeps every moment you picked; the clip may start a
     // touch early because a cut has to begin on one of the video's key frames.
     copy: {
@@ -9155,6 +9165,27 @@ async function trimVideoFile(file, start, end) {
     type: "video/mp4"
   });
 }
+
+// After recording in the app: checks the saved clip plays the same way round as it looked on
+// screen. Returns the extra turn needed (0 or 90). iOS sometimes saves portrait clips on their side.
+async function recordedOrientationFix(file, wantPortrait) {
+  if (wantPortrait == null) return 0;
+  try {
+    const T = await loadTrimLib();
+    const input = new T.Input({
+      source: new T.BlobSource(file),
+      formats: [T.MP4, T.QTFF]
+    });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) return 0;
+    const w = track.getDisplayWidth ? await track.getDisplayWidth() : track.displayWidth;
+    const h = track.getDisplayHeight ? await track.getDisplayHeight() : track.displayHeight;
+    if (!w || !h) return 0;
+    return h > w === wantPortrait ? 0 : 90;
+  } catch (e) {
+    return 0;
+  }
+}
 function formatClipTime(s) {
   if (!isFinite(s)) return "0:00.0";
   const m = Math.floor(s / 60);
@@ -9169,9 +9200,25 @@ function TrimmableVideo({
   trim,
   onTrim,
   locked,
-  knownDuration
+  knownDuration,
+  rotate = 0
 }) {
   const videoRef = useRef(null);
+  const boxRef = useRef(null);
+  const [box, setBox] = useState(null);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setBox({
+      w: el.clientWidth,
+      h: el.clientHeight
+    });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const trackRef = useRef(null);
   const dragRef = useRef(null);
   const [playhead, setPlayhead] = useState(0);
@@ -9281,23 +9328,42 @@ function TrimmableVideo({
       display: "flex",
       flexDirection: "column"
     }
+  }, /*#__PURE__*/React.createElement("div", {
+    ref: boxRef,
+    style: {
+      position: "relative",
+      flex: 1,
+      minHeight: 0,
+      overflow: "hidden"
+    }
   }, /*#__PURE__*/React.createElement("video", {
     ref: videoRef,
     src: url,
-    controls: true,
+    controls: !rotate,
     playsInline: true,
     preload: "metadata",
     onLoadedMetadata: onMeta,
     onTimeUpdate: onTime,
     onPlay: onPlay,
-    style: {
-      flex: 1,
-      minHeight: 0,
+    onClick: rotate ? e => e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause() : undefined,
+    style: rotate && box ? {
+      position: "absolute",
+      left: "50%",
+      top: "50%",
+      width: rotate % 180 ? box.h : box.w,
+      height: rotate % 180 ? box.w : box.h,
+      transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+      objectFit: "contain",
+      background: "#000"
+    } : {
+      position: "absolute",
+      inset: 0,
       width: "100%",
+      height: "100%",
       objectFit: "contain",
       background: "#000"
     }
-  }), canTrim && trim && /*#__PURE__*/React.createElement("div", {
+  })), canTrim && trim && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px 28px 4px",
       background: "#111",
@@ -9378,9 +9444,9 @@ function TrimmableVideo({
 // iOS hands web apps a heavily compressed clip when they record through its own camera screen,
 // so this records straight from the camera instead, at 1080p.
 //
-// The picture is redrawn onto a canvas and the canvas is what gets recorded. Recent iOS versions
-// write portrait recordings on their side when recording the camera directly, so recording what's
-// actually on screen keeps the clip upright whichever way the phone is held.
+// The camera feed is recorded directly, which keeps the motion smooth. Recent iOS versions can save
+// portrait recordings on their side, so the app notes which way the picture looked on screen and
+// the review screen turns the clip upright (with a rotate button as a manual backup).
 // ═══════════════════════════════════════════════════
 const CAMERA_BITRATE = 10000000; // 10 Mbps, about what the iPhone camera uses for 1080p
 
@@ -9436,11 +9502,9 @@ function InAppCamera({
   onFallback
 }) {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const recRef = useRef(null);
   const chunksRef = useRef([]);
-  const drawRef = useRef(null);
   const wakeRef = useRef(null);
   const startedAtRef = useRef(0);
   const sizeRef = useRef(null);
@@ -9448,12 +9512,7 @@ function InAppCamera({
   const [error, setError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [sizeLabel, setSizeLabel] = useState("");
-  const stopDrawing = () => {
-    if (drawRef.current) drawRef.current.stop = true;
-    drawRef.current = null;
-  };
   const releaseAll = () => {
-    stopDrawing();
     try {
       if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop();
     } catch (e) {}
@@ -9552,35 +9611,13 @@ function InAppCamera({
     const portrait = detectPortrait(v);
     const long = Math.max(v.videoWidth, v.videoHeight) || 1920;
     const short = Math.min(v.videoWidth, v.videoHeight) || 1080;
-    const w = portrait ? short : long;
-    const h = portrait ? long : short;
     sizeRef.current = {
-      w,
-      h
+      portrait
     };
-    const canvas = canvasRef.current;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d", {
-      alpha: false
-    });
-    ctx.drawImage(v, 0, 0, w, h);
-    const loop = {
-      stop: false
-    };
-    drawRef.current = loop;
-    const draw = () => {
-      if (loop.stop) return;
-      ctx.drawImage(v, 0, 0, w, h);
-      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw);else requestAnimationFrame(draw);
-    };
-    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw);else requestAnimationFrame(draw);
-    const out = canvas.captureStream(30);
-    stream.getAudioTracks().forEach(t => out.addTrack(t));
     const type = pickRecorderType();
     let rec;
     try {
-      rec = new MediaRecorder(out, {
+      rec = new MediaRecorder(stream, {
         ...(type ? {
           mimeType: type
         } : {}),
@@ -9588,14 +9625,13 @@ function InAppCamera({
         audioBitsPerSecond: 128000
       });
     } catch (e) {
-      rec = new MediaRecorder(out);
+      rec = new MediaRecorder(stream);
     }
     chunksRef.current = [];
     rec.ondataavailable = e => {
       if (e.data && e.data.size) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
-      stopDrawing();
       const mime = (rec.mimeType || type || "video/mp4").split(";")[0];
       const ext = mime.includes("webm") ? "webm" : "mp4";
       const blob = new Blob(chunksRef.current, {
@@ -9608,14 +9644,15 @@ function InAppCamera({
       releaseAll();
       onDone({
         file,
-        duration
+        duration,
+        wantPortrait: portrait
       });
     };
     recRef.current = rec;
     rec.start(1000);
     startedAtRef.current = performance.now();
     setElapsed(0);
-    setSizeLabel(`${w} × ${h}`);
+    setSizeLabel(portrait ? `${short} × ${long}` : `${long} × ${short}`);
     setState("recording");
     try {
       if (navigator.wakeLock) wakeRef.current = await navigator.wakeLock.request("screen");
@@ -9664,11 +9701,6 @@ function InAppCamera({
       height: "100%",
       objectFit: "contain",
       background: "#000"
-    }
-  }), /*#__PURE__*/React.createElement("canvas", {
-    ref: canvasRef,
-    style: {
-      display: "none"
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9893,9 +9925,10 @@ function ProblemForm({
     if (!capturedVideo || ytState?.status === "uploading" || ytState?.status === "cutting") return;
     const trim = videoTrim;
     const wantsTrim = !!trim && isFinite(trim.duration) && (trim.start > 0.05 || trim.end < trim.duration - 0.05);
+    const extraTurn = capturedVideo.rotate || 0;
     // Google's sign-in window only opens if it's asked for straight from the tap, before the cut.
     const tokenReady = getYouTubeToken();
-    setYtState(wantsTrim ? {
+    setYtState(wantsTrim || extraTurn ? {
       status: "cutting"
     } : {
       status: "uploading",
@@ -9915,10 +9948,11 @@ function ProblemForm({
     tokenReady.then(async () => {
       let file = capturedVideo.file;
       let soft = null;
-      if (wantsTrim) {
+      if (wantsTrim || extraTurn) {
         try {
-          file = await trimVideoFile(capturedVideo.file, trim.start, trim.end);
+          file = await trimVideoFile(capturedVideo.file, wantsTrim ? trim.start : null, wantsTrim ? trim.end : null, extraTurn);
         } catch (e) {
+          if (wantsTrim)
           // Couldn't cut this clip on the phone: upload it whole and have the app play only the
           // chosen section instead.
           soft = {
@@ -10592,7 +10626,8 @@ function ProblemForm({
   }, initial ? "SAVE CHANGES" : "LOG PROBLEM")), cameraOpen && /*#__PURE__*/React.createElement(InAppCamera, {
     onDone: ({
       file,
-      duration
+      duration,
+      wantPortrait
     }) => {
       setCameraOpen(false);
       setYtState(null);
@@ -10601,7 +10636,15 @@ function ProblemForm({
       setCapturedVideo({
         file,
         url: URL.createObjectURL(file),
-        duration
+        duration,
+        rotate: 0
+      });
+      // Turn the clip upright if iOS saved it on its side.
+      recordedOrientationFix(file, wantPortrait).then(turn => {
+        if (turn) setCapturedVideo(cv => cv && cv.file === file ? {
+          ...cv,
+          rotate: turn
+        } : cv);
       });
     },
     onCancel: () => setCameraOpen(false),
@@ -10629,8 +10672,31 @@ function ProblemForm({
     trim: videoTrim,
     onTrim: setVideoTrim,
     knownDuration: capturedVideo.duration,
+    rotate: capturedVideo.rotate || 0,
     locked: !!ytState && ytState.status !== "error"
-  })), /*#__PURE__*/React.createElement("div", {
+  }), (!ytState || ytState.status === "error") && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setCapturedVideo(cv => cv && {
+      ...cv,
+      rotate: ((cv.rotate || 0) + 90) % 360
+    }),
+    "aria-label": "Rotate clip",
+    style: {
+      position: "absolute",
+      top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      right: 12,
+      zIndex: 5,
+      padding: "8px 12px",
+      borderRadius: 18,
+      border: "none",
+      background: "rgba(0,0,0,0.55)",
+      color: "#FFF",
+      fontFamily: F.m,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: 1,
+      cursor: "pointer"
+    }
+  }, "⟳ ROTATE")), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "20px 20px calc(env(safe-area-inset-bottom,20px) + 20px)",
       background: "#111"
@@ -10673,7 +10739,7 @@ function ProblemForm({
       color: "#FFF",
       letterSpacing: 1
     }
-  }, ytState?.status === "cutting" ? "CUTTING CLIP…" : ytState?.status === "uploading" ? `UPLOADING ${ytState.pct || 0}%` : ytState?.status === "done" ? "DONE ✓" : "SAVE TO YOUTUBE")), /*#__PURE__*/React.createElement("button", {
+  }, ytState?.status === "cutting" ? "PREPARING CLIP…" : ytState?.status === "uploading" ? `UPLOADING ${ytState.pct || 0}%` : ytState?.status === "done" ? "DONE ✓" : "SAVE TO YOUTUBE")), /*#__PURE__*/React.createElement("button", {
     onClick: closeVideoReview,
     style: {
       width: "100%",
@@ -10696,7 +10762,7 @@ function ProblemForm({
       textAlign: "center",
       marginTop: 12
     }
-  }, ytState?.status === "error" ? ytState.msg : ytState?.status === "cutting" ? "Cutting the clip on your phone…" : ytState?.status === "uploading" ? "Keep the app open until the upload finishes." : ytState?.status === "done" && ytState.soft ? "This clip couldn't be cut on the phone, so the full video went up as Unlisted. The app plays just your trimmed part." : ytState?.status === "done" ? ytState.privacy === "unlisted" ? "Uploaded and kept as Unlisted. The link has been added." : `Uploaded, but YouTube set it to ${String(ytState.privacy).toUpperCase()}. The link has been added. Check it in the YouTube app.` : storedYouTubeToken() ? "Uploads to your YouTube channel as Unlisted and adds the link." : "Uploads to your YouTube channel as Unlisted. Google will ask you to allow YouTube access."))), capturedPhoto && /*#__PURE__*/React.createElement("div", {
+  }, ytState?.status === "error" ? ytState.msg : ytState?.status === "cutting" ? "Getting the clip ready on your phone…" : ytState?.status === "uploading" ? "Keep the app open until the upload finishes." : ytState?.status === "done" && ytState.soft ? "This clip couldn't be cut on the phone, so the full video went up as Unlisted. The app plays just your trimmed part." : ytState?.status === "done" ? ytState.privacy === "unlisted" ? "Uploaded and kept as Unlisted. The link has been added." : `Uploaded, but YouTube set it to ${String(ytState.privacy).toUpperCase()}. The link has been added. Check it in the YouTube app.` : storedYouTubeToken() ? "Uploads to your YouTube channel as Unlisted and adds the link." : "Uploads to your YouTube channel as Unlisted. Google will ask you to allow YouTube access."))), capturedPhoto && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
