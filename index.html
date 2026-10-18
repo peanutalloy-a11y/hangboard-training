@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 15";
+<script>const APP_VERSION = "19 Oct 2026, build 17";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -1273,7 +1273,7 @@ function FingerApp() {
   const [view, setView] = useState("home");
   // Otherwise the scroll position from whatever view you were on carries over into the new one —
   // navigating into a page while scrolled down would land you scrolled down there too.
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [view]);
   const [prevView, setPrevView] = useState(null);
@@ -2726,9 +2726,11 @@ function FingerApp() {
     return /*#__PURE__*/React.createElement("div", {
       style: S.page
     }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      key: "settings",
       style: {
         position: "relative",
-        zIndex: 1
+        zIndex: 1,
+        animation: "fadeUp 0.25s ease both"
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("home"),
@@ -4883,13 +4885,15 @@ function ClimbPhotoFull({
       letterSpacing: 1,
       cursor: "pointer"
     }
-  }, "LOAD FROM DRIVE")), p.photoLink && /*#__PURE__*/React.createElement("a", {
+  }, "LOAD FROM DRIVE"), p.photoLink && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("a", {
     href: p.photoLink,
     target: "_blank",
     rel: "noopener noreferrer",
     style: {
-      display: "inline-block",
-      marginTop: 6,
       fontFamily: F.m,
       fontSize: 10,
       fontWeight: 700,
@@ -4897,7 +4901,7 @@ function ClimbPhotoFull({
       letterSpacing: 0.5,
       textDecoration: "none"
     }
-  }, "Open in Drive \u2197"));
+  }, "Open in Drive \u2197"))));
 }
 
 // Warms up the current set's photos a few at a time, so Google doesn't refuse a burst of requests.
@@ -5455,7 +5459,7 @@ function ClimbApp() {
   const [view, setView] = useState("home");
   // Otherwise the scroll position from whatever view you were on carries over into the new one —
   // navigating into a page while scrolled down would land you scrolled down there too.
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [view]);
   const [data, setData] = useState({
@@ -7267,9 +7271,11 @@ function ClimbApp() {
     return /*#__PURE__*/React.createElement("div", {
       style: CS.page
     }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      key: "settings",
       style: {
         position: "relative",
-        zIndex: 1
+        zIndex: 1,
+        animation: "fadeUp 0.25s ease both"
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("home"),
@@ -7828,9 +7834,11 @@ function ClimbApp() {
     return /*#__PURE__*/React.createElement("div", {
       style: CS.page
     }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      key: "analytics",
       style: {
         position: "relative",
-        zIndex: 1
+        zIndex: 1,
+        animation: "fadeUp 0.25s ease both"
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("home"),
@@ -9964,6 +9972,28 @@ function InAppCamera({
     releaseAll();
     onCancel();
   };
+
+  // Bluetooth shutter remotes and presentation clickers. iOS keeps the volume-up signal (what most
+  // shutter remotes send on their main button) to itself, but keys like Enter, Space, Page Down or
+  // the arrows do reach the app, and many remotes have a second button that sends one of those.
+  const toggleRef = useRef(null);
+  toggleRef.current = () => {
+    if (recRef.current && recRef.current.state === "recording") stopRecording();else if (videoRef.current && streamRef.current && !recRef.current) startRecording();
+  };
+  useEffect(() => {
+    let last = 0;
+    const keys = ["Enter", " ", "Spacebar", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "MediaPlayPause", "MediaPlay", "MediaStop", "AudioVolumeUp", "AudioVolumeDown", "VolumeUp", "VolumeDown", "Camera"];
+    const onKey = e => {
+      if (!keys.includes(e.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat || performance.now() - last < 700) return;
+      last = performance.now();
+      if (toggleRef.current) toggleRef.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
   const mm = Math.floor(elapsed / 60);
   const ss = Math.floor(elapsed % 60);
   const recording = state === "recording";
@@ -10135,7 +10165,7 @@ function InAppCamera({
       margin: 0,
       minHeight: 14
     }
-  }, state === "saving" ? "Saving clip…" : recording ? "Tap to stop" : state === "ready" ? "Prop your phone up, then tap to record" : "")));
+  }, state === "saving" ? "Saving clip…" : recording ? "Tap or click your remote to stop" : state === "ready" ? "Prop your phone up, then tap to record" : "")));
 }
 
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
@@ -11469,7 +11499,7 @@ function StretchApp() {
   const [view, setView] = useState("home");
   // Otherwise the scroll position from whatever view you were on carries over into the new one —
   // navigating into a page while scrolled down would land you scrolled down there too.
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [view]);
   const [routines, setRoutines] = useState(emptyStretchRoutines());
@@ -12456,9 +12486,11 @@ function StretchApp() {
     return /*#__PURE__*/React.createElement("div", {
       style: CS.page
     }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      key: "settings",
       style: {
         position: "relative",
-        zIndex: 1
+        zIndex: 1,
+        animation: "fadeUp 0.25s ease both"
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setView("home"),
