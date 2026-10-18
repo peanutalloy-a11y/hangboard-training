@@ -13,6 +13,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icons/waypoint/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/waypoint/favicon-16.png">
 <title>Waypoint — Trip Planner</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -46,6 +47,7 @@
     --mode-bicycling:#C23B82;
     --mode-bicycling-bg:#FBE8F1;
     --danger:#D9583F;
+    --danger-bg:#FCE9E4;
     --radius:18px;
   }
   *{box-sizing:border-box;}
@@ -260,6 +262,36 @@
   .pack-cat-body .pack-row:last-of-type{border-bottom:none;}
   .pack-end-spacer{height:72px;}
   .btn:disabled{opacity:.45;cursor:default;}
+
+  /* ---- Google Drive backup (same behaviour as Jarful and Send Log) ---- */
+  .backup-reminder{display:flex;align-items:center;gap:10px;margin:0 2px 12px;font-size:12.5px;font-weight:700;color:var(--coral);}
+  .backup-reminder[hidden]{display:none;}
+  .backup-reminder span{flex:1;}
+  .backup-reminder.ok{color:var(--activity);}
+  .backup-reminder.bad{color:var(--danger);}
+  .backup-reminder button{
+    flex-shrink:0;border:none;border-radius:20px;padding:6px 14px;font:inherit;font-size:12px;font-weight:800;
+    background:var(--sun-bg);color:var(--ink);cursor:pointer;
+  }
+  .drive-panel .drive-status{font-weight:700;color:var(--ink);font-size:14.5px;}
+  .drive-panel .waiting{color:var(--coral);}
+  .drive-panel .drive-note{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45;}
+  .drive-panel .drive-btns{display:flex;gap:8px;margin-top:12px;}
+  .drive-panel .drive-btns .btn{flex:1;margin-top:0;}
+  .drive-msg{margin-top:10px;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:700;}
+  .drive-msg[hidden]{display:none;}
+  .drive-msg.ok{background:var(--activity-bg);color:var(--activity);}
+  .drive-msg.bad{background:var(--danger-bg);color:var(--danger);}
+  .drive-list{margin-top:10px;}
+  .drive-list[hidden]{display:none;}
+  .drive-file{padding:10px 2px;border-top:1px dashed var(--line);}
+  .drive-file:first-child{border-top:none;}
+  .drive-file-row{display:flex;align-items:center;gap:10px;}
+  .drive-file-row span{flex:1;font-size:13px;font-weight:700;color:var(--ink);}
+  .drive-file-row small{color:var(--muted);font-weight:600;}
+  .drive-file .btn{width:auto;margin-top:0;padding:7px 12px;font-size:12.5px;}
+  .drive-confirm{margin-top:8px;font-size:12.5px;color:var(--muted);font-weight:600;}
+  .drive-confirm .drive-btns{margin-top:8px;}
   .sheet .btn.danger-outline{background:#fff;color:var(--danger);border:1px solid var(--line);box-shadow:none;margin-top:10px;}
   .sheet .field-note{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4;}
 
@@ -371,6 +403,42 @@
     .sheet, .sheet-backdrop, .fab{ animation:none !important; transition:none !important; }
     .pack-cat-toggle .chev{ transition:none; }
   }
+
+  /* ---- Drag to reorder (timetable list) ---- */
+  .tt-list{position:relative;}
+  .item[data-drag]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  .item.press{transition:transform .38s ease, box-shadow .38s ease;transform:scale(.985);}
+  .item.drag-source{background:transparent;border:2px dashed #BFD6CD;box-shadow:none;}
+  .item.drag-source > *{visibility:hidden;}
+  .drag-ghost{
+    position:fixed;z-index:60;margin:0 !important;pointer-events:none;will-change:transform;
+    box-shadow:0 16px 34px rgba(30,58,58,.22), 0 3px 8px rgba(30,58,58,.12);
+    animation:dragLift .16s ease-out both;
+  }
+  .drag-ghost > *{transform:scale(1.02);transform-origin:center;}
+  .drag-ghost.dropping{transition:transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease;box-shadow:0 2px 6px rgba(30,58,58,.08);}
+  @keyframes dragLift{from{box-shadow:0 0 0 rgba(30,58,58,0);}to{box-shadow:0 16px 34px rgba(30,58,58,.22), 0 3px 8px rgba(30,58,58,.12);}}
+  body.is-dragging{-webkit-user-select:none;user-select:none;cursor:grabbing;}
+  @keyframes itemSettle{0%{transform:scale(1.025);}60%{transform:scale(.995);}100%{transform:scale(1);}}
+  .item .time{align-self:flex-start;}
+  .item.retimed .time{animation:timeFlash 1.2s ease;border-radius:6px;}
+  @keyframes timeFlash{0%,35%{background:var(--sun-bg);color:var(--sun);box-shadow:0 0 0 5px var(--sun-bg);}100%{background:transparent;box-shadow:0 0 0 5px transparent;}}
+  .drag-hint{margin:0 2px 10px;}
+  .undo-toast{
+    position:fixed;top:14px;left:50%;transform:translate(-50%,-8px);
+    display:flex;align-items:center;gap:14px;
+    background:var(--ink);color:#fff;padding:9px 10px 9px 16px;border-radius:12px;font-size:13.5px;
+    z-index:51;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;
+    box-shadow:0 8px 22px rgba(30,58,58,.25);white-space:nowrap;
+  }
+  .undo-toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0);}
+  .undo-toast button{background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:8px;padding:6px 12px;font:inherit;font-weight:700;cursor:pointer;}
+  @media (prefers-reduced-motion: reduce){
+    .item.press{transition:none;transform:none;}
+    .drag-ghost{animation:none;}
+    .item.retimed .time{animation:none;}
+    .undo-toast{transition:none;}
+  }
 </style>
 </head>
 <body>
@@ -386,6 +454,7 @@
 <div id="app"></div>
 <div id="sheetHost"></div>
 <div class="toast" id="toast"></div>
+<div class="undo-toast" id="undoToast" role="status"><span></span><button type="button">Undo</button></div>
 
 <script>
 /* ---------- storage ---------- */
@@ -394,7 +463,10 @@ function load(){
   try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {trips:[]}; }
   catch(e){ return {trips:[]}; }
 }
-function save(data){ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+function save(data){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }catch(e){}
+  if(window.__driveReady) scheduleAutoBackup();
+}
 let DATA = load();
 let STATE = { view:'home', tripId:null, tab:'timetable', day:null, calView:false };
 
@@ -615,13 +687,14 @@ function render(){
     if(justAdded) playEntrance(justAdded, 'itemEnter', 260);
     _justAddedId = null;
   }
+  if(window.__driveReady) renderBackupUI();
 }
 
 /* ---------- HOME ---------- */
 function renderHome(){
   let body;
   if(DATA.trips.length===0){
-    body = `<div class="empty"><div class="big">No trips yet</div>Tap + to plan your first one, or restore a trip from a CSV backup below.</div>`;
+    body = `<div class="empty"><div class="big">No trips yet</div>Tap + to plan your first one, or restore your trips from Drive or a CSV below.</div>`;
   } else {
     body = DATA.trips.slice().sort((a,b)=>a.startDate.localeCompare(b.startDate))
       .map(t=>`
@@ -640,11 +713,15 @@ function renderHome(){
         <div class="sub">Your trips</div>
       </header>
       <main>
+        ${reminderHtml()}
         ${body}
-        <label class="btn secondary" style="display:block;text-align:center;cursor:pointer;margin-top:8px;">
+        <div class="section-title">Backup</div>
+        ${drivePanelHtml()}
+        <label class="btn secondary" style="display:block;text-align:center;cursor:pointer;margin-top:0;">
           Restore a trip from CSV
           <input type="file" accept=".csv" style="display:none" onchange="importNewTripFromFile(this)">
         </label>
+        <div class="pack-end-spacer" aria-hidden="true"></div>
       </main>
     </div>
     <button class="fab" onclick="openSheet('addTrip')">+</button>
@@ -657,7 +734,9 @@ function parseTripMeta(text){
   const firstLine = (text.split(/\r?\n/)[0] || '');
   const m = firstLine.match(/^#\s*trip:(.*?)\s+start:(\d{4}-\d{2}-\d{2})\s+end:(\d{4}-\d{2}-\d{2})\s*$/);
   if(!m) return {};
-  return { name:m[1].trim(), start:m[2], end:m[3] };
+  let name = m[1].trim();
+  if(name.length > 1 && name[0] === '"' && name[name.length-1] === '"') name = name.slice(1,-1).replace(/""/g,'"');
+  return { name, start:m[2], end:m[3] };
 }
 function todayStr(){
   const d=new Date();
@@ -688,18 +767,12 @@ function importNewTripFromFile(inputEl){
   reader.onerror=()=>toast('Could not read that file — please try again.');
   reader.onload = e=>{
     try{
-      const text=e.target.result;
-      const meta=parseTripMeta(text);
-      const trip={ id:uid(), name:meta.name||'Imported trip', startDate:meta.start||null,
-        endDate:meta.end||meta.start||null, accommodations:[], agenda:[], packing:[] };
-      applyCSVToTrip(trip, text);
-      widenTripRangeToData(trip);
-      if(!trip.startDate) trip.startDate = todayStr();
-      if(!trip.endDate) trip.endDate = trip.startDate;
-      DATA.trips.push(trip);
+      const trips = tripsFromCSVText(e.target.result);
+      if(!trips.length) throw new Error('That file has no trips in it.');
+      trips.forEach(t => DATA.trips.push(t));
       save(DATA);
-      toast('Trip imported');
-      openTrip(trip.id);
+      if(trips.length === 1){ toast('Trip imported'); openTrip(trips[0].id); }
+      else { toast(trips.length + ' trips imported'); render(); }
     } catch(err){
       toast(err.message || 'Could not import that file.');
     }
@@ -735,7 +808,7 @@ function renderTrip(t){
         <div class="title" style="margin-top:6px;">${esc(t.name)}</div>
         <div class="sub">${fmtRange(t.startDate,t.endDate)}</div>
       </header>
-      <main>${tabContent}</main>
+      <main>${reminderHtml()}${tabContent}</main>
     </div>
     ${STATE.tab==='timetable' ? `<button class="fab" onclick="openSheet('addItem','${t.id}')">+</button>` : ''}
     ${STATE.tab==='stay' ? `<button class="fab" onclick="openSheet('addStay','${t.id}')">+</button>` : ''}
@@ -774,9 +847,14 @@ function getDayRows(t, day){
       if(f.arrDate===day) rows.push({id:f.id,type:'flight',leg:'arrive',time:f.arrTime,name:f.name||'Flight',location:route,notes:f.notes,_flight:f});
     }
   });
-  rows.sort(timeSort);
+  // Same start time: fixed bookings (check-in/out, flights) come first, then
+  // agenda items in their saved order — which is what a drag-reorder sets, so
+  // an item dropped right after a 10:00 check-out stays below it.
+  rows.sort((a,b)=> timeSort(a,b) || (isAnchorRow(b)?1:0) - (isAnchorRow(a)?1:0));
   return rows;
 }
+/* Rows whose time comes from a booking and so can't be dragged or retimed. */
+function isAnchorRow(r){ return !!(r.readonly || r.type==='flight'); }
 
 function renderTimetable(t){
   const days = daysBetween(t.startDate,t.endDate);
@@ -789,8 +867,11 @@ function renderTimetable(t){
   </div>`;
 
   const rows = getDayRows(t, STATE.day);
+  const movable = rows.filter(r=>!isAnchorRow(r)).length;
+  const dragHint = (movable && rows.length > 1 && !dragHintSeen())
+    ? `<div class="hint drag-hint">Tip: press and hold an item, then drag it to reorder. Times after it shift to fit.</div>` : '';
   const body = STATE.calView ? renderCalendarView(rows, t.id) :
-    (rows.length ? rows.map(r=>renderItem(r,t.id)).join('') :
+    (rows.length ? `${dragHint}<div class="tt-list" data-trip-id="${t.id}" data-day="${STATE.day}">${rows.map(r=>renderItem(r,t.id,true)).join('')}</div>` :
       `<div class="empty" style="padding:32px 10px;">Nothing planned yet for this day.</div>`);
 
   return `<div class="timetable-sticky-bar"><div class="daychips">${chips}</div>${toggle}</div>${body}`;
@@ -966,7 +1047,7 @@ function flightMeta(f, leg){
 
 const MODE_LABELS = { driving:'driving', walking:'walking', transit:'transit', bicycling:'cycling' };
 
-function renderItem(a,tripId){
+function renderItem(a,tripId,draggable){
   const kicker = a.type==='meal' ? (a.mealSlot||'meal')
     : a.type==='travel' ? (MODE_LABELS[a.mode] || 'travel')
     : a.type==='stay' ? 'accommodation'
@@ -998,7 +1079,7 @@ function renderItem(a,tripId){
   const editBtn = a.readonly ? '' : `<button onclick="openSheet('editItem','${tripId}','${a.id}')">Edit</button>`;
   const delBtn = a.readonly ? '' : `<button class="del" onclick="deleteItem('${tripId}','${a.id}')">Delete</button>`;
   return `
-    <div class="item ${a.type}${modeClass}" data-item-id="${a.id}">
+    <div class="item ${a.type}${modeClass}" data-item-id="${a.id}"${draggable && !isAnchorRow(a) ? ' data-drag="1"' : ''}>
       <div class="bar"></div>
       <div class="time num">${fmtTime(a.time)||'--:--'}</div>
       <div class="body">
@@ -1017,6 +1098,320 @@ function deleteItem(tripId,itemId){
     save(DATA); render();
   });
 }
+
+/* ---- Reorder: press and hold an item in the list view, then drag ----
+   Moving an item means retiming the day, because both views sort by time.
+   "Ripple" rule: the moved item starts the moment the item above it ends
+   (or takes the day's first start time if dropped at the top), and every
+   item keeps its own length and the gap that sat before it. The gap that sat
+   before the moved item stays where it was, so items beyond the affected
+   stretch keep their times. Check-in/out and flights never move; items after
+   one are laid out from its time, so a booking acts as a fixed wall. */
+function minutesToTime(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function itemDurationMin(r){
+  if((r.type==='activity'||r.type==='meal') && r.endTime){
+    const s=timeToMinutes(r.time), e=timeToMinutes(r.endTime);
+    if(s!==null && e!==null && e>s) return e-s;
+  }
+  if(r.type==='travel'){ const p=parseDurationToMinutes(r.duration); if(p && p>0) return p; }
+  return CAL_DEFAULT_DURATIONS[r.type] || 45;
+}
+/* {start,end} in minutes for a day row, or null when it has no time. */
+function rowSpan(r){
+  const s = timeToMinutes(r.time);
+  if(s===null) return null;
+  if(r.type==='stay') return {start:s, end:s};
+  if(r.type==='flight'){
+    if(r.leg==='arrive') return {start:s, end:s};
+    if(r.leg==='depart') return {start:s, end:1440};
+    const e = timeToMinutes(r._calEnd);
+    return {start:s, end:(e!==null && e>=s) ? e : s};
+  }
+  return {start:s, end:s+itemDurationMin(r)};
+}
+/* Works out the new times for dropping item itemId at position newIndex
+   (its index in the day's rows once it has been taken out). Pure: returns
+   {ok, unchanged?, reason?, changes:[{id,time,endTime?}], order:[ids]} and
+   doesn't touch the trip, so it can be tested on its own. */
+function planReorder(t, day, itemId, newIndex){
+  const rows = getDayRows(t, day);
+  const oldIndex = rows.findIndex(r=>r.id===itemId && !isAnchorRow(r));
+  if(oldIndex<0) return {ok:false, reason:"That item can't be moved."};
+  const moved = rows[oldIndex];
+  const rest = rows.slice(); rest.splice(oldIndex,1);
+  newIndex = Math.max(0, Math.min(rest.length, newIndex));
+  if(newIndex===oldIndex) return {ok:true, unchanged:true, changes:[], order:rows.map(r=>r.id)};
+  const newOrder = rest.slice(); newOrder.splice(newIndex,0,moved);
+
+  // Original timeline: each timed row's span and the gap before it.
+  const timed = rows.filter(r=>rowSpan(r));
+  const info = new Map();
+  let prevEnd = null;
+  timed.forEach((r,i)=>{
+    const sp = rowSpan(r);
+    info.set(r, {span:sp, gap: i===0 ? 0 : sp.start-prevEnd});
+    prevEnd = sp.end;
+  });
+  if(!timed.length) return {ok:true, unchanged:true, changes:[], order:newOrder.map(r=>r.id)};
+  const base = rowSpan(timed[0]).start;
+  // The gap before the moved item stays behind with the item that followed it.
+  if(info.has(moved)){
+    const ti = timed.indexOf(moved), follower = timed[ti+1];
+    if(follower) info.get(follower).gap += info.get(moved).gap;
+  }
+
+  // Lay the day out again in the new order; untimed items (other than the
+  // moved one) stay untimed and out of the way at the bottom.
+  const seq = newOrder.filter(r=>r===moved || info.has(r));
+  const placed = new Map();
+  prevEnd = null;
+  seq.forEach((r,i)=>{
+    if(isAnchorRow(r)){ const sp=rowSpan(r); placed.set(r,sp); prevEnd=sp.end; return; }
+    const dur = r===moved ? itemDurationMin(r) : (info.get(r).span.end - info.get(r).span.start);
+    let start;
+    if(r===moved){
+      if(i===0){
+        const next = seq[1];
+        // Dropped above a booking at the top of the day: finish as it starts.
+        start = (next && isAnchorRow(next)) ? Math.max(0, rowSpan(next).start - dur) : base;
+      } else start = prevEnd;
+    } else {
+      start = i===0 ? base : prevEnd + info.get(r).gap;
+    }
+    start = Math.max(0, start);
+    placed.set(r, {start, end:start+dur});
+    prevEnd = start + dur;
+  });
+
+  const changes = [];
+  for(const r of seq){
+    if(isAnchorRow(r)) continue;
+    const sp = placed.get(r), orig = info.get(r);
+    const hasEnd = (r.type==='activity'||r.type==='meal') && r.endTime && orig &&
+      timeToMinutes(r.endTime)===orig.span.end;
+    if(sp.start > 1439 || (hasEnd && sp.end > 1439)){
+      return {ok:false, reason:"There isn't room left in the day for that — it would run past midnight."};
+    }
+    if(orig && orig.span.start===sp.start) continue;
+    const ch = {id:r.id, time:minutesToTime(sp.start)};
+    if(hasEnd) ch.endTime = minutesToTime(sp.end);
+    changes.push(ch);
+  }
+  return {ok:true, changes, order:newOrder.map(r=>r.id)};
+}
+/* Applies planReorder to the trip: new times, plus the moved item's place in
+   the agenda array (which breaks ties between equal start times). Returns the
+   plan, with a snapshot of the agenda for Undo. */
+function reorderDayItem(tripId, day, itemId, newIndex){
+  const t = getTrip(tripId);
+  if(!t) return {ok:false, reason:'Trip not found.'};
+  const plan = planReorder(t, day, itemId, newIndex);
+  if(!plan.ok || plan.unchanged) return plan;
+  plan.snapshot = JSON.parse(JSON.stringify(t.agenda||[]));
+  const byId = {}; (t.agenda||[]).forEach(a=>{ byId[a.id]=a; });
+  plan.changes.forEach(ch=>{
+    const a = byId[ch.id]; if(!a) return;
+    a.time = ch.time;
+    if(ch.endTime) a.endTime = ch.endTime;
+  });
+  // Put the moved item just before the next movable item in the new order.
+  const pos = plan.order.indexOf(itemId);
+  const nextId = plan.order.slice(pos+1).find(id=>byId[id] && byId[id].type!=='flight');
+  const movedObj = byId[itemId];
+  t.agenda = t.agenda.filter(a=>a!==movedObj);
+  const at = nextId ? t.agenda.indexOf(byId[nextId]) : -1;
+  if(at>=0) t.agenda.splice(at,0,movedObj); else t.agenda.push(movedObj);
+  return plan;
+}
+
+function dragHintSeen(){ try{ return localStorage.getItem('waypointDragHintSeen')==='1'; }catch(e){ return false; } }
+function markDragHintSeen(){ try{ localStorage.setItem('waypointDragHintSeen','1'); }catch(e){} }
+
+let _undoTimer = null;
+function showUndo(msg, onUndo){
+  const el = document.getElementById('undoToast');
+  if(!el) return;
+  el.querySelector('span').textContent = msg;
+  const btn = el.querySelector('button');
+  btn.onclick = ()=>{ hideUndo(); onUndo(); };
+  el.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndo, 6000);
+}
+function hideUndo(){
+  const el = document.getElementById('undoToast');
+  if(el) el.classList.remove('show');
+  clearTimeout(_undoTimer);
+}
+
+const DRAG_HOLD_MS = 380;   // how long to hold before the item lifts
+const DRAG_SLOP_PX = 8;     // movement allowed while holding before it counts as a scroll
+let _drag = null;
+function reducedMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+
+function dragPointerDown(target, x, y, isTouch){
+  if(_drag) return;
+  if(STATE.calView) return;
+  const el = target && target.closest && target.closest('.tt-list .item[data-drag]');
+  if(!el || target.closest('a, button, input, select, textarea')) return;
+  const list = el.parentElement;
+  _drag = { el, list, tripId:list.dataset.tripId, day:list.dataset.day, itemId:el.dataset.itemId,
+            startX:x, startY:y, lastY:y, active:false, isTouch };
+  el.classList.add('press');
+  _drag.timer = setTimeout(liftDrag, DRAG_HOLD_MS);
+}
+function dragPointerMove(x, y, ev){
+  if(!_drag) return;
+  if(!_drag.active){
+    if(Math.abs(x-_drag.startX) > DRAG_SLOP_PX || Math.abs(y-_drag.startY) > DRAG_SLOP_PX) cancelPendingDrag();
+    return;
+  }
+  if(ev && ev.cancelable) ev.preventDefault();
+  _drag.lastY = y;
+  positionGhost();
+  placeDragSlot();
+}
+function dragPointerUp(ev){
+  if(!_drag) return;
+  if(!_drag.active){ cancelPendingDrag(); return; }
+  if(ev && ev.cancelable) ev.preventDefault();
+  finishDrag();
+}
+function cancelPendingDrag(){
+  if(!_drag) return;
+  clearTimeout(_drag.timer);
+  _drag.el.classList.remove('press');
+  _drag = null;
+}
+
+function liftDrag(){
+  const d = _drag; if(!d) return;
+  const el = d.el;
+  el.classList.remove('press');
+  const rect = el.getBoundingClientRect();
+  const ghost = el.cloneNode(true);
+  ghost.removeAttribute('data-item-id');
+  ghost.classList.add('drag-ghost');
+  Object.assign(ghost.style, { left:rect.left+'px', top:rect.top+'px', width:rect.width+'px', height:rect.height+'px' });
+  document.body.appendChild(ghost);
+  el.classList.add('drag-source');
+  d.ghost = ghost; d.ghostTop = rect.top; d.height = rect.height;
+  d.grabOffset = d.startY - rect.top;
+  d.active = true;
+  document.body.classList.add('is-dragging');
+  try{ if(navigator.vibrate) navigator.vibrate(12); }catch(e){}
+  positionGhost();
+  d.raf = requestAnimationFrame(dragAutoScroll);
+}
+function positionGhost(){
+  const d=_drag; if(!d || !d.ghost) return;
+  d.ghost.style.transform = `translateY(${d.lastY - d.startY}px)`;
+}
+/* Moves the dashed slot to wherever the dragged card's middle now sits,
+   sliding the cards it passes out of the way (FLIP). Uses offsetTop, which
+   ignores the in-flight transforms, so mid-slide cards measure correctly. */
+function placeDragSlot(){
+  const d=_drag; if(!d) return;
+  const list=d.list, el=d.el;
+  const sibs = Array.from(list.children).filter(c=>c.classList.contains('item') && c!==el);
+  const listTop = list.getBoundingClientRect().top;
+  const centre = d.lastY - d.grabOffset + d.height/2 - listTop;
+  let before = null;
+  for(const s of sibs){ if(centre < s.offsetTop + s.offsetHeight/2){ before = s; break; } }
+  const currentNext = (()=>{ let n=el.nextElementSibling; while(n && !n.classList.contains('item')) n=n.nextElementSibling; return n; })();
+  if(before===currentNext) return;
+  const oldTops = new Map(sibs.map(s=>[s, s.offsetTop]));
+  if(before) list.insertBefore(el, before);
+  else list.insertBefore(el, sibs[sibs.length-1].nextSibling);
+  if(reducedMotion()) return;
+  sibs.forEach(s=>{
+    const delta = oldTops.get(s) - s.offsetTop;
+    if(!delta) return;
+    s.style.transition='none';
+    s.style.transform=`translateY(${delta}px)`;
+    void s.offsetWidth;
+    s.style.transition='transform .2s cubic-bezier(.22,.61,.36,1)';
+    s.style.transform='';
+  });
+}
+/* Scrolls the page while the finger is held near the top (under the day bar)
+   or bottom (above the tab bar), so an item can travel the whole day. */
+function dragAutoScroll(){
+  const d=_drag; if(!d || !d.active) return;
+  const bar = document.querySelector('.timetable-sticky-bar');
+  const tabs = document.querySelector('nav.tabbar');
+  const topEdge = bar ? bar.getBoundingClientRect().bottom : 0;
+  const bottomEdge = tabs ? tabs.getBoundingClientRect().top : window.innerHeight;
+  const zone = 60;
+  let speed = 0;
+  if(d.lastY < topEdge + zone) speed = -Math.min(16, Math.ceil((topEdge + zone - d.lastY)/4));
+  else if(d.lastY > bottomEdge - zone) speed = Math.min(16, Math.ceil((d.lastY - (bottomEdge - zone))/4));
+  if(speed){
+    const before = window.scrollY;
+    window.scrollBy(0, speed);
+    if(window.scrollY !== before) placeDragSlot();
+  }
+  d.raf = requestAnimationFrame(dragAutoScroll);
+}
+let _suppressClickUntil = 0;
+function finishDrag(){
+  const d=_drag; if(!d) return;
+  cancelAnimationFrame(d.raf);
+  _suppressClickUntil = Date.now() + 350;
+  const items = Array.from(d.list.children).filter(c=>c.classList.contains('item'));
+  const newIndex = items.indexOf(d.el);
+  const settle = ()=>{
+    if(d.ghost) d.ghost.remove();
+    document.body.classList.remove('is-dragging');
+    _drag = null;
+    const res = reorderDayItem(d.tripId, d.day, d.itemId, newIndex);
+    if(!res.ok){ render(); toast(res.reason || "Couldn't move that."); return; }
+    if(res.unchanged){ render(); return; }
+    markDragHintSeen();
+    save(DATA); render();
+    flashReordered(d.itemId, res.changes);
+    const n = res.changes.length;
+    showUndo(n ? `Moved · ${n} time${n===1?'':'s'} updated` : 'Moved', ()=>{
+      const t=getTrip(d.tripId); if(!t) return;
+      t.agenda = res.snapshot; save(DATA); render();
+    });
+  };
+  // Glide the lifted card down into its slot, then rebuild with new times.
+  if(d.ghost && !reducedMotion()){
+    const slotTop = d.el.getBoundingClientRect().top;
+    d.ghost.classList.add('dropping');
+    d.ghost.style.transform = `translateY(${slotTop - d.ghostTop}px)`;
+    setTimeout(settle, 190);
+  } else settle();
+}
+function flashReordered(movedId, changes){
+  const moved = document.querySelector(`.tt-list [data-item-id="${movedId}"]`);
+  if(moved) playEntrance(moved, 'itemSettle', 320);
+  changes.forEach(ch=>{
+    const el = document.querySelector(`.tt-list [data-item-id="${ch.id}"]`);
+    if(!el) return;
+    el.classList.add('retimed');
+    setTimeout(()=>el.classList.remove('retimed'), 1300);
+  });
+}
+
+document.addEventListener('touchstart', e=>{
+  if(e.touches.length!==1){ if(_drag && !_drag.active) cancelPendingDrag(); return; }
+  const tch=e.touches[0]; dragPointerDown(e.target, tch.clientX, tch.clientY, true);
+}, {passive:true});
+document.addEventListener('touchmove', e=>{
+  if(!_drag || !_drag.isTouch) return;
+  const tch=e.touches[0]; if(tch) dragPointerMove(tch.clientX, tch.clientY, e);
+}, {passive:false});
+document.addEventListener('touchend', e=>{ if(_drag && _drag.isTouch) dragPointerUp(e); }, {passive:false});
+document.addEventListener('touchcancel', ()=>{ if(_drag && _drag.isTouch){ if(_drag.active) finishDrag(); else cancelPendingDrag(); } });
+document.addEventListener('mousedown', e=>{ if(e.button===0) dragPointerDown(e.target, e.clientX, e.clientY, false); });
+document.addEventListener('mousemove', e=>{ if(_drag && !_drag.isTouch) dragPointerMove(e.clientX, e.clientY, e); });
+document.addEventListener('mouseup', e=>{ if(_drag && !_drag.isTouch) dragPointerUp(e); });
+// A tap that turned into a drag shouldn't also open whatever was under it.
+document.addEventListener('click', e=>{ if((Date.now() < _suppressClickUntil || (_drag && _drag.active)) && !(e.target.closest && e.target.closest('#undoToast'))){ e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('contextmenu', e=>{ if(_drag) e.preventDefault(); });
+window.addEventListener('scroll', ()=>{ if(_drag && !_drag.active) cancelPendingDrag(); }, {passive:true});
 
 /* ---- Accommodation ---- */
 function renderAccommodation(t){
@@ -1229,6 +1624,8 @@ function deletePack(tripId,id){
 /* ---- Data / Export-Import ---- */
 function renderData(t){
   return `
+    <div class="section-title">Google Drive</div>
+    ${drivePanelHtml()}
     <div class="section-title">Backup this trip</div>
     <div class="card">
       Everything is saved automatically on this device. Export a CSV to back it up or move it to another device.
@@ -1285,8 +1682,8 @@ function parseTravellers(str){
 function csvRow(obj){
   return CSV_COLS.map(c => csvEscape(obj[c] !== undefined ? obj[c] : '')).join(',');
 }
-function exportCSV(tripId){
-  const t=getTrip(tripId);
+/* One trip as CSV text: the "# trip:" line, the header, then its rows. */
+function buildTripCSV(t){
   const rows=[CSV_COLS.join(',')];
   (t.accommodations||[]).forEach(a=>{
     rows.push(csvRow({ type:'accommodation', date:a.checkIn, time:a.checkInTime||'', endDate:a.checkOut, endTime:a.checkOutTime||'',
@@ -1317,7 +1714,43 @@ function exportCSV(tripId){
     rows.push(csvRow({ type:'packing', name:p.name, packed:p.packed?'true':'false', category:catName[p.cat]||'' }));
   });
   const meta = `# trip:${csvEscape(t.name)} start:${t.startDate} end:${t.endDate}\n`;
-  const blob = new Blob([meta+rows.join('\n')], {type:'text/csv'});
+  return meta + rows.join('\n');
+}
+/* Every trip in one file: each trip's own CSV, one after another. Each block
+   starts with its "# trip:" line, so the file splits back into trips cleanly,
+   and any single block still works as an ordinary one-trip import. */
+function buildAllTripsCSV(){
+  return DATA.trips.map(buildTripCSV).join('\n\n');
+}
+/* Splits a file into one CSV text per trip, at each "# trip:" line. A file
+   with no such line is treated as a single trip. */
+function splitTripsCSV(text){
+  const lines = String(text||'').split(/\r?\n/);
+  const chunks = [];
+  let cur = [];
+  lines.forEach(l => {
+    if(/^#\s*trip:/.test(l) && cur.some(x => x.trim() !== '')){ chunks.push(cur.join('\n')); cur = []; }
+    cur.push(l);
+  });
+  if(cur.some(x => x.trim() !== '')) chunks.push(cur.join('\n'));
+  return chunks;
+}
+/* Builds trip objects from a one- or many-trip CSV (throws on bad input). */
+function tripsFromCSVText(text){
+  return splitTripsCSV(text).map(chunk => {
+    const meta = parseTripMeta(chunk);
+    const trip = { id:uid(), name:meta.name||'Imported trip', startDate:meta.start||null,
+      endDate:meta.end||meta.start||null, accommodations:[], agenda:[], packing:[] };
+    applyCSVToTrip(trip, chunk);
+    widenTripRangeToData(trip);
+    if(!trip.startDate) trip.startDate = todayStr();
+    if(!trip.endDate) trip.endDate = trip.startDate;
+    return trip;
+  });
+}
+function exportCSV(tripId){
+  const t=getTrip(tripId);
+  const blob = new Blob([buildTripCSV(t)], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url; a.download = `${t.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}.csv`;
@@ -1393,7 +1826,7 @@ function applyCSVToTrip(t, text){
     } else if(['meal','activity','travel'].includes(type)){
       t.agenda.push({ id:uid(), type, date:get('date'), time:get('time'), endTime:get('endTime'),
         mealSlot:get('mealSlot'), name:get('name'), location:get('location'), origin:get('origin'),
-        destination:get('destination'), duration:get('duration'), mode:get('mode')||'driving', notes:get('notes') });
+        destination:get('destination'), duration:get('duration'), mode:get('mode')||(type==='travel'?'driving':''), notes:get('notes') });
     }
   }
   ensurePackingModel(t); // migrate "Category: item" names from older CSVs
@@ -1405,6 +1838,8 @@ function importCSV(tripId){
   reader.onerror=()=>toast('Could not read that file — please try again.');
   reader.onload = e=>{
     try{
+      const n = splitTripsCSV(e.target.result).length;
+      if(n > 1){ toast(`That file has ${n} trips. Use "Restore a trip from CSV" on the home screen instead.`); return; }
       const t=getTrip(tripId);
       applyCSVToTrip(t, e.target.result);
       widenTripRangeToData(t);
@@ -1792,6 +2227,311 @@ function esc(s){
 }
 function attachHomeHandlers(){}
 
+/* ---------- Google Drive backup ----------
+   Same approach as Jarful and the Send Log, which live on the same site:
+   sign in with Google using the narrow drive.file permission (the app only
+   ever sees files it made itself), save every trip as one CSV into a private
+   "Waypoint Backups" folder, keep the newest 10. It backs up by itself a few
+   seconds after a change and when the app is reopened, but only while a
+   sign-in is still valid (about an hour), so it never pops up a Google window
+   on its own. The sign-in is shared with Jarful and the Send Log: same client
+   ID, same stored token.
+
+   Waypoint-specific safeguards: it never backs up an app with no trips (so a
+   new or cleared phone can't push a blank file into the 10 kept), and a
+   restore keeps a copy of the phone's current trips first. */
+var GOOGLE_CLIENT_ID = '865694161905-a6f6kdtp9g41r3muq9r020nihpgci0gd.apps.googleusercontent.com';
+var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var DRIVE_TOKEN_KEY = 'send-log-drive-token';
+var BACKUP_FOLDER_NAME = 'Waypoint Backups';
+var BACKUP_FOLDER_KEY = 'waypoint-backup-folder';
+var BACKUP_META_KEY = 'waypoint-backup-meta';
+var BEFORE_RESTORE_KEY = 'waypointData-before-restore';
+var BACKUP_KEEP = 10;
+var BACKUP_REMIND_DAYS = 3;
+var DAY_MS = 86400000;
+
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+function lsDel(k){ try { localStorage.removeItem(k); } catch(e){} }
+
+function storedDriveToken(){
+  try {
+    var t = JSON.parse(lsGet(DRIVE_TOKEN_KEY) || 'null');
+    if(t && t.token && t.exp - 60000 > Date.now()) return t.token;
+  } catch(e){}
+  return null;
+}
+// Must run straight from a tap (nothing awaited first) or the browser blocks Google's window.
+function getDriveToken(){
+  var existing = storedDriveToken();
+  if(existing) return Promise.resolve(existing);
+  return new Promise(function(resolve, reject){
+    var oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+    if(!oauth){ reject(new Error("Google sign-in hasn't loaded. Check your connection and try again.")); return; }
+    var client = oauth.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      include_granted_scopes: false,
+      callback: function(resp){
+        if(!resp || resp.error || !resp.access_token){
+          reject(new Error(resp && resp.error === 'access_denied' ? "Google access wasn't allowed, so nothing was backed up." : "Google sign-in didn't finish. Try again."));
+          return;
+        }
+        lsSet(DRIVE_TOKEN_KEY, JSON.stringify({ token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000 }));
+        resolve(resp.access_token);
+      },
+      error_callback: function(err){
+        var type = err && err.type;
+        reject(new Error(type === 'popup_closed' ? 'Google sign-in was closed before it finished.'
+          : type === 'popup_failed_to_open' ? "Google sign-in couldn't open. Allow pop-ups for this site and try again."
+          : "Google sign-in didn't finish. Try again."));
+      }
+    });
+    client.requestAccessToken();
+  });
+}
+
+function readBackupMeta(){ try { return JSON.parse(lsGet(BACKUP_META_KEY) || 'null') || {}; } catch(e){ return {}; } }
+function writeBackupMeta(m){ lsSet(BACKUP_META_KEY, JSON.stringify(m)); renderBackupUI(); }
+function hashText(s){
+  var h = 0x811c9dc5;
+  for(var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36) + '-' + s.length;
+}
+// No trips means nothing worth backing up, so never "dirty".
+function backupDirty(){ return DATA.trips.length > 0 && readBackupMeta().sig !== hashText(buildAllTripsCSV()); }
+
+function backupFetch(token, url, opts, asText){
+  opts = opts || {};
+  var headers = { Authorization: 'Bearer ' + token };
+  for(var k in (opts.headers || {})) headers[k] = opts.headers[k];
+  return fetch(url, { method: opts.method || 'GET', headers: headers, body: opts.body }).then(function(res){
+    if(res.status === 401){
+      lsDel(DRIVE_TOKEN_KEY);
+      var e = new Error('Your Google sign-in has expired. Tap Back up now to sign in again.');
+      e.expired = true;
+      throw e;
+    }
+    if(!res.ok) throw new Error('Google Drive returned an error (' + res.status + '). Try again.');
+    if(res.status === 204) return null;
+    return asText ? res.text() : res.json();
+  });
+}
+function ensureBackupFolder(token){
+  var id = lsGet(BACKUP_FOLDER_KEY);
+  var check = id
+    ? backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + id + '?fields=id,trashed')
+        .then(function(f){ return (f && !f.trashed) ? id : null; }, function(e){ if(e.expired) throw e; return null; })
+    : Promise.resolve(null);
+  return check.then(function(ok){
+    if(ok) return ok;
+    var q = encodeURIComponent("name='" + BACKUP_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+    return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&spaces=drive').then(function(found){
+      if(found.files && found.files.length) return found.files[0].id;
+      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?fields=id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: BACKUP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+      }).then(function(made){ return made.id; });
+    }).then(function(fid){ lsSet(BACKUP_FOLDER_KEY, fid); return fid; });
+  });
+}
+function backupFileName(d){
+  function p(n){ return String(n).padStart(2, '0'); }
+  return 'Waypoint backup ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + '.csv';
+}
+function listBackups(token, folderId){
+  return (folderId ? Promise.resolve(folderId) : ensureBackupFolder(token)).then(function(fid){
+    var q = encodeURIComponent("'" + fid + "' in parents and trashed=false");
+    return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,modifiedTime,size)');
+  }).then(function(res){ return res.files || []; });
+}
+function pruneBackups(token, folderId){
+  return listBackups(token, folderId).then(function(files){
+    return files.slice(BACKUP_KEEP).reduce(function(p, f){
+      return p.then(function(){
+        return backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + f.id + '?fields=id', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true })
+        });
+      });
+    }, Promise.resolve());
+  });
+}
+function localDay(d){ return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+// Automatic backups update one file per day, so a busy day doesn't use up
+// all 10 copies. Back up now always makes a new file.
+var backupInFlight = null;
+function runBackup(token, force){
+  if(backupInFlight) return backupInFlight;
+  if(!DATA.trips.length) return Promise.reject(new Error('There are no trips to back up yet.'));
+  backupInFlight = (function(){
+    var csv = buildAllTripsCSV(), sig = hashText(csv);
+    if(!force && readBackupMeta().sig === sig) return Promise.resolve({ skipped: true });
+    var now = new Date(), meta = readBackupMeta(), folderId;
+    function body(m){
+      var fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify(m)], { type: 'application/json' }));
+      fd.append('file', new Blob([csv], { type: 'text/csv' }));
+      return fd;
+    }
+    return ensureBackupFolder(token).then(function(fid){
+      folderId = fid;
+      if(!force && meta.fileId && meta.day === localDay(now)){
+        return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files/' + meta.fileId + '?uploadType=multipart&fields=id,name,trashed', {
+          method: 'PATCH', body: body({ name: backupFileName(now) })
+        }).then(function(up){ return (up && !up.trashed) ? up : null; }, function(e){ if(e.expired) throw e; return null; });
+      }
+      return null;
+    }).then(function(up){
+      if(up) return up;
+      return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
+        method: 'POST', body: body({ name: backupFileName(now), mimeType: 'text/csv', parents: [folderId] })
+      });
+    }).then(function(up){
+      writeBackupMeta({ at: now.getTime(), sig: sig, name: up.name, fileId: up.id, day: localDay(now) });
+      return pruneBackups(token, folderId).catch(function(){}).then(function(){ return up; });
+    });
+  })();
+  backupInFlight.then(function(){ backupInFlight = null; }, function(){ backupInFlight = null; });
+  return backupInFlight;
+}
+
+var backupTimer = null, backupDueAt = 0;
+function scheduleAutoBackup(delay){
+  delay = delay == null ? 8000 : delay;
+  var due = Date.now() + delay;
+  if(backupTimer && backupDueAt <= due) return;
+  clearTimeout(backupTimer);
+  backupDueAt = due;
+  backupTimer = setTimeout(function(){
+    backupTimer = null;
+    renderBackupUI();
+    var token = storedDriveToken();
+    if(token && backupDirty()) runBackup(token, false).catch(function(){ renderBackupUI(); });
+  }, delay);
+}
+
+function formatBackupTime(ms){
+  var d = new Date(ms), h = d.getHours(), ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' }) + ' at ' + h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+}
+
+/* ---- Drive UI. Waypoint re-renders whole screens, so the panel and the
+   reminder are drawn from this state and redrawn in place when it changes. */
+var reminderFlash = null;
+var driveBusy = false, driveFiles = null, driveConfirm = null, driveMessage = null, driveMsgTimer = null;
+
+function reminderHtml(){ return '<div class="backup-reminder" id="backup-reminder" hidden></div>'; }
+function drivePanelHtml(){
+  return '<div class="card drive-panel" id="drive-panel">' + drivePanelInner() + '</div>';
+}
+function drivePanelInner(){
+  var meta = readBackupMeta(), dirty = backupDirty();
+  var status = esc(meta.at ? 'Last backed up ' + formatBackupTime(meta.at) : 'Not backed up to Drive yet') +
+    (meta.at && dirty ? '<span class="waiting"> · newer changes waiting</span>' : '');
+  var list = '';
+  if(driveFiles){
+    list = !driveFiles.length ? '<div class="drive-note">No backups in Drive yet.</div>'
+      : driveFiles.map(function(f, i){
+        var when = formatBackupTime(new Date(f.modifiedTime).getTime());
+        var size = Math.max(1, Math.round(Number(f.size || 0) / 1024)) + ' KB';
+        var confirming = driveConfirm === f.id;
+        return '<div class="drive-file"><div class="drive-file-row"><span>' + esc(when) +
+          ' <small>' + (i === 0 ? '· latest · ' : '· ') + size + '</small></span>' +
+          (confirming ? '' : '<button type="button" class="btn secondary" onclick="drivePick(\'' + attr(f.id) + '\')">Restore</button>') + '</div>' +
+          (confirming ? '<div class="drive-confirm">This replaces all your trips on this phone with this backup.' +
+            '<div class="drive-btns"><button type="button" class="btn danger" ' + (driveBusy ? 'disabled' : '') + ' onclick="driveRestore(\'' + attr(f.id) + '\')">' + (driveBusy === 'restore' ? 'Restoring…' : 'Restore this') + '</button>' +
+            '<button type="button" class="btn secondary" onclick="driveCancel()">Cancel</button></div></div>' : '') +
+          '</div>';
+      }).join('');
+  }
+  return '<div class="drive-status">' + status + '</div>' +
+    '<div class="drive-note">All your trips back up to a private Waypoint Backups folder in your Google Drive by themselves while you\'re signed in, keeping the last 10. Signing in here, in Jarful or in the Send Log covers all three.</div>' +
+    '<div class="drive-btns">' +
+      '<button type="button" class="btn" ' + (driveBusy ? 'disabled' : '') + ' onclick="driveBackupNow()">' + (driveBusy === 'backup' ? 'Backing up…' : 'Back up now') + '</button>' +
+      '<button type="button" class="btn secondary" ' + (driveBusy && driveBusy !== 'list' ? 'disabled' : '') + ' onclick="driveToggleRestore()">' + (driveBusy === 'list' ? 'Loading…' : driveFiles ? 'Close' : 'Restore from Drive') + '</button>' +
+    '</div>' +
+    '<div class="drive-msg' + (driveMessage ? ' ' + driveMessage.tone : '') + '" ' + (driveMessage ? '' : 'hidden') + '>' + (driveMessage ? esc(driveMessage.text) : '') + '</div>' +
+    '<div class="drive-list" ' + (driveFiles ? '' : 'hidden') + '>' + list + '</div>';
+}
+function renderBackupUI(){
+  var panel = document.getElementById('drive-panel');
+  if(panel) panel.innerHTML = drivePanelInner();
+  var bar = document.getElementById('backup-reminder');
+  if(!bar) return;
+  var meta = readBackupMeta(), dirty = backupDirty();
+  var due = dirty && (!meta.at || Date.now() - meta.at > BACKUP_REMIND_DAYS * DAY_MS);
+  if(!due && !reminderFlash){ bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.className = 'backup-reminder' + (reminderFlash ? ' ' + reminderFlash.tone : '');
+  var days = meta.at ? Math.floor((Date.now() - meta.at) / DAY_MS) : null;
+  var text = reminderFlash ? reminderFlash.text
+    : days == null ? 'Not backed up to Drive yet' : 'Last Drive backup ' + days + ' days ago';
+  var showBtn = !(reminderFlash && reminderFlash.tone === 'ok');
+  var busy = !!(reminderFlash && reminderFlash.tone === 'busy');
+  var label = busy ? 'Backing up…' : reminderFlash && reminderFlash.tone === 'bad' ? 'Try again' : 'Back up';
+  bar.innerHTML = '<span>' + esc(text) + '</span>' +
+    (showBtn ? '<button type="button" ' + (busy ? 'disabled' : '') + ' onclick="reminderBackup()">' + label + '</button>' : '');
+}
+function driveMsg(text, tone){
+  clearTimeout(driveMsgTimer);
+  driveMessage = text ? { text: text, tone: tone } : null;
+  renderBackupUI();
+}
+
+function backupNowFromTap(){ return getDriveToken().then(function(t){ return runBackup(t, true); }); }
+
+function reminderBackup(){
+  reminderFlash = { tone: 'busy', text: 'Backing up to Drive…' }; renderBackupUI();
+  backupNowFromTap().then(function(){
+    reminderFlash = { tone: 'ok', text: 'Backed up to Drive ✓' }; renderBackupUI();
+    setTimeout(function(){ reminderFlash = null; renderBackupUI(); }, 2500);
+  }, function(e){ reminderFlash = { tone: 'bad', text: e.message }; renderBackupUI(); });
+}
+function driveBackupNow(){
+  driveBusy = 'backup'; driveMsg(null);
+  backupNowFromTap().then(function(){
+    driveBusy = false; driveMsg('Backed up to Drive ✓', 'ok');
+    driveMsgTimer = setTimeout(function(){ driveMsg(null); }, 3000);
+  }, function(e){ driveBusy = false; driveMsg(e.message, 'bad'); });
+}
+function driveToggleRestore(){
+  if(driveFiles){ driveFiles = null; driveConfirm = null; driveBusy = false; renderBackupUI(); return; }
+  driveBusy = 'list'; driveMsg(null);
+  getDriveToken().then(function(t){ return listBackups(t); }).then(function(list){
+    driveFiles = list; driveBusy = false; renderBackupUI();
+  }, function(e){ driveBusy = false; driveMsg(e.message, 'bad'); });
+}
+function drivePick(id){ if(driveBusy) return; driveConfirm = id; renderBackupUI(); }
+function driveCancel(){ if(driveBusy) return; driveConfirm = null; renderBackupUI(); }
+function driveRestore(id){
+  if(driveBusy) return;
+  var token = storedDriveToken();
+  if(!token){ driveFiles = null; driveConfirm = null; driveMsg('Your Google sign-in has expired. Tap Restore from Drive again.', 'bad'); return; }
+  driveBusy = 'restore'; renderBackupUI();
+  backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {}, true).then(function(text){
+    var trips = tripsFromCSVText(text);
+    if(!trips.length) throw new Error("That backup doesn't have any trips in it, so nothing was changed.");
+    lsSet(BEFORE_RESTORE_KEY, JSON.stringify(DATA)); // safety copy of what this phone had
+    DATA.trips = trips;
+    save(DATA);
+    driveFiles = null; driveConfirm = null; driveBusy = false;
+    driveMessage = { text: 'Restored ' + trips.length + ' trip' + (trips.length === 1 ? '' : 's') + ' ✓', tone: 'ok' };
+    driveMsgTimer = setTimeout(function(){ driveMsg(null); }, 4000);
+    if(STATE.view !== 'home'){ goHome(); } else { render(); }
+  }).catch(function(err){ driveBusy = false; driveMsg(err.message || "That backup couldn't be read.", 'bad'); });
+}
+
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') scheduleAutoBackup(2000);
+});
+window.addEventListener('storage', function(e){
+  // A Google sign-in from Jarful or the Send Log in another tab is a chance to back up now.
+  if(e.key === DRIVE_TOKEN_KEY) scheduleAutoBackup(1500);
+});
+
 /* App-open splash: hold on the pin until its drop-and-bounce has finished
    (900ms), then fade it out to reveal the app underneath. The fade
    transition is attached here, right before triggering it — never present
@@ -1814,6 +2554,9 @@ function runSplash(){
 
 render();
 runSplash();
+window.__driveReady = true;
+renderBackupUI();          // show the backup status and reminder straight away
+scheduleAutoBackup(1500);  // and back up shortly after opening, if signed in
 </script>
 </body>
 </html>
