@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 21";
+<script>const APP_VERSION = "20 Oct 2026, build 26";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -1425,12 +1425,12 @@ function FingerApp() {
       };
       persistSessionsConfig([...sessionsConfig, newSession]);
     }
-    navigateTo("home");
+    navigateTo("settings");
   };
   const deleteSessionConfig = () => {
     if (!editingSession) return;
     persistSessionsConfig(sessionsConfig.filter(s => s.id !== editingSession.id));
-    navigateTo("home");
+    navigateTo("settings");
   };
   const navigateTo = useCallback((target, prep) => {
     setPrevView(view);
@@ -2319,11 +2319,7 @@ function FingerApp() {
         height: 28,
         background: "#E8E4DE"
       }
-    })))))), /*#__PURE__*/React.createElement(Stagger, {
-      delay: 100
-    }, /*#__PURE__*/React.createElement(Divider, {
-      text: "LOG SESSION"
-    })), sortedSessionEntries.map(([key, s], i) => {
+    })))))), sortedSessionEntries.map(([key, s], i) => {
       const hov = hoveredCard === key;
       return /*#__PURE__*/React.createElement(Stagger, {
         key: key,
@@ -2380,21 +2376,7 @@ function FingerApp() {
           marginTop: 4,
           letterSpacing: 1
         }
-      }, getSessionCount(key), " session", getSessionCount(key) !== 1 ? "s" : "", " logged")), /*#__PURE__*/React.createElement("svg", {
-        width: "28",
-        height: "28",
-        viewBox: "0 0 24 24"
-      }, /*#__PURE__*/React.createElement("path", {
-        d: "M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z",
-        fill: "#D4663A",
-        opacity: "0.12"
-      }), /*#__PURE__*/React.createElement("path", {
-        d: "M12 2C7 2 3 6.5 3 11c0 3.5 2 6 4.5 7.5L12 22l4.5-3.5C19 17 21 14.5 21 11c0-4.5-4-9-9-9z",
-        fill: "none",
-        stroke: "#D4663A",
-        strokeWidth: "1.5",
-        opacity: "0.35"
-      }))), /*#__PURE__*/React.createElement("button", {
+      }, getSessionCount(key), " session", getSessionCount(key) !== 1 ? "s" : "", " logged"))), /*#__PURE__*/React.createElement("button", {
         onClick: e => {
           e.stopPropagation();
           openTimer(key);
@@ -2413,42 +2395,79 @@ function FingerApp() {
           alignItems: "center",
           justifyContent: "center"
         }
-      }, "▶"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => openEditSession(key),
-        style: {
-          width: 40,
-          height: 40,
-          flexShrink: 0,
-          borderRadius: 10,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          cursor: "pointer",
-          fontSize: 15,
-          color: "#AAA",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, "✎")));
-    }), /*#__PURE__*/React.createElement(Stagger, {
-      delay: 140 + sortedSessionEntries.length * 40
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: openAddSession,
+      }, "▶")));
+    }), logs.length === 0 && /*#__PURE__*/React.createElement(Stagger, {
+      delay: 220
+    }, /*#__PURE__*/React.createElement("div", {
       style: {
-        width: "100%",
-        padding: "14px 0",
-        borderRadius: 12,
-        fontSize: 12,
-        fontWeight: 700,
-        fontFamily: F.m,
-        cursor: "pointer",
-        background: "transparent",
-        border: "1.5px dashed #DDD8D0",
-        color: "#999",
-        letterSpacing: 2,
-        marginBottom: 10
+        textAlign: "center",
+        padding: "44px 20px"
       }
-    }, "+ ADD SESSION")), logs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Stagger, {
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontFamily: F.m,
+        fontSize: 11,
+        color: "#CCC",
+        letterSpacing: 2,
+        marginTop: 12
+      }
+    }, "NO SESSIONS YET"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 13,
+        color: "#BBB",
+        marginTop: 6
+      }
+    }, "Tap a session above to start")))));
+  }
+  if (view === "settings") {
+    const filtered = logs.filter(l => historyFilter === "all" || l.session === historyFilter).slice(0, 20);
+    return /*#__PURE__*/React.createElement("div", {
+      style: S.page
+    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
+      key: "settings",
+      style: {
+        position: "relative",
+        zIndex: 1,
+        animation: "fadeUp 0.25s ease both"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setView("home"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#FFF",
+        border: "1.5px solid #E8E4DE",
+        borderRadius: 20,
+        color: "#2A2520",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+        marginBottom: 16,
+        padding: "8px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      }
+    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
+      style: {
+        fontFamily: F.h,
+        fontSize: 26,
+        fontWeight: 800,
+        color: "#2A2520",
+        margin: "0 0 20px"
+      }
+    }, "Settings"), /*#__PURE__*/React.createElement(FingerSessionsSettings, {
+      entries: sortedSessionEntries.map(([key, s]) => {
+        const c = sessionsConfig.find(x => x.id === key);
+        return {
+          key,
+          day: s.day,
+          name: c ? c.name : s.subtitle,
+          protocol: c ? c.protocol : ""
+        };
+      }),
+      onEdit: openEditSession,
+      onAdd: openAddSession
+    }), logs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Stagger, {
       delay: 220
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setHistoryOpen(!historyOpen),
@@ -2519,7 +2538,10 @@ function FingerApp() {
         border: `1.5px solid ${historyFilter === f ? "#2A2520" : "#E8E4DE"}`,
         color: historyFilter === f ? "#F5F2ED" : "#AAA"
       }
-    }, f === "all" ? "All" : sessionsConfig.find(s => s.id === f)?.name.slice(0, 8) || f))), /*#__PURE__*/React.createElement("div", {
+    }, f === "all" ? "All" : (() => {
+      const c = sessionsConfig.find(s => s.id === f);
+      return c ? c.protocol || c.name : f;
+    })()))), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "relative",
         paddingLeft: 22
@@ -2699,70 +2721,12 @@ function FingerApp() {
           letterSpacing: 1
         }
       }, "DELETE"))))));
-    }))))), logs.length === 0 && /*#__PURE__*/React.createElement(Stagger, {
-      delay: 220
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        padding: "44px 20px"
-      }
-    }, /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontFamily: F.m,
-        fontSize: 11,
-        color: "#CCC",
-        letterSpacing: 2,
-        marginTop: 12
-      }
-    }, "NO SESSIONS YET"), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 13,
-        color: "#BBB",
-        marginTop: 6
-      }
-    }, "Tap a session above to start")))));
-  }
-  if (view === "settings") {
-    return /*#__PURE__*/React.createElement("div", {
-      style: S.page
-    }, /*#__PURE__*/React.createElement(TopoBackground, null), /*#__PURE__*/React.createElement("div", {
-      key: "settings",
-      style: {
-        position: "relative",
-        zIndex: 1,
-        animation: "fadeUp 0.25s ease both"
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setView("home"),
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        background: "#FFF",
-        border: "1.5px solid #E8E4DE",
-        borderRadius: 20,
-        color: "#2A2520",
-        fontSize: 14,
-        fontWeight: 600,
-        cursor: "pointer",
-        marginBottom: 16,
-        padding: "8px 16px",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
-      }
-    }, "← Back"), /*#__PURE__*/React.createElement("h2", {
-      style: {
-        fontFamily: F.h,
-        fontSize: 26,
-        fontWeight: 800,
-        color: "#2A2520",
-        margin: "0 0 20px"
-      }
-    }, "Settings"), /*#__PURE__*/React.createElement("div", {
+    }))))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "0 0 16px"
+        margin: "28px 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -2848,7 +2812,7 @@ function FingerApp() {
         animation: pageAnim
       }
     }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => navigateTo("home"),
+      onClick: () => navigateTo("settings"),
       style: {
         display: "flex",
         alignItems: "center",
@@ -3438,15 +3402,7 @@ function FingerApp() {
         color: "#999",
         letterSpacing: 1
       }
-    }, "SKIP ›")), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontFamily: F.b,
-        fontSize: 11,
-        color: "#BBB",
-        textAlign: "center",
-        marginTop: 14
-      }
-    }, "Step ", timerIndex + 1, " of ", totalSteps)) : /*#__PURE__*/React.createElement("div", {
+    }, "SKIP ›"))) : /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
         paddingTop: 20
@@ -4538,15 +4494,63 @@ function videoEmbedInfo(link) {
   };
   return null;
 }
+// Plays a climb's video. The "Open in YouTube" link only appears when the video can't be shown
+// here (YouTube reports an error, the player never loads, or the local copy won't play), the same
+// way "Open in Drive" works for photos. Old Drive video links keep their link, since Drive's player
+// can't report whether it worked.
+let videoEmbedSeq = 0;
 function VideoEmbed({
   link
 }) {
   const info = videoEmbedInfo(link);
-  if (!info) return null;
-  // A clip uploaded from this phone in this session plays from the local copy, since YouTube
-  // takes a minute or two to process a new upload before its player will show it.
   const ytId = extractYouTubeId(link);
   const localUrl = ytId && window.__ytLocalVideos && window.__ytLocalVideos[ytId];
+  const [failed, setFailed] = useState(false);
+  const frameRef = useRef(null);
+  const idRef = useRef(null);
+  if (idRef.current == null) idRef.current = ++videoEmbedSeq;
+  const isYouTube = !!(info && info.platform === "YouTube");
+  useEffect(() => {
+    setFailed(false);
+    if (!isYouTube || localUrl) return;
+    let ready = false;
+    const onMsg = e => {
+      if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
+      if (!frameRef.current || e.source !== frameRef.current.contentWindow) return;
+      let d = e.data;
+      try {
+        if (typeof d === "string") d = JSON.parse(d);
+      } catch (err) {
+        return;
+      }
+      if (!d || !d.event) return;
+      if (d.event === "onError") setFailed(true);else ready = true;
+    };
+    window.addEventListener("message", onMsg);
+    // Ask the player to report back (this is how YouTube's own player API talks to a page).
+    const ping = () => {
+      try {
+        frameRef.current && frameRef.current.contentWindow.postMessage(JSON.stringify({
+          event: "listening",
+          id: idRef.current,
+          channel: "widget"
+        }), "*");
+      } catch (err) {}
+    };
+    const pings = [500, 1500, 3000].map(t => setTimeout(ping, t));
+    // No word from the player at all (offline, blocked): offer the link.
+    const giveUp = setTimeout(() => {
+      if (!ready) setFailed(true);
+    }, 12000);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      pings.forEach(clearTimeout);
+      clearTimeout(giveUp);
+    };
+  }, [link, localUrl]);
+  if (!info) return null;
+  const src = isYouTube && !localUrl ? `${info.url}&enablejsapi=1&playsinline=1${location.origin && location.origin !== "null" ? `&origin=${encodeURIComponent(location.origin)}` : ""}` : info.url;
+  const showLink = !isYouTube || failed;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
@@ -4556,6 +4560,7 @@ function VideoEmbed({
     controls: true,
     playsInline: true,
     preload: "metadata",
+    onError: () => setFailed(true),
     style: {
       width: "100%",
       maxHeight: "70vh",
@@ -4575,7 +4580,13 @@ function VideoEmbed({
       background: "#000"
     }
   }, /*#__PURE__*/React.createElement("iframe", {
-    src: info.url,
+    ref: frameRef,
+    src: src,
+    onLoad: () => setTimeout(() => frameRef.current && frameRef.current.contentWindow && frameRef.current.contentWindow.postMessage(JSON.stringify({
+      event: "listening",
+      id: idRef.current,
+      channel: "widget"
+    }), "*"), 200),
     style: {
       position: "absolute",
       inset: 0,
@@ -4585,7 +4596,7 @@ function VideoEmbed({
     },
     allow: "autoplay; encrypted-media",
     allowFullScreen: true
-  })), /*#__PURE__*/React.createElement("a", {
+  })), showLink && /*#__PURE__*/React.createElement("a", {
     href: link,
     target: "_blank",
     rel: "noopener noreferrer",
@@ -4599,7 +4610,7 @@ function VideoEmbed({
       letterSpacing: 0.5,
       textDecoration: "none"
     }
-  }, "Open in ", info.platform, " ↗"));
+  }, isYouTube && failed ? "Video didn't load · " : "", "Open in ", info.platform, " \u2197"));
 }
 
 // Resolves a displayable image URL for a climb: prefers the new Google Drive link (converted to
@@ -6666,9 +6677,29 @@ function ClimbApp() {
       }, "✓ MARK SENT")), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
-          gap: 8
+          gap: 8,
+          flexWrap: "wrap"
         }
       }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setQuickVideoFor(p.id),
+        style: {
+          padding: "5px 12px",
+          fontSize: 11,
+          fontFamily: F.m,
+          fontWeight: 700,
+          borderRadius: 6,
+          background: "#2A2520",
+          border: "1.5px solid #2A2520",
+          color: "#F5F2ED",
+          cursor: "pointer",
+          letterSpacing: 1
+        }
+      }, p.videoLink ? "\uD83C\uDFA5 REPLACE VIDEO" : "\uD83C\uDFA5 VIDEO"), quickVideoFor === p.id && /*#__PURE__*/React.createElement(QuickVideoRecorder, {
+        problem: p,
+        sector: p.sector,
+        onSaved: link => quickSetVideo(p.sector, p.id, link),
+        onClose: () => setQuickVideoFor(null)
+      }), /*#__PURE__*/React.createElement("button", {
         onClick: () => {
           setEditingProblem(p);
           setPrefillSector(p.sector);
@@ -6686,21 +6717,7 @@ function ClimbApp() {
           cursor: "pointer",
           letterSpacing: 1
         }
-      }, "EDIT"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => deleteProblem(p.sector, p.id),
-        style: {
-          padding: "5px 12px",
-          fontSize: 11,
-          fontFamily: F.m,
-          fontWeight: 600,
-          borderRadius: 6,
-          background: "transparent",
-          border: "1.5px solid #E8C4C4",
-          color: "#C45A5A",
-          cursor: "pointer",
-          letterSpacing: 1
-        }
-      }, "DELETE"))));
+      }, "EDIT"))));
     }))))), visibleSectorNames.length === 0 && /*#__PURE__*/React.createElement(Stagger, {
       delay: 140
     }, /*#__PURE__*/React.createElement("button", {
@@ -10526,6 +10543,564 @@ function DeleteClimbButton({
   }, "CANCEL")));
 }
 
+// Fingers settings: the weekly sessions, set up once and then just run from the home screen.
+function FingerSessionsSettings({
+  entries,
+  onEdit,
+  onAdd
+}) {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Divider, {
+    text: "SESSIONS"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      marginBottom: 10
+    }
+  }, entries.map(({
+    key,
+    day,
+    name,
+    protocol
+  }) => /*#__PURE__*/React.createElement("button", {
+    key: key,
+    onClick: () => onEdit(key),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      width: "100%",
+      textAlign: "left",
+      padding: "14px 16px",
+      borderRadius: 12,
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#D4663A",
+      letterSpacing: 2
+    }
+  }, String(day || "").toUpperCase()), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.h,
+      fontSize: 15,
+      fontWeight: 700,
+      color: "#2A2520",
+      marginTop: 3
+    }
+  }, name), protocol && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      color: "#BBB",
+      marginTop: 2
+    }
+  }, protocol)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#999",
+      letterSpacing: 1
+    }
+  }, "EDIT")))), /*#__PURE__*/React.createElement("button", {
+    onClick: onAdd,
+    style: {
+      width: "100%",
+      padding: "14px 0",
+      borderRadius: 12,
+      fontSize: 12,
+      fontWeight: 700,
+      fontFamily: F.m,
+      cursor: "pointer",
+      background: "transparent",
+      border: "1.5px dashed #DDD8D0",
+      color: "#999",
+      letterSpacing: 2,
+      marginBottom: 10
+    }
+  }, "+ ADD SESSION"));
+}
+
+// ═══════════════════════════════════════════════════
+// ─── SWIPE + HOLD-TO-DRAG LISTS ──────────────────────
+// A vertical list where each row can be:
+//   • tapped (onTap)
+//   • slid to the right to uncover a Delete button underneath
+//   • held for a moment, then dragged up or down to reorder
+// Touch events are used (not pointer events) so the page can be stopped from scrolling while
+// a row is being slid or dragged, which iPhone otherwise won't allow.
+// ═══════════════════════════════════════════════════
+const SWIPE_REVEAL = 92;
+const HOLD_MS = 420;
+function GestureList({
+  items,
+  renderItem,
+  onTap,
+  onDelete,
+  onReorder,
+  deleteLabel = "DELETE",
+  confirmDelete = false,
+  handleOnly = false,
+  gap = 6,
+  rowRadius = 8
+}) {
+  const listRef = useRef(null);
+  const rowRefs = useRef({});
+  const g = useRef(null); // the gesture in progress
+  const [openId, setOpenId] = useState(null);
+  const [swipe, setSwipe] = useState(null); // { id, x }
+  const [drag, setDrag] = useState(null); // { id, dy, from, over }
+  const [confirmId, setConfirmId] = useState(null);
+  const openRef = useRef(openId);
+  openRef.current = openId;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const cbRef = useRef({});
+  cbRef.current = {
+    onTap,
+    onReorder
+  };
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const ownRow = target => {
+      const row = target.closest && target.closest("[data-gid]");
+      if (!row || row.closest("[data-glist]") !== list) return null;
+      if (target.closest("[data-gskip]")) return null;
+      if (handleOnly && !target.closest("[data-ghandle]")) return null;
+      return row;
+    };
+    const start = (x, y, target) => {
+      const row = ownRow(target);
+      if (!row) return;
+      const id = row.getAttribute("data-gid");
+      const base = openRef.current === id ? SWIPE_REVEAL : 0;
+      g.current = {
+        id,
+        x0: x,
+        y0: y,
+        mode: "pending",
+        base,
+        moved: false
+      };
+      g.current.timer = setTimeout(() => {
+        const cur = g.current;
+        if (!cur || cur.mode !== "pending") return;
+        cur.mode = "drag";
+        const ids = itemsRef.current.map(it => String(it.id));
+        cur.rects = ids.map(k => {
+          const el = rowRefs.current[k];
+          const r = el ? el.getBoundingClientRect() : {
+            top: 0,
+            height: 0
+          };
+          return {
+            id: k,
+            top: r.top,
+            h: r.height
+          };
+        });
+        cur.from = ids.indexOf(id);
+        setOpenId(null);
+        setDrag({
+          id,
+          dy: 0,
+          from: cur.from,
+          over: cur.from
+        });
+      }, HOLD_MS);
+    };
+    const move = (x, y, e) => {
+      const cur = g.current;
+      if (!cur) return;
+      const dx = x - cur.x0,
+        dy = y - cur.y0;
+      if (cur.mode === "pending") {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+          cur.mode = "swipe";
+          clearTimeout(cur.timer);
+        } else if (Math.abs(dy) > 8) {
+          cur.mode = "scroll";
+          clearTimeout(cur.timer);
+          return;
+        } else return;
+      }
+      if (cur.mode === "swipe") {
+        if (e && e.cancelable) e.preventDefault();
+        const xPos = Math.max(0, Math.min(SWIPE_REVEAL + 24, cur.base + dx));
+        setSwipe({
+          id: cur.id,
+          x: xPos
+        });
+        cur.last = xPos;
+      } else if (cur.mode === "drag") {
+        if (e && e.cancelable) e.preventDefault();
+        const from = cur.rects[cur.from];
+        const centre = from.top + from.h / 2 + dy;
+        let over = cur.from;
+        cur.rects.forEach((r, i) => {
+          if (i < cur.from && centre < r.top + r.h / 2) over = Math.min(over, i);
+          if (i > cur.from && centre > r.top + r.h / 2) over = Math.max(over, i);
+        });
+        cur.over = over;
+        setDrag({
+          id: cur.id,
+          dy,
+          from: cur.from,
+          over
+        });
+      }
+    };
+    const end = () => {
+      const cur = g.current;
+      g.current = null;
+      if (!cur) return;
+      clearTimeout(cur.timer);
+      if (cur.mode === "pending") {
+        if (openRef.current) setOpenId(null);else {
+          const item = itemsRef.current.find(it => String(it.id) === cur.id);
+          if (item && cbRef.current.onTap) cbRef.current.onTap(item);
+        }
+      } else if (cur.mode === "swipe") {
+        setSwipe(null);
+        setConfirmId(null);
+        setOpenId((cur.last || 0) > SWIPE_REVEAL / 2 ? cur.id : null);
+      } else if (cur.mode === "drag") {
+        setDrag(null);
+        if (cur.over !== cur.from && cbRef.current.onReorder) {
+          const ids = itemsRef.current.map(it => it.id);
+          const [m] = ids.splice(cur.from, 1);
+          ids.splice(cur.over, 0, m);
+          cbRef.current.onReorder(ids);
+        }
+      }
+    };
+    const ts = e => {
+      if (e.touches.length !== 1) return;
+      start(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    };
+    const tm = e => {
+      if (!g.current) return;
+      move(e.touches[0].clientX, e.touches[0].clientY, e);
+    };
+    const te = e => {
+      if (!g.current) return;
+      const tap = g.current.mode === "pending";
+      end();
+      // Our own tap handling replaces the browser's click for rows.
+      if (tap && e.cancelable) e.preventDefault();
+    };
+    let mouseDown = false;
+    const md = e => {
+      if (e.button !== 0) return;
+      mouseDown = true;
+      start(e.clientX, e.clientY, e.target);
+    };
+    const mm = e => mouseDown && move(e.clientX, e.clientY, e);
+    const mu = () => {
+      if (!mouseDown) return;
+      mouseDown = false;
+      end();
+    };
+    list.addEventListener("touchstart", ts, {
+      passive: true
+    });
+    list.addEventListener("touchmove", tm, {
+      passive: false
+    });
+    list.addEventListener("touchend", te, {
+      passive: false
+    });
+    list.addEventListener("touchcancel", end);
+    list.addEventListener("mousedown", md);
+    window.addEventListener("mousemove", mm);
+    window.addEventListener("mouseup", mu);
+    return () => {
+      list.removeEventListener("touchstart", ts);
+      list.removeEventListener("touchmove", tm);
+      list.removeEventListener("touchend", te);
+      list.removeEventListener("touchcancel", end);
+      list.removeEventListener("mousedown", md);
+      window.removeEventListener("mousemove", mm);
+      window.removeEventListener("mouseup", mu);
+    };
+  }, [handleOnly]);
+
+  // Where each row sits while another row is being dragged past it.
+  const shiftFor = idx => {
+    if (!drag || drag.from === drag.over) return 0;
+    const cur = g.current;
+    const h = cur && cur.rects ? cur.rects[drag.from].h + gap : 0;
+    if (drag.from < drag.over && idx > drag.from && idx <= drag.over) return -h;
+    if (drag.from > drag.over && idx >= drag.over && idx < drag.from) return h;
+    return 0;
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    ref: listRef,
+    "data-glist": "1",
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap
+    }
+  }, items.map((item, idx) => {
+    const id = String(item.id);
+    const dragging = drag && drag.id === id;
+    const x = swipe && swipe.id === id ? swipe.x : openId === id ? SWIPE_REVEAL : 0;
+    const confirming = confirmId === id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: id,
+      "data-gid": id,
+      ref: el => rowRefs.current[id] = el,
+      style: {
+        position: "relative",
+        borderRadius: rowRadius,
+        overflow: "hidden",
+        transform: dragging ? `translateY(${drag.dy}px) scale(1.02)` : `translateY(${shiftFor(idx)}px)`,
+        transition: dragging ? "none" : "transform 0.18s ease",
+        zIndex: dragging ? 5 : 1,
+        boxShadow: dragging ? "0 8px 22px rgba(42,37,32,0.18)" : "none",
+        WebkitUserSelect: "none",
+        userSelect: "none",
+        WebkitTouchCallout: "none"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      "data-gskip": "1",
+      onClick: () => {
+        if (confirmDelete && !confirming) return setConfirmId(id);
+        setOpenId(null);
+        setConfirmId(null);
+        onDelete(item);
+      },
+      "aria-label": deleteLabel,
+      style: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        width: SWIPE_REVEAL,
+        border: "none",
+        background: "#C45A5A",
+        color: "#FFF",
+        fontFamily: F.m,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: 1,
+        cursor: "pointer",
+        visibility: x > 0 ? "visible" : "hidden"
+      }
+    }, confirming ? "SURE?" : deleteLabel), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        transform: `translateX(${x}px)`,
+        transition: swipe && swipe.id === id ? "none" : "transform 0.2s ease"
+      }
+    }, renderItem(item, {
+      dragging
+    })));
+  }));
+}
+
+// The Stretch tab's routines for the selected day: tap a routine to open it, slide right to
+// delete it, hold and drag to reorder. Inside an open routine the stretches work the same way,
+// and tapping a stretch opens its edit screen.
+function StretchRoutineList({
+  routines,
+  expandedId,
+  onToggle,
+  onStart,
+  onAddStretch,
+  onEditStretch,
+  onDeleteStretch,
+  onReorderStretches,
+  onDeleteRoutine,
+  onReorderRoutines,
+  onRenameRoutine
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement(GestureList, {
+    items: routines,
+    handleOnly: true,
+    gap: 8,
+    rowRadius: 10,
+    confirmDelete: true,
+    deleteLabel: "DELETE",
+    onTap: r => onToggle(r.id),
+    onDelete: r => onDeleteRoutine(r.id),
+    onReorder: ids => onReorderRoutines(ids),
+    renderItem: r => {
+      const open = expandedId === r.id;
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#FFF",
+          borderRadius: 10,
+          border: "1px solid #E8E4DE",
+          overflow: "hidden"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        "data-ghandle": "1",
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "14px 16px",
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: F.h,
+          fontSize: 15,
+          fontWeight: 700,
+          color: "#2A2520"
+        }
+      }, r.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: F.m,
+          fontSize: 11,
+          color: "#BBB",
+          marginTop: 3,
+          letterSpacing: 0.5
+        }
+      }, r.stretches.length, " stretch", r.stretches.length !== 1 ? "es" : "")), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#CCC",
+          fontSize: 13,
+          transition: "transform 0.2s",
+          transform: open ? "rotate(90deg)" : "none"
+        }
+      }, "\u25B8")), open && /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "0 16px 14px",
+          borderTop: "1px solid #F0EDE8",
+          animation: "fadeUp 0.25s ease"
+        }
+      }, r.stretches.length > 0 && /*#__PURE__*/React.createElement("button", {
+        onClick: () => onStart(r),
+        style: {
+          width: "100%",
+          padding: "14px 0",
+          borderRadius: 10,
+          fontSize: 12,
+          fontWeight: 800,
+          fontFamily: F.m,
+          cursor: "pointer",
+          background: STRETCH_ACCENT,
+          border: "none",
+          color: "#FFF",
+          letterSpacing: 2,
+          margin: "14px 0"
+        }
+      }, "\u25B6 START ", r.name.toUpperCase()), r.stretches.length === 0 && /*#__PURE__*/React.createElement("p", {
+        style: {
+          fontSize: 12,
+          color: "#BBB",
+          margin: "12px 0"
+        }
+      }, "No stretches in this routine yet."), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: 10
+        }
+      }, /*#__PURE__*/React.createElement(GestureList, {
+        items: r.stretches,
+        onTap: s => onEditStretch(r.id, s),
+        onDelete: s => onDeleteStretch(r.id, s.id),
+        onReorder: ids => onReorderStretches(r.id, ids),
+        renderItem: s => /*#__PURE__*/React.createElement("div", {
+          style: {
+            background: "#F5F2ED",
+            borderRadius: 8,
+            padding: "11px 12px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            cursor: "pointer"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            minWidth: 0
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontFamily: F.h,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#2A2520"
+          }
+        }, s.name), /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontFamily: F.m,
+            fontSize: 10,
+            color: "#BBB",
+            marginTop: 2
+          }
+        }, s.reps <= 1 ? `${s.holdSec}s hold` : `${s.reps} × ${s.holdSec}s hold${s.restSec > 0 ? ` · ${s.restSec}s rest` : ""}`)), /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: "#CCC",
+            fontSize: 11
+          }
+        }, "\u25B8"))
+      })), /*#__PURE__*/React.createElement("button", {
+        onClick: () => onAddStretch(r.id),
+        style: {
+          width: "100%",
+          padding: "10px 0",
+          borderRadius: 8,
+          fontSize: 11,
+          fontWeight: 700,
+          fontFamily: F.m,
+          cursor: "pointer",
+          background: "transparent",
+          border: "1.5px dashed #DDD8D0",
+          color: "#999",
+          letterSpacing: 1,
+          marginBottom: 10
+        }
+      }, "+ ADD STRETCH"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontFamily: F.b,
+          fontSize: 10,
+          color: "#BBB"
+        }
+      }, "Slide right to delete \xB7 hold to reorder"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => onRenameRoutine(r),
+        style: {
+          background: "none",
+          border: "none",
+          padding: 0,
+          fontFamily: F.m,
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#999",
+          letterSpacing: 1,
+          cursor: "pointer"
+        }
+      }, "RENAME"))));
+    }
+  }));
+}
+
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
 // never used as its grade or in analytics.
 function OthersGradeLine({
@@ -12128,6 +12703,30 @@ function StretchApp() {
       [selectedDay]: nextList
     });
   };
+  const reorderStretches = (routineId, ids) => {
+    const cur = dataRef.current;
+    const nextList = (cur[selectedDay] || []).map(r => {
+      if (r.id !== routineId) return r;
+      const byId = new Map(r.stretches.map(st => [st.id, st]));
+      return {
+        ...r,
+        stretches: ids.map(id => byId.get(id)).filter(Boolean)
+      };
+    });
+    persist({
+      ...cur,
+      [selectedDay]: nextList
+    });
+  };
+  const reorderRoutines = ids => {
+    const cur = dataRef.current;
+    const list = cur[selectedDay] || [];
+    const byId = new Map(list.map(r => [r.id, r]));
+    persist({
+      ...cur,
+      [selectedDay]: ids.map(id => byId.get(id)).filter(Boolean)
+    });
+  };
   const moveRoutine = (routineId, direction) => {
     const cur = dataRef.current;
     const list = [...(cur[selectedDay] || [])];
@@ -12517,8 +13116,10 @@ function StretchApp() {
         border: `1.5px solid ${selectedDay === d ? "#2A2520" : "#E8E4DE"}`,
         color: selectedDay === d ? "#F5F2ED" : "#999"
       }
-    }, DAY_LABELS[d])))), /*#__PURE__*/React.createElement(Divider, {
-      text: `${DAY_LABELS[selectedDay]} ROUTINES`
+    }, DAY_LABELS[d])))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 18
+      }
     }), dayRoutines.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
@@ -12537,296 +13138,22 @@ function StretchApp() {
         color: "#BBB",
         marginTop: 6
       }
-    }, "Add one below — e.g. \"Warmup\" or \"Warm Down\"")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        marginBottom: 16
-      }
-    }, dayRoutines.map((r, idx) => {
-      const isExpanded = expandedRoutineId === r.id;
-      return /*#__PURE__*/React.createElement(Stagger, {
-        key: r.id,
-        delay: 100 + idx * 40
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: "#FFF",
-          borderRadius: 10,
-          border: "1px solid #E8E4DE",
-          overflow: "hidden"
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          setExpandedRoutineId(isExpanded ? null : r.id);
-          setDeleteRoutineConfirmId(null);
-        },
-        style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          width: "100%",
-          padding: "14px 16px",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          textAlign: "left"
-        }
-      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.h,
-          fontSize: 15,
-          fontWeight: 700,
-          color: "#2A2520"
-        }
-      }, r.name), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 11,
-          color: "#BBB",
-          marginTop: 3,
-          letterSpacing: 0.5
-        }
-      }, r.stretches.length, " stretch", r.stretches.length !== 1 ? "es" : "")), /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: "#CCC",
-          fontSize: 13,
-          transition: "transform 0.2s",
-          transform: isExpanded ? "rotate(90deg)" : "none"
-        }
-      }, "▸")), isExpanded && /*#__PURE__*/React.createElement("div", {
-        style: {
-          padding: "0 16px 16px",
-          borderTop: "1px solid #F0EDE8",
-          animation: "fadeUp 0.25s ease"
-        }
-      }, r.stretches.length > 0 && /*#__PURE__*/React.createElement("button", {
-        onClick: () => openTimer(r),
-        style: {
-          width: "100%",
-          padding: "14px 0",
-          borderRadius: 10,
-          fontSize: 12,
-          fontWeight: 800,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: STRETCH_ACCENT,
-          border: "none",
-          color: "#FFF",
-          letterSpacing: 2,
-          margin: "14px 0"
-        }
-      }, "▶ START ", r.name.toUpperCase()), r.stretches.length === 0 && /*#__PURE__*/React.createElement("p", {
-        style: {
-          fontSize: 12,
-          color: "#BBB",
-          margin: "12px 0"
-        }
-      }, "No stretches in this routine yet."), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          marginBottom: 10
-        }
-      }, r.stretches.map((s, sIdx) => /*#__PURE__*/React.createElement("div", {
-        key: s.id,
-        style: {
-          background: "#F5F2ED",
-          borderRadius: 8,
-          padding: "10px 12px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }
-      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.h,
-          fontSize: 13,
-          fontWeight: 700,
-          color: "#2A2520"
-        }
-      }, s.name), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontFamily: F.m,
-          fontSize: 10,
-          color: "#BBB",
-          marginTop: 2
-        }
-      }, s.reps <= 1 ? `${s.holdSec}s hold` : `${s.reps} × ${s.holdSec}s hold${s.restSec > 0 ? ` · ${s.restSec}s rest` : ""}`)), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 4,
-          flexShrink: 0
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => moveStretch(r.id, s.id, -1),
-        disabled: sIdx === 0,
-        style: {
-          width: 24,
-          height: 28,
-          borderRadius: 7,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: sIdx === 0 ? "#DDD" : "#999",
-          cursor: sIdx === 0 ? "default" : "pointer",
-          fontSize: 11
-        }
-      }, "▲"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => moveStretch(r.id, s.id, 1),
-        disabled: sIdx === r.stretches.length - 1,
-        style: {
-          width: 24,
-          height: 28,
-          borderRadius: 7,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: sIdx === r.stretches.length - 1 ? "#DDD" : "#999",
-          cursor: sIdx === r.stretches.length - 1 ? "default" : "pointer",
-          fontSize: 11
-        }
-      }, "▼"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => openEditStretch(r.id, s),
-        style: {
-          width: 28,
-          height: 28,
-          borderRadius: 7,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#AAA",
-          cursor: "pointer",
-          fontSize: 11
-        }
-      }, "✎"), deleteConfirmId !== s.id ? /*#__PURE__*/React.createElement("button", {
-        onClick: () => setDeleteConfirmId(s.id),
-        style: {
-          width: 28,
-          height: 28,
-          borderRadius: 7,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#C45A5A",
-          cursor: "pointer",
-          fontSize: 11
-        }
-      }, "×") : /*#__PURE__*/React.createElement("button", {
-        onClick: () => deleteStretch(r.id, s.id),
-        style: {
-          padding: "0 8px",
-          height: 28,
-          borderRadius: 7,
-          background: "#C45A5A",
-          border: "none",
-          color: "#FFF",
-          cursor: "pointer",
-          fontSize: 9,
-          fontFamily: F.m,
-          fontWeight: 700
-        }
-      }, "OK?"))))), /*#__PURE__*/React.createElement("button", {
-        onClick: () => openAddStretch(r.id),
-        style: {
-          width: "100%",
-          padding: "10px 0",
-          borderRadius: 8,
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: F.m,
-          cursor: "pointer",
-          background: "transparent",
-          border: "1.5px dashed #DDD8D0",
-          color: "#999",
-          letterSpacing: 1,
-          marginBottom: 10
-        }
-      }, "+ ADD STRETCH"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8,
-          marginBottom: 8
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => moveRoutine(r.id, -1),
-        disabled: idx === 0,
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: F.m,
-          background: "transparent",
-          border: "1.5px solid #DDD8D0",
-          color: idx === 0 ? "#DDD" : "#2A2520",
-          cursor: idx === 0 ? "default" : "pointer"
-        }
-      }, "▲ MOVE UP"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => moveRoutine(r.id, 1),
-        disabled: idx === dayRoutines.length - 1,
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: F.m,
-          background: "transparent",
-          border: "1.5px solid #DDD8D0",
-          color: idx === dayRoutines.length - 1 ? "#DDD" : "#2A2520",
-          cursor: idx === dayRoutines.length - 1 ? "default" : "pointer"
-        }
-      }, "▼ MOVE DOWN")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => openEditRoutine(r),
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: F.m,
-          background: "transparent",
-          border: "1.5px solid #DDD8D0",
-          color: "#2A2520",
-          cursor: "pointer",
-          letterSpacing: 0.5
-        }
-      }, "RENAME ROUTINE"), deleteRoutineConfirmId !== r.id ? /*#__PURE__*/React.createElement("button", {
-        onClick: () => setDeleteRoutineConfirmId(r.id),
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: F.m,
-          background: "transparent",
-          border: "1.5px solid #E8C4C4",
-          color: "#C45A5A",
-          cursor: "pointer",
-          letterSpacing: 0.5
-        }
-      }, "DELETE ROUTINE") : /*#__PURE__*/React.createElement("button", {
-        onClick: () => deleteRoutine(r.id),
-        style: {
-          flex: 1,
-          padding: "9px 0",
-          borderRadius: 6,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: F.m,
-          background: "#C45A5A",
-          border: "none",
-          color: "#FFF",
-          cursor: "pointer",
-          letterSpacing: 0.5
-        }
-      }, "CONFIRM DELETE")))));
-    })), /*#__PURE__*/React.createElement("button", {
+    }, "Add one below — e.g. \"Warmup\" or \"Warm Down\"")), /*#__PURE__*/React.createElement(StretchRoutineList, {
+      routines: dayRoutines,
+      expandedId: expandedRoutineId,
+      onToggle: id => {
+        setExpandedRoutineId(prev => prev === id ? null : id);
+        setDeleteRoutineConfirmId(null);
+      },
+      onStart: r => openTimer(r),
+      onAddStretch: id => openAddStretch(id),
+      onEditStretch: (id, st) => openEditStretch(id, st),
+      onDeleteStretch: (id, sid) => deleteStretch(id, sid),
+      onReorderStretches: reorderStretches,
+      onDeleteRoutine: id => deleteRoutine(id),
+      onReorderRoutines: reorderRoutines,
+      onRenameRoutine: r => openEditRoutine(r)
+    }), /*#__PURE__*/React.createElement("button", {
       onClick: openAddRoutine,
       style: {
         width: "100%",
@@ -13578,15 +13905,7 @@ function StretchApp() {
         color: "#999",
         letterSpacing: 1
       }
-    }, "SKIP ›")), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontFamily: F.b,
-        fontSize: 11,
-        color: "#BBB",
-        textAlign: "center",
-        marginTop: 14
-      }
-    }, "Step ", timerIndex + 1, " of ", totalSteps)) : /*#__PURE__*/React.createElement("div", {
+    }, "SKIP ›"))) : /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
         paddingTop: 20
