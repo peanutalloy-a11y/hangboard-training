@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 17";
+<script>const APP_VERSION = "19 Oct 2026, build 18";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -13856,6 +13856,11 @@ function RootApp() {
       zIndex: 50,
       background: "#F5F2ED",
       borderBottom: "1px solid #E8E4DE",
+      transform: "translateZ(0)",
+      WebkitTransform: "translateZ(0)",
+      WebkitBackfaceVisibility: "hidden",
+      backfaceVisibility: "hidden",
+      willChange: "transform",
       paddingTop: "env(safe-area-inset-top, 12px)"
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -13877,7 +13882,7 @@ function RootApp() {
       fontFamily: F.m,
       cursor: "pointer",
       letterSpacing: 2,
-      transition: "all 0.2s",
+      transition: "background-color 0.2s, color 0.2s, border-color 0.2s",
       background: page === "fingers" ? "#2A2520" : "#FFF",
       border: `1.5px solid ${page === "fingers" ? "#2A2520" : "#E8E4DE"}`,
       color: page === "fingers" ? "#F5F2ED" : "#999"
@@ -13893,7 +13898,7 @@ function RootApp() {
       fontFamily: F.m,
       cursor: "pointer",
       letterSpacing: 2,
-      transition: "all 0.2s",
+      transition: "background-color 0.2s, color 0.2s, border-color 0.2s",
       background: page === "climbs" ? "#2A2520" : "#FFF",
       border: `1.5px solid ${page === "climbs" ? "#2A2520" : "#E8E4DE"}`,
       color: page === "climbs" ? "#F5F2ED" : "#999"
@@ -13909,7 +13914,7 @@ function RootApp() {
       fontFamily: F.m,
       cursor: "pointer",
       letterSpacing: 2,
-      transition: "all 0.2s",
+      transition: "background-color 0.2s, color 0.2s, border-color 0.2s",
       background: page === "stretch" ? "#2A2520" : "#FFF",
       border: `1.5px solid ${page === "stretch" ? "#2A2520" : "#E8E4DE"}`,
       color: page === "stretch" ? "#F5F2ED" : "#999"
