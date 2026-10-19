@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "19 Oct 2026, build 18";
+<script>const APP_VERSION = "19 Oct 2026, build 19";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -5830,6 +5830,25 @@ function ClimbApp() {
     });
     setExpandedProblem(null);
   };
+  const [quickVideoFor, setQuickVideoFor] = useState(null); // id of the climb being filmed from the sector list
+  const quickSetVideo = (sectorName, id, link) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    persist({
+      ...cur,
+      sectorLogs: {
+        ...cur.sectorLogs,
+        [sectorName]: {
+          ...log,
+          currentProblems: log.currentProblems.map(p => p.id === id ? {
+            ...p,
+            videoLink: link
+          } : p)
+        }
+      }
+    });
+  };
   const quickAddAttempt = (sectorName, id) => {
     const cur = dataRef.current;
     const log = cur.sectorLogs[sectorName];
@@ -7120,9 +7139,29 @@ function ClimbApp() {
             }, "✓ MARK SENT")), /*#__PURE__*/React.createElement("div", {
               style: {
                 display: "flex",
-                gap: 8
+                gap: 8,
+                flexWrap: "wrap"
               }
             }, /*#__PURE__*/React.createElement("button", {
+              onClick: () => setQuickVideoFor(p.id),
+              style: {
+                padding: "5px 12px",
+                fontSize: 11,
+                fontFamily: F.m,
+                fontWeight: 700,
+                borderRadius: 6,
+                background: "#2A2520",
+                border: "1.5px solid #2A2520",
+                color: "#F5F2ED",
+                cursor: "pointer",
+                letterSpacing: 1
+              }
+            }, p.videoLink ? "\uD83C\uDFA5 REPLACE VIDEO" : "\uD83C\uDFA5 VIDEO"), quickVideoFor === p.id && /*#__PURE__*/React.createElement(QuickVideoRecorder, {
+              problem: p,
+              sector: name,
+              onSaved: link => quickSetVideo(name, p.id, link),
+              onClose: () => setQuickVideoFor(null)
+            }), /*#__PURE__*/React.createElement("button", {
               onClick: () => {
                 setEditingProblem(p);
                 setPrefillSector(p.sector);
@@ -10166,6 +10205,259 @@ function InAppCamera({
       minHeight: 14
     }
   }, state === "saving" ? "Saving clip…" : recording ? "Tap or click your remote to stop" : state === "ready" ? "Prop your phone up, then tap to record" : "")));
+}
+
+// ═══════════════════════════════════════════════════
+// ─── QUICK VIDEO FOR A LOGGED CLIMB ──────────────────
+// Records (in-app camera) → trim / rotate → YouTube, then saves the link straight onto an existing
+// climb, without going through the edit form. Replaces any video the climb already had.
+// ═══════════════════════════════════════════════════
+function QuickVideoRecorder({
+  problem,
+  sector,
+  onSaved,
+  onClose
+}) {
+  const [stage, setStage] = useState("camera"); // camera | review
+  const [clip, setClip] = useState(null); // { file, url, duration, rotate }
+  const [trim, setTrim] = useState(null);
+  const [yt, setYt] = useState(null); // null | cutting | uploading {pct} | done {privacy, soft} | error {msg}
+  const fallbackRef = useRef(null);
+  const busy = yt && (yt.status === "cutting" || yt.status === "uploading");
+  const clipUrl = clip && clip.url;
+  useEffect(() => () => {
+    if (clipUrl) URL.revokeObjectURL(clipUrl);
+  }, [clipUrl]);
+  const takeClip = (file, duration, wantPortrait) => {
+    setTrim(null);
+    setYt(null);
+    setClip({
+      file,
+      url: URL.createObjectURL(file),
+      duration,
+      rotate: 0
+    });
+    setStage("review");
+    if (wantPortrait != null) {
+      recordedOrientationFix(file, wantPortrait).then(turn => {
+        if (turn) setClip(c => c && c.file === file ? {
+          ...c,
+          rotate: turn
+        } : c);
+      });
+    }
+  };
+  const onFallbackFile = e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) takeClip(file, null, null);
+  };
+  const retake = () => {
+    setClip(null);
+    setTrim(null);
+    setYt(null);
+    setStage("camera");
+  };
+  const upload = () => {
+    if (!clip || busy) return;
+    const wantsTrim = !!trim && isFinite(trim.duration) && (trim.start > 0.05 || trim.end < trim.duration - 0.05);
+    const extraTurn = clip.rotate || 0;
+    const tokenReady = getYouTubeToken(); // sign-in has to start inside the tap
+    setYt(wantsTrim || extraTurn ? {
+      status: "cutting"
+    } : {
+      status: "uploading",
+      pct: 0
+    });
+    const resultLabel = {
+      flash: "Flash",
+      sent: "Sent",
+      project: "Project"
+    }[problem.status] || "";
+    const day = new Date().toLocaleDateString("en-AU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+    const grade = (problem.grade || "").trim();
+    const title = [sector || problem.sector || "Climb", `${problem.color || ""}${grade ? ` ${grade}` : ""}`.trim(), resultLabel, day].filter(Boolean).join(" · ");
+    tokenReady.then(async () => {
+      let file = clip.file;
+      let soft = null;
+      if (wantsTrim || extraTurn) {
+        try {
+          file = await trimVideoFile(clip.file, wantsTrim ? trim.start : null, wantsTrim ? trim.end : null, extraTurn);
+        } catch (e) {
+          if (wantsTrim) soft = {
+            start: Math.floor(trim.start),
+            end: Math.ceil(trim.end)
+          };
+        }
+        setYt({
+          status: "uploading",
+          pct: 0
+        });
+      }
+      const {
+        id,
+        privacy
+      } = await youtubeUploadVideo(file, title, pct => setYt({
+        status: "uploading",
+        pct
+      }));
+      window.__ytLocalVideos = window.__ytLocalVideos || {};
+      window.__ytLocalVideos[id] = URL.createObjectURL(file);
+      onSaved(soft ? `https://youtu.be/${id}?t=${soft.start}&end=${soft.end}` : `https://youtu.be/${id}`);
+      setYt({
+        status: "done",
+        privacy,
+        soft: !!soft
+      });
+    }).catch(err => setYt({
+      status: "error",
+      msg: err && err.message || "Couldn't upload to YouTube. Try again."
+    }));
+  };
+  const statusText = !yt ? problem.videoLink ? "Uploads to YouTube as Unlisted and replaces this climb's current video." : storedYouTubeToken() ? "Uploads to your YouTube channel as Unlisted and adds it to this climb." : "Uploads to YouTube as Unlisted. Google will ask you to allow YouTube access." : yt.status === "error" ? yt.msg : yt.status === "cutting" ? "Getting the clip ready on your phone…" : yt.status === "uploading" ? "Keep the app open until the upload finishes." : yt.soft ? "This clip couldn't be cut on the phone, so the full video went up as Unlisted. The app plays just your trimmed part." : yt.privacy === "unlisted" ? "Uploaded as Unlisted and added to this climb." : `Uploaded, but YouTube set it to ${String(yt.privacy).toUpperCase()}. Check it in the YouTube app.`;
+  const statusColor = !yt ? "#999" : yt.status === "error" ? "#E8907A" : yt.status === "done" ? yt.privacy === "unlisted" || yt.soft ? "#7FD1A8" : "#E8C34A" : "#999";
+  const btn = {
+    padding: "14px 0",
+    borderRadius: 10,
+    fontSize: 12,
+    fontFamily: F.m,
+    cursor: "pointer",
+    letterSpacing: 1
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    ref: fallbackRef,
+    type: "file",
+    accept: "video/*",
+    capture: "environment",
+    onChange: onFallbackFile,
+    style: {
+      display: "none"
+    }
+  }), stage === "camera" && /*#__PURE__*/React.createElement(InAppCamera, {
+    onDone: ({
+      file,
+      duration,
+      wantPortrait
+    }) => takeClip(file, duration, wantPortrait),
+    onCancel: onClose,
+    onFallback: () => fallbackRef.current && fallbackRef.current.click()
+  }), stage === "review" && clip && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#000",
+      zIndex: 1000,
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      flex: 1,
+      background: "#000"
+    }
+  }, /*#__PURE__*/React.createElement(TrimmableVideo, {
+    url: clip.url,
+    file: clip.file,
+    trim: trim,
+    onTrim: setTrim,
+    knownDuration: clip.duration,
+    rotate: clip.rotate || 0,
+    locked: !!yt && yt.status !== "error"
+  }), (!yt || yt.status === "error") && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setClip(c => c && {
+      ...c,
+      rotate: ((c.rotate || 0) + 90) % 360
+    }),
+    "aria-label": "Rotate clip",
+    style: {
+      position: "absolute",
+      top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      right: 12,
+      zIndex: 5,
+      padding: "8px 12px",
+      borderRadius: 18,
+      border: "none",
+      background: "rgba(0,0,0,0.55)",
+      color: "#FFF",
+      fontFamily: F.m,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: 1,
+      cursor: "pointer"
+    }
+  }, "\u27F3 ROTATE")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "20px 20px calc(env(safe-area-inset-bottom,20px) + 20px)",
+      background: "#111"
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      color: "#888",
+      letterSpacing: 1,
+      textAlign: "center",
+      margin: "0 0 12px"
+    }
+  }, [problem.color, (problem.grade || "").trim()].filter(Boolean).join(" ").toUpperCase(), sector ? ` · ${String(sector).toUpperCase()}` : ""), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 10
+    }
+  }, yt && yt.status === "done" ? null : /*#__PURE__*/React.createElement("button", {
+    onClick: retake,
+    disabled: busy,
+    style: {
+      ...btn,
+      flex: 1,
+      fontWeight: 700,
+      background: "transparent",
+      border: "1.5px solid #555",
+      color: "#FFF",
+      opacity: busy ? 0.5 : 1
+    }
+  }, "RETAKE"), /*#__PURE__*/React.createElement("button", {
+    onClick: yt && yt.status === "done" ? onClose : upload,
+    disabled: busy,
+    style: {
+      ...btn,
+      flex: 2,
+      fontWeight: 800,
+      border: "none",
+      color: "#FFF",
+      background: yt && yt.status === "done" ? "#3A8A7A" : "#D4663A",
+      opacity: busy ? 0.7 : 1,
+      cursor: busy ? "default" : "pointer"
+    }
+  }, yt && yt.status === "cutting" ? "PREPARING CLIP…" : yt && yt.status === "uploading" ? `UPLOADING ${yt.pct || 0}%` : yt && yt.status === "done" ? "DONE ✓" : problem.videoLink ? "REPLACE ON YOUTUBE" : "SAVE TO YOUTUBE")), !(yt && yt.status === "done") && /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    disabled: busy,
+    style: {
+      ...btn,
+      width: "100%",
+      padding: "12px 0",
+      fontSize: 11,
+      fontWeight: 700,
+      background: "transparent",
+      border: "1.5px solid #333",
+      color: "#999",
+      opacity: busy ? 0.5 : 1
+    }
+  }, "CANCEL"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: statusColor,
+      fontFamily: F.b,
+      fontSize: 11,
+      textAlign: "center",
+      marginTop: 12
+    }
+  }, statusText))));
 }
 
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
