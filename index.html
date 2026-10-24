@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "24 Oct 2026, build 32";
+<script>const APP_VERSION = "24 Oct 2026, build 33";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -5179,7 +5179,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "OthersGrade"];
+const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "OthersGrade", "Tags", "ProblemId", "Backfilled"];
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
   const s = String(val);
@@ -5206,13 +5206,17 @@ function buildClimbCSV(data) {
     // archived problems, since a link is small enough to keep around forever — the whole point
     // of moving photos to Drive was so sector history could stop losing them on reset.
     log.currentProblems.forEach(p => {
-      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || "", "", "", p.othersGrade || ""]);
+      rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "current", "", "", "", "", "", "", p.photo || "", p.videoLink || "", "", "", "", p.photoLink || "", "", "", p.othersGrade || "", cleanTags(p.tags).join(";")]);
     });
     log.archivedResets.forEach(reset => {
       reset.problems.forEach(p => {
-        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || "", "", "", p.othersGrade || ""]);
+        rows.push(["problem", p.id, sectorName, p.color || "", p.grade || "", p.status || "", p.attempts || "", p.notes || "", p.date || "", "archived", reset.id, reset.startDate, reset.endDate, "", "", "", "", p.videoLink || "", "", "", "", p.photoLink || "", "", "", p.othersGrade || "", cleanTags(p.tags).join(";")]);
       });
     });
+  });
+  // The activity log: Status = flash/send/try, Attempts = tries in that line, Date = when.
+  (data.activity || []).forEach(e => {
+    rows.push(["activity", e.id, e.sector || "", e.color || "", e.grade || "", e.kind, e.n, "", e.t, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", e.pid, e.backfilled ? "1" : ""]);
   });
   return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
 }
@@ -5280,8 +5284,13 @@ function parseClimbCSV(text, existingData) {
     iPhotoLink = idx("PhotoLink"),
     iCompletedGroups = idx("CompletedGroups"),
     iArchived = idx("Archived"),
-    iOthersGrade = idx("OthersGrade");
+    iOthersGrade = idx("OthersGrade"),
+    iTags = idx("Tags"),
+    iProblemId = idx("ProblemId"),
+    iBackfilled = idx("Backfilled");
   if (iType === -1 || iSector === -1) throw new Error("Missing required columns");
+  const activity = [...(existingData.activity || [])];
+  const activityIds = new Set(activity.map(e => e.id));
   let gymMap = existingData.gymMap;
   const sectorsById = {};
   existingData.sectors.forEach(s => sectorsById[s.id] = s);
@@ -5315,6 +5324,25 @@ function parseClimbCSV(text, existingData) {
       // Only ever sets archived=true from a backup, matching every other field here — an older
       // backup that predates archiving a sector shouldn't silently un-archive it on restore.
       if (iArchived !== -1 && row[iArchived]) sectorLogs[sectorName].archived = true;
+    } else if (type === "activity") {
+      const id = row[iId];
+      if (id && !activityIds.has(id) && iProblemId !== -1) {
+        activityIds.add(id);
+        const pidRaw = row[iProblemId];
+        activity.push({
+          id,
+          t: row[iDate],
+          pid: Number(pidRaw) || pidRaw,
+          sector: row[iSector],
+          color: row[iColor],
+          grade: row[iGrade],
+          kind: row[iStatus],
+          n: Number(row[iAttempts]) || 0,
+          ...(iBackfilled !== -1 && row[iBackfilled] ? {
+            backfilled: true
+          } : {})
+        });
+      }
     } else if (type === "problem") {
       const sectorName = row[iSector];
       const problem = {
@@ -5337,6 +5365,9 @@ function parseClimbCSV(text, existingData) {
         } : {}),
         ...(iOthersGrade !== -1 && row[iOthersGrade] ? {
           othersGrade: row[iOthersGrade]
+        } : {}),
+        ...(iTags !== -1 && row[iTags] ? {
+          tags: cleanTags(row[iTags].split(";"))
         } : {})
       };
       if (!sectorLogs[sectorName]) sectorLogs[sectorName] = emptySectorLog();
@@ -5372,11 +5403,12 @@ function parseClimbCSV(text, existingData) {
       });
     }
   });
-  return {
+  return ensureActivity({
     gymMap,
     sectors: Object.values(sectorsById),
-    sectorLogs
-  };
+    sectorLogs,
+    activity
+  });
 }
 // One row in the map screen's sector management list. Tapping the row opens the sector's
 // reset schedule (moved here from the Climbs home screen); Archive stays on the right.
@@ -5697,12 +5729,13 @@ function ClimbApp() {
             sectorLogs
           };
         }
-        const withDefaults = {
+        const withDefaults = ensureActivity({
           gymMap: null,
           sectors: [],
           sectorLogs: {},
+          activity: [],
           ...parsed
-        };
+        });
         setData(withDefaults);
         dataRef.current = withDefaults;
         try {
@@ -5927,9 +5960,18 @@ function ClimbApp() {
         archived: false
       } : {})
     };
+    const before = isEdit ? allLoggedProblems(cur).find(p => p.id === problem.id) : null;
+    const newEvents = isEdit ? eventsForEdit(before, {
+      ...problem,
+      sector: destSector
+    }) : eventsForNewClimb({
+      ...newProblem,
+      sector: destSector
+    });
     persist({
       ...cur,
-      sectorLogs
+      sectorLogs,
+      activity: [...(cur.activity || []), ...newEvents]
     });
     setView("home");
     setEditingProblem(null);
@@ -5948,7 +5990,9 @@ function ClimbApp() {
       sectorLogs: {
         ...cur.sectorLogs,
         [sectorName]: updated
-      }
+      },
+      // A deleted climb was a mistake, so its tries come out of the log too.
+      activity: (cur.activity || []).filter(e => String(e.pid) !== String(id))
     });
     setExpandedProblem(null);
   };
@@ -5983,12 +6027,14 @@ function ClimbApp() {
         date: new Date().toISOString()
       } : p)
     };
+    const target = log.currentProblems.find(p => p.id === id);
     persist({
       ...cur,
       sectorLogs: {
         ...cur.sectorLogs,
         [sectorName]: updated
-      }
+      },
+      activity: target ? [...(cur.activity || []), activityEvent({ ...target, sector: sectorName }, "try", 1)] : cur.activity || []
     });
   };
   const quickMarkSent = (sectorName, id) => {
@@ -6004,12 +6050,14 @@ function ClimbApp() {
         date: new Date().toISOString()
       } : p)
     };
+    const target = log.currentProblems.find(p => p.id === id);
     persist({
       ...cur,
       sectorLogs: {
         ...cur.sectorLogs,
         [sectorName]: updated
-      }
+      },
+      activity: target ? [...(cur.activity || []), activityEvent({ ...target, sector: sectorName }, "send", 1)] : cur.activity || []
     });
   };
   const resetSector = sectorName => {
@@ -6742,6 +6790,8 @@ function ClimbApp() {
         link: p.videoLink
       }), p.othersGrade && /*#__PURE__*/React.createElement(OthersGradeLine, {
         value: p.othersGrade
+      }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
+        tags: p.tags
       }), p.notes && /*#__PURE__*/React.createElement("p", {
         style: {
           fontSize: 12,
@@ -7196,7 +7246,9 @@ function ClimbApp() {
               link: p.videoLink
             }), p.othersGrade && /*#__PURE__*/React.createElement(OthersGradeLine, {
               value: p.othersGrade
-            }), p.notes && /*#__PURE__*/React.createElement("p", {
+            }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
+        tags: p.tags
+      }), p.notes && /*#__PURE__*/React.createElement("p", {
               style: {
                 fontSize: 12,
                 color: "#666",
@@ -7874,7 +7926,9 @@ function ClimbApp() {
           link: p.videoLink
         }), p.othersGrade && /*#__PURE__*/React.createElement(OthersGradeLine, {
           value: p.othersGrade
-        }), p.notes && /*#__PURE__*/React.createElement("p", {
+        }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
+        tags: p.tags
+      }), p.notes && /*#__PURE__*/React.createElement("p", {
           style: {
             fontSize: 12,
             color: "#666",
@@ -11819,6 +11873,571 @@ function GoogleConnections({
   })));
 }
 
+// ═══════════════════════════════════════════════════
+// ─── STYLE TAGS, ACTIVITY LOG, ANALYSIS EXPORT ───────
+// Style tags: a fixed list, any number per climb.
+// Activity log: one line every time you try, send or flash a climb, so climbing days, weekly
+//   volume and tries per day are real (a climb's own date moves each time it's touched).
+// Analysis export: one CSV, grouped into sections the app works out itself, written to
+//   Send Log / Send Log Analysis in Drive whenever the app backs up. No notes, photos or videos.
+// ═══════════════════════════════════════════════════
+const STYLE_TAG_GROUPS = [{
+  name: "Holds",
+  tags: ["Crimps", "Slopers", "Pinches", "Pockets", "Jugs"]
+}, {
+  name: "Wall",
+  tags: ["Slab", "Vertical", "Overhang", "Roof"]
+}, {
+  name: "Moves",
+  tags: ["Dyno", "Coordination", "Balance", "Compression", "Heel hooks", "Toe hooks", "Mantle"]
+}];
+const ALL_STYLE_TAGS = STYLE_TAG_GROUPS.flatMap(g => g.tags);
+function cleanTags(tags) {
+  const set = new Set((tags || []).filter(t => ALL_STYLE_TAGS.includes(t)));
+  return ALL_STYLE_TAGS.filter(t => set.has(t));
+}
+function StyleTagPicker({
+  value,
+  onChange
+}) {
+  const on = new Set(value || []);
+  const toggle = t => onChange(cleanTags(on.has(t) ? [...on].filter(x => x !== t) : [...on, t]));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FFF",
+      borderRadius: 10,
+      padding: 16,
+      border: "1px solid #E8E4DE",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.h,
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#2A2520",
+      marginBottom: 10
+    }
+  }, "Style ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#CCC",
+      fontWeight: 400
+    }
+  }, "(pick any)")), STYLE_TAG_GROUPS.map((g, gi) => /*#__PURE__*/React.createElement("div", {
+    key: g.name,
+    style: {
+      marginTop: gi ? 12 : 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      letterSpacing: 1.5,
+      color: "#AAA",
+      marginBottom: 6
+    }
+  }, g.name.toUpperCase()), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, g.tags.map(t => {
+    const sel = on.has(t);
+    return /*#__PURE__*/React.createElement("button", {
+      key: t,
+      type: "button",
+      "aria-pressed": sel,
+      onClick: () => toggle(t),
+      style: {
+        padding: "8px 11px",
+        borderRadius: 16,
+        fontFamily: F.b,
+        fontSize: 12,
+        fontWeight: sel ? 700 : 500,
+        cursor: "pointer",
+        background: sel ? "#2A2520" : "#F5F2ED",
+        border: `1.5px solid ${sel ? "#2A2520" : "#E8E4DE"}`,
+        color: sel ? "#F5F2ED" : "#2A2520"
+      }
+    }, t);
+  })))));
+}
+function ClimbTagsLine({
+  tags
+}) {
+  const list = cleanTags(tags);
+  if (!list.length) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 4,
+      margin: "0 0 8px"
+    }
+  }, list.map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: 0.5,
+      padding: "3px 7px",
+      borderRadius: 10,
+      background: "#EFEBE4",
+      color: "#5F5952"
+    }
+  }, t)));
+}
+
+// ─── Activity log ───
+// { id, t (ISO time), pid (climb id), sector, color, grade, kind: "flash" | "send" | "try", n (tries), backfilled? }
+// "send" counts the sending try too; "try" is tries that didn't end in a send.
+function activityEvent(p, kind, n, t) {
+  return {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    t: t || new Date().toISOString(),
+    pid: p.id,
+    sector: p.sector || "",
+    color: p.color || "",
+    grade: p.grade || "",
+    kind,
+    n: Math.max(0, Math.round(Number(n) || 0))
+  };
+}
+function eventsForNewClimb(p) {
+  if (p.status === "flash") return [activityEvent(p, "flash", 1, p.date)];
+  if (p.status === "sent") return [activityEvent(p, "send", Math.max(1, Number(p.attempts) || 1), p.date)];
+  return [activityEvent(p, "try", Math.max(1, Number(p.attempts) || 1), p.date)];
+}
+// What an edit adds to the log. Lowering the tries or un-sending is treated as a correction, not climbing.
+function eventsForEdit(before, after) {
+  if (!before) return eventsForNewClimb(after);
+  const oa = Number(before.attempts) || (before.status === "flash" ? 1 : 0);
+  const na = Number(after.attempts) || (after.status === "flash" ? 1 : 0);
+  const d = na - oa;
+  if (before.status !== "sent" && before.status !== "flash" && after.status === "sent") return [activityEvent(after, "send", Math.max(1, d))];
+  if (before.status === after.status && d > 0 && after.status !== "flash") return [activityEvent(after, "try", d)];
+  return [];
+}
+// Gives every climb that has no log lines one line at its saved date, so history from before the
+// log existed still counts. Those lines have a fixed ID per climb, so a backup restored on another
+// phone never doubles them up; any later tries on that climb are added as normal lines beside it.
+function ensureActivity(data) {
+  const seen = new Set();
+  let changed = false;
+  const kept = [];
+  (data.activity || []).forEach(e => {
+    if (!e || seen.has(e.id)) {
+      changed = true;
+      return;
+    }
+    seen.add(e.id);
+    kept.push(e);
+  });
+  const has = new Set(kept.map(e => String(e.pid)));
+  allLoggedProblems(data).forEach(p => {
+    if (p.id == null || has.has(String(p.id)) || !p.date) return;
+    eventsForNewClimb(p).forEach(e => {
+      kept.push({
+        ...e,
+        id: `b-${p.id}`,
+        backfilled: true
+      });
+    });
+    has.add(String(p.id));
+    changed = true;
+  });
+  return changed ? {
+    ...data,
+    activity: kept
+  } : data;
+}
+
+// ─── Analysis export ───
+const pad2 = n => String(n).padStart(2, "0");
+const isoDayLocal = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtPct = x => x == null || !isFinite(x) ? "–" : `${Math.round(x * 100)}%`;
+const fmt1 = x => x == null || !isFinite(x) ? "–" : (Math.round(x * 10) / 10).toFixed(1);
+function analysisPeriods(now) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday
+  const back = days => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() - days);
+    return d;
+  };
+  const end = new Date(now.getTime() + 1);
+  return [{
+    key: "this",
+    label: "This week",
+    from: weekStart,
+    to: end
+  }, {
+    key: "last4",
+    label: "Last 4 weeks",
+    from: back(28),
+    to: weekStart
+  }, {
+    key: "prev4",
+    label: "Previous 4 weeks",
+    from: back(56),
+    to: back(28)
+  }, {
+    key: "all",
+    label: "All time",
+    from: new Date(0),
+    to: end
+  }];
+}
+const inPeriod = (e, P) => {
+  const t = new Date(e.t);
+  return t >= P.from && t < P.to;
+};
+const colourRank = name => HOLD_COLORS.findIndex(c => c.name === name);
+function readFingerLogs() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") || [];
+  } catch (e) {
+    return [];
+  }
+}
+function readSessionsConfig() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : DEFAULT_SESSIONS_CONFIG;
+  } catch (e) {
+    return DEFAULT_SESSIONS_CONFIG;
+  }
+}
+function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfig = DEFAULT_SESSIONS_CONFIG) {
+  const data = ensureActivity({
+    gymMap: null,
+    sectors: [],
+    sectorLogs: {},
+    ...climbData
+  });
+  const climbs = allLoggedProblems(data);
+  const climbById = {};
+  climbs.forEach(p => climbById[String(p.id)] = p);
+  const setOf = {};
+  Object.entries(data.sectorLogs || {}).forEach(([name, log]) => {
+    (log.currentProblems || []).forEach(p => setOf[String(p.id)] = "Current");
+    (log.archivedResets || []).forEach(r => (r.problems || []).forEach(p => setOf[String(p.id)] = `Reset ${(r.endDate || "").slice(0, 10)}`));
+  });
+  // Each line takes the climb's current colour, grade, sector and tags (edits since are respected).
+  const events = (data.activity || []).map(e => {
+    const p = climbById[String(e.pid)];
+    return {
+      ...e,
+      sector: p && p.sector || e.sector,
+      color: p && p.color || e.color,
+      grade: p && p.grade || e.grade,
+      tags: cleanTags(p && p.tags)
+    };
+  }).filter(e => e.t && !isNaN(new Date(e.t))).sort((a, b) => new Date(a.t) - new Date(b.t));
+  const firstAt = {};
+  const sentAt = {};
+  events.forEach(e => {
+    const k = String(e.pid);
+    if (!firstAt[k]) firstAt[k] = new Date(e.t);
+    if ((e.kind === "send" || e.kind === "flash") && !sentAt[k]) sentAt[k] = new Date(e.t);
+  });
+  const periods = analysisPeriods(now);
+  const allTimeLevel = hardestConsistentColor(climbs.filter(p => firstAt[String(p.id)]));
+
+  // Works out every number for one slice of lines (a period, optionally one colour or tag).
+  const stats = (P, filter = () => true) => {
+    const ev = events.filter(e => inPeriod(e, P) && filter(e));
+    const pids = [...new Set(ev.map(e => String(e.pid)))];
+    const fresh = pids.filter(k => firstAt[k] >= P.from && firstAt[k] < P.to);
+    const flashes = ev.filter(e => e.kind === "flash");
+    const sends = ev.filter(e => e.kind === "send");
+    const tries = ev.reduce((s, e) => s + (Number(e.n) || 0), 0);
+    const days = new Set(ev.map(e => isoDayLocal(new Date(e.t))));
+    const triesToSend = sends.map(s => events.filter(e => String(e.pid) === String(s.pid) && new Date(e.t) <= new Date(s.t)).reduce((t, e) => t + (Number(e.n) || 0), 0));
+    const worked = pids.filter(k => !flashes.some(f => String(f.pid) === k) && !(sentAt[k] && sentAt[k] < P.from));
+    const convertedBy = worked.filter(k => sentAt[k] && sentAt[k] < P.to);
+    const freshFlashed = fresh.filter(k => flashes.some(f => String(f.pid) === k));
+    const freshClimbs = fresh.map(k => climbById[k]).filter(Boolean).map(p => ({
+      ...p,
+      status: freshFlashed.includes(String(p.id)) ? "flash" : "x"
+    }));
+    const sentColours = [...flashes, ...sends].map(e => e.color).filter(c => colourRank(c) >= 0);
+    const hardest = sentColours.sort((a, b) => colourRank(b) - colourRank(a))[0] || null;
+    const lvl = allTimeLevel ? colourRank(allTimeLevel) : -1;
+    const hardTries = lvl >= 0 ? ev.filter(e => colourRank(e.color) >= lvl).reduce((s, e) => s + (Number(e.n) || 0), 0) : null;
+    return {
+      days: days.size,
+      climbs: pids.length,
+      fresh: fresh.length,
+      tries,
+      triesPerDay: days.size ? tries / days.size : null,
+      flashes: flashes.length,
+      sends: sends.length,
+      flashRate: fresh.length ? freshFlashed.length / fresh.length : null,
+      triesToSend: triesToSend.length ? triesToSend.reduce((a, b) => a + b, 0) / triesToSend.length : null,
+      conversion: worked.length ? convertedBy.length / worked.length : null,
+      open: worked.length - convertedBy.length,
+      level: hardestConsistentColor(freshClimbs),
+      hardest,
+      hardShare: hardTries != null && tries ? hardTries / tries : null
+    };
+  };
+  const out = [];
+  const section = (header, rows) => {
+    out.push(["Section", ...header]);
+    rows.forEach(r => out.push(r));
+    out.push([]);
+  };
+  const dayStr = d => isoDayLocal(d);
+  const lastEvent = events.length ? new Date(events[events.length - 1].t) : null;
+  section(["Field", "Value"], [["About", "Written", `${dayStr(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`], ["About", "Latest climb logged", lastEvent ? `${dayStr(lastEvent)} ${pad2(lastEvent.getHours())}:${pad2(lastEvent.getMinutes())}` : "none"], ...periods.filter(P => P.key !== "all").map(P => ["About", P.label, `${dayStr(P.from)} to ${dayStr(new Date(P.to.getTime() - 1))}`]), ["About", "Weeks", "Monday to Sunday"], ["About", "All-time level", allTimeLevel || "not set yet"], ["About", "Level rule", "Hardest colour with at least 3 new climbs and 70% or more flashed"], ["About", "Colour order (easiest first)", HOLD_COLORS.map(c => c.name).join(" < ")], ["About", "History before the activity log", "Climbs logged before the activity log existed count once, on their saved date, with all their tries (marked in the activity blocks)"]]);
+  const S = periods.map(P => stats(P));
+  const row = (name, pick, fmt, meaning) => ["Summary", name, ...S.map(s => fmt(pick(s))), meaning];
+  const n = x => x == null ? "–" : String(x);
+  section(["Metric", ...periods.map(P => P.label), "Meaning"], [row("Climbing days", s => s.days, n, "Days with at least one logged try"), row("Climbs tried", s => s.climbs, n, "Different climbs with any tries"), row("New climbs", s => s.fresh, n, "Climbs tried for the first time"), row("Total tries", s => s.tries, n, "Every try, including sends and flashes"), row("Tries per climbing day", s => s.triesPerDay, fmt1, "Volume per session"), row("Flashes", s => s.flashes, n, "First-try sends"), row("Sends after more than one try", s => s.sends, n, "Includes finished projects"), row("Flash rate", s => s.flashRate, fmtPct, "Share of new climbs flashed"), row("Tries per send", s => s.triesToSend, fmt1, "Average total tries on climbs sent (not flashed)"), row("Project conversion", s => s.conversion, fmtPct, "Climbs worked (not flashed) that were sent by the end of the period"), row("Still open", s => s.open, n, "Climbs worked but not sent by the end of the period"), row("Level", s => s.level || "–", x => x, "Level rule applied to this period's new climbs"), row("Hardest colour sent", s => s.hardest || "–", x => x, "Including flashes"), row(`Share of tries at ${allTimeLevel || "level"} or harder`, s => s.hardShare, fmtPct, "Against the all-time level")]);
+  const colourNames = HOLD_COLORS.map(c => c.name).filter(c => events.some(e => e.color === c));
+  const breakdown = (label, key, list, match) => {
+    const rows = [];
+    list.forEach(item => periods.forEach(P => {
+      const s = stats(P, e => match(e, item));
+      if (!s.climbs) return;
+      rows.push([label, item, P.label, s.climbs, s.fresh, s.tries, s.flashes, s.sends, fmtPct(s.flashRate), fmt1(s.triesToSend), fmtPct(s.conversion)]);
+    }));
+    section([key, "Period", "Climbs tried", "New climbs", "Tries", "Flashes", "Sends", "Flash rate", "Tries per send", "Project conversion"], rows);
+  };
+  breakdown("By colour", "Colour", colourNames, (e, c) => e.color === c);
+  breakdown("By style", "Style", ALL_STYLE_TAGS.filter(t => events.some(e => e.tags.includes(t))), (e, t) => e.tags.includes(t));
+  const untagged = events.filter(e => !e.tags.length).length;
+  out.splice(out.length - 1, 0, ["By style", "Untagged lines", String(untagged), `of ${events.length}`]);
+
+  // Hangboard.
+  const nameForDay = day => {
+    const c = (sessionsConfig || []).find(x => x.day === day);
+    return c ? c.name : day;
+  };
+  const sessions = (fingerLogs || []).filter(s => s && s.date).map(s => {
+    let hangs = 0,
+      secs = 0,
+      sets = 0;
+    const loads = new Set();
+    const exercises = Object.keys(s.exercises || {});
+    Object.values(s.exercises || {}).forEach(ex => (ex.sets || []).forEach(set => {
+      sets++;
+      (set.reps || []).forEach(r => {
+        hangs++;
+        secs += Number(r.duration) || 0;
+        loads.add(r.bw ? `BW ${r.bwPercent || "?"}%` : `+${r.addedWeight || 0}kg`);
+      });
+    }));
+    return {
+      d: new Date(s.date),
+      name: nameForDay(s.session),
+      exercises,
+      sets,
+      hangs,
+      secs,
+      loads: [...loads],
+      rpe: Number(s.rpe) || null
+    };
+  }).sort((a, b) => a.d - b.d);
+  const hb = periods.map(P => {
+    const xs = sessions.filter(s => s.d >= P.from && s.d < P.to);
+    const rpes = xs.map(s => s.rpe).filter(Boolean);
+    return {
+      n: xs.length,
+      hangs: xs.reduce((a, s) => a + s.hangs, 0),
+      secs: xs.reduce((a, s) => a + s.secs, 0),
+      rpe: rpes.length ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null
+    };
+  });
+  section(["Metric", ...periods.map(P => P.label)], [["Hangboard summary", "Sessions", ...hb.map(h => String(h.n))], ["Hangboard summary", "Hangs", ...hb.map(h => String(h.hangs))], ["Hangboard summary", "Time on the board (s)", ...hb.map(h => String(h.secs))], ["Hangboard summary", "Average effort (RPE 1–10)", ...hb.map(h => fmt1(h.rpe))], ["Hangboard summary", "Last session", sessions.length ? dayStr(sessions[sessions.length - 1].d) : "none", "", "", ""]]);
+
+  // Climbing activity, one block per period.
+  periods.filter(P => P.key !== "all").forEach(P => {
+    const rows = events.filter(e => inPeriod(e, P)).map(e => {
+      const d = new Date(e.t);
+      return [P.label, dayStr(d), d.toLocaleDateString("en-AU", {
+        weekday: "short"
+      }), e.sector, e.color, e.grade || "", e.tags.join("; "), e.kind === "try" ? "Tries" : e.kind === "send" ? "Sent" : "Flashed", String(e.n), String(e.pid), e.backfilled ? "yes" : ""];
+    });
+    if (!rows.length) rows.push([P.label, "No climbing logged"]);
+    section(["Date", "Day", "Sector", "Colour", "Grade", "Style", "What happened", "Tries", "Climb ID", "From before the log"], rows);
+  });
+
+  // Active sectors and the climbs on them.
+  const activeRows = [];
+  Object.entries(data.sectorLogs || {}).filter(([, log]) => log && !log.archived).sort(([a], [b]) => a.localeCompare(b)).forEach(([name, log]) => {
+    const until = daysUntilNextReset(log.resetDate, log.resetIntervalDays);
+    const resetTxt = until == null ? "no schedule" : until < 0 ? `overdue by ${-until} days` : `${until} days`;
+    const done = (log.completedGroups || []).join("; ");
+    const ps = (log.currentProblems || []).slice().sort((a, b) => colourRank(a.color) - colourRank(b.color));
+    if (!ps.length) activeRows.push(["Active sectors", name, resetTxt, done, "", "", "", "", "", "", "", ""]);
+    ps.forEach(p => {
+      const k = String(p.id);
+      const lines = events.filter(e => String(e.pid) === k);
+      const status = p.status === "flash" ? "Flashed" : p.status === "sent" ? "Sent" : "Project";
+      activeRows.push(["Active sectors", name, resetTxt, done, p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), lines.length ? dayStr(new Date(lines[0].t)) : "", lines.length ? dayStr(new Date(lines[lines.length - 1].t)) : "", k]);
+    });
+  });
+  section(["Sector", "Resets in", "Colours marked complete", "Colour", "Grade", "Style", "Status", "Tries", "First tried", "Last tried", "Climb ID"], activeRows);
+
+  // Hangboard sessions, every one.
+  section(["Date", "Session", "Exercises", "Sets", "Hangs", "Time on the board (s)", "Loads used", "Effort (RPE)"], sessions.map(s => ["Hangboard sessions", dayStr(s.d), s.name, s.exercises.join("; "), String(s.sets), String(s.hangs), String(s.secs), s.loads.join("; "), s.rpe ? String(s.rpe) : ""]));
+
+  // Every climb ever.
+  const historyRows = climbs.slice().sort((a, b) => (firstAt[String(a.id)] || 0) - (firstAt[String(b.id)] || 0)).map(p => {
+    const k = String(p.id);
+    const status = p.status === "flash" ? "Flashed" : p.status === "sent" ? "Sent" : "Project";
+    return ["History", p.sector || "", setOf[k] || "", p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), firstAt[k] ? dayStr(firstAt[k]) : "", sentAt[k] ? dayStr(sentAt[k]) : "", k];
+  });
+  section(["Sector", "Set", "Colour", "Grade", "Style", "Status", "Tries", "First tried", "Sent", "Climb ID"], historyRows);
+  return out.map(r => r.map(csvEscape).join(",")).join("\r\n");
+}
+function buildAnalysisCSVFromStorage(now = new Date()) {
+  let climbData = {
+    gymMap: null,
+    sectors: [],
+    sectorLogs: {}
+  };
+  try {
+    const raw = localStorage.getItem(CLIMB_STORAGE_KEY);
+    if (raw) climbData = JSON.parse(raw);
+  } catch (e) {}
+  return buildAnalysisCSV(climbData, readFingerLogs(), now, readSessionsConfig());
+}
+
+// ─── Writing it to Drive ───
+const ANALYSIS_FOLDER_NAME = "Send Log Analysis";
+const ANALYSIS_FOLDER_KEY = "send-log-analysis-folder";
+const ANALYSIS_META_KEY = "send-log-analysis-meta";
+const ANALYSIS_FILE_NAME = "Send Log analysis.csv";
+function readAnalysisMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(ANALYSIS_META_KEY) || "null") || {};
+  } catch (e) {
+    return {};
+  }
+}
+async function ensureAnalysisFolder(token) {
+  let id = null;
+  try {
+    id = localStorage.getItem(ANALYSIS_FOLDER_KEY);
+  } catch (e) {}
+  if (id) {
+    try {
+      const f = await backupFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
+      if (f && !f.trashed) {
+        await nestInSendLog(token, id);
+        return id;
+      }
+    } catch (e) {
+      if (e.expired) throw e;
+    }
+  }
+  const rootId = await sendLogRootId(token);
+  const q = encodeURIComponent(`name='${ANALYSIS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await backupFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+  if (found.files && found.files.length) id = found.files[0].id;else {
+    const made = await backupFetch(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: ANALYSIS_FOLDER_NAME,
+        mimeType: "application/vnd.google-apps.folder",
+        ...(rootId ? {
+          parents: [rootId]
+        } : {})
+      })
+    });
+    id = made.id;
+  }
+  try {
+    localStorage.setItem(ANALYSIS_FOLDER_KEY, id);
+  } catch (e) {}
+  await nestInSendLog(token, id);
+  return id;
+}
+// The file depends on the data and on today's date (the weeks move), so it's rewritten when either changes.
+function analysisKey() {
+  let sig = "";
+  try {
+    sig = hashText([localStorage.getItem(CLIMB_STORAGE_KEY) || "", localStorage.getItem(STORAGE_KEY) || ""].join("|"));
+  } catch (e) {}
+  return `${sig}|${isoDayLocal(new Date())}`;
+}
+let analysisInFlight = null;
+function writeAnalysisFile(token, {
+  force = false
+} = {}) {
+  if (analysisInFlight) return analysisInFlight;
+  analysisInFlight = (async () => {
+    const key = analysisKey();
+    const meta = readAnalysisMeta();
+    if (!force && meta.key === key) return {
+      skipped: true
+    };
+    const csv = buildAnalysisCSVFromStorage(new Date());
+    const folderId = await ensureAnalysisFolder(token);
+    const body = m => {
+      const fd = new FormData();
+      fd.append("metadata", new Blob([JSON.stringify(m)], {
+        type: "application/json"
+      }));
+      fd.append("file", new Blob([csv], {
+        type: "text/csv"
+      }));
+      return fd;
+    };
+    let up = null;
+    let fileId = meta.fileId;
+    if (!fileId) {
+      const q = encodeURIComponent(`name='${ANALYSIS_FILE_NAME}' and '${folderId}' in parents and trashed=false`);
+      const found = await backupFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+      if (found.files && found.files.length) fileId = found.files[0].id;
+    }
+    if (fileId) {
+      try {
+        up = await backupFetch(token, `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&fields=id,trashed`, {
+          method: "PATCH",
+          body: body({
+            name: ANALYSIS_FILE_NAME
+          })
+        });
+        if (up && up.trashed) up = null;
+      } catch (e) {
+        if (e.expired) throw e;
+        up = null;
+      }
+    }
+    if (!up) {
+      up = await backupFetch(token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+        method: "POST",
+        body: body({
+          name: ANALYSIS_FILE_NAME,
+          mimeType: "text/csv",
+          parents: [folderId]
+        })
+      });
+    }
+    try {
+      localStorage.setItem(ANALYSIS_META_KEY, JSON.stringify({
+        key,
+        fileId: up.id,
+        at: Date.now()
+      }));
+    } catch (e) {}
+    return up;
+  })().finally(() => {
+    analysisInFlight = null;
+  });
+  return analysisInFlight;
+}
+
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
 // never used as its grade or in analytics.
 function OthersGradeLine({
@@ -11853,6 +12472,7 @@ function ProblemForm({
   const [status, setStatus] = useState(initial?.status || "flash");
   const [attempts, setAttempts] = useState(initial?.attempts || (initial?.status === "sent" ? 2 : 1));
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [tags, setTags] = useState(cleanTags(initial?.tags));
   const [photoLink, setPhotoLink] = useState(initial?.photoLink || "");
   const [capturedPhoto, setCapturedPhoto] = useState(null); // { file, url } once the camera/picker hands back a photo
   const [photoShareState, setPhotoShareState] = useState(null);
@@ -12060,6 +12680,9 @@ function ProblemForm({
       status,
       attempts: status === "flash" ? 1 : Number(attempts) || 1,
       notes: notes.trim(),
+      ...(tags.length ? {
+        tags
+      } : {}),
       date: initial?.date || new Date().toISOString(),
       ...(photoLink.trim() ? {
         photoLink: photoLink.trim()
@@ -12318,7 +12941,10 @@ function ProblemForm({
       outline: "none",
       boxSizing: "border-box"
     }
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement(StyleTagPicker, {
+    value: tags,
+    onChange: setTags
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF",
       borderRadius: 10,
@@ -12975,7 +13601,7 @@ function getMigratedStretchData() {
 // remapping their columns into one shared table on export, and extracting each section's own
 // rows back out on restore. A few column names collide across sections with different meanings
 // (Notes, Date), so those get a section-specific prefix in the unified file only.
-const UNIFIED_CSV_HEADER = ["Section", "Type", "SessionId", "FDate", "SessionType", "ExerciseId", "SetIndex", "RepIndex", "BW", "BWPercent", "AddedWeight", "Duration", "FNotes", "RPE", "ConfigId", "ConfigDay", "ConfigName", "ConfigExerciseId", "ConfigProtocol", "ConfigSets", "ConfigReps", "ConfigHangSec", "ConfigRepRestSec", "ConfigSetRestSec", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "CNotes", "CDate", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "Day", "RoutineId", "RoutineName", "RoutineOrder", "StretchId", "StretchName", "Reps", "HoldSec", "RestSec", "NextRestSec", "StretchOrder", "OthersGrade"];
+const UNIFIED_CSV_HEADER = ["Section", "Type", "SessionId", "FDate", "SessionType", "ExerciseId", "SetIndex", "RepIndex", "BW", "BWPercent", "AddedWeight", "Duration", "FNotes", "RPE", "ConfigId", "ConfigDay", "ConfigName", "ConfigExerciseId", "ConfigProtocol", "ConfigSets", "ConfigReps", "ConfigHangSec", "ConfigRepRestSec", "ConfigSetRestSec", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "CNotes", "CDate", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "Day", "RoutineId", "RoutineName", "RoutineOrder", "StretchId", "StretchName", "Reps", "HoldSec", "RestSec", "NextRestSec", "StretchOrder", "OthersGrade", "Tags", "ProblemId", "Backfilled"];
 const FINGER_LOG_RENAME = {
   "Date": "FDate",
   "Notes": "FNotes"
@@ -14854,6 +15480,9 @@ function runBackup(token, {
     try {
       await pruneBackups(token, folderId);
     } catch (e) {}
+    try {
+      await writeAnalysisFile(token);
+    } catch (e) {}
     return up;
   })().finally(() => {
     backupInFlight = null;
@@ -14895,6 +15524,8 @@ function scheduleAutoBackup(delay = 8000) {
         refreshBackupDirty();
         const token = storedDriveToken();
         if (backupDirty && token) runBackup(token).catch(() => {});
+        // Nothing new to back up, but the weeks may have moved on: keep the analysis file current.
+        else if (token) writeAnalysisFile(token).catch(() => {});
       } catch (e) {}
     };
     if (window.requestIdleCallback) window.requestIdleCallback(go, {
