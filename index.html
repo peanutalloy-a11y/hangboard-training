@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "24 Oct 2026, build 34";
+<script>const APP_VERSION = "24 Oct 2026, build 35";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -4628,7 +4628,8 @@ function VideoEmbed({
 // - Every attempt has a time limit. A request Google leaves hanging used to sit on "Loading…"
 //   forever (only reopening the app cleared it); now it moves on to the next source.
 // - Coming back to the app, or getting signal back, retries anything still loading or failed.
-// - Background warm-up does only the small thumbnails, two at a time, and can't get stuck.
+// - Background warm-up: thumbnails two at a time, then full photos one at a time (build 35),
+//   stepping aside for on-screen photos and backing off if Google refuses.
 // Build 34: full photos get longer to arrive, a photo that gives up quietly tries again after 30s
 //   and 90s, and the "didn't send" box says what each source did.
 // ═══════════════════════════════════════════════════
@@ -4867,6 +4868,14 @@ function usePhotoSource(p, size = "full", lazy = false) {
   // A request Google leaves hanging counts as a failure after a while, so the next source gets a go.
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  // Tells the background loader a photo on screen is still coming in, so it waits.
+  useEffect(() => {
+    if (lazy || !src || st.loaded || st.failed || !/^https:/.test(src)) return;
+    window.__photoVisibleLoading = (window.__photoVisibleLoading || 0) + 1;
+    return () => {
+      window.__photoVisibleLoading = Math.max(0, (window.__photoVisibleLoading || 1) - 1);
+    };
+  }, [src, st.loaded, st.failed]);
   useEffect(() => {
     clearTimeout(stall.current);
     // Off-screen lazy photos haven't been asked for yet, so there's nothing to time.
@@ -5046,13 +5055,20 @@ function ClimbPhotoFull({
   }, "Open in Drive \u2197"))));
 }
 
-// Warms up the current set's photos in the background: every small thumbnail first, then the full
-// photos, a few at a time and at low priority so it never crowds out what's on screen. Each one
-// has a time limit, so a request Google leaves hanging can't jam the queue.
+// Warms up the current set's photos in the background: every small thumbnail first (two at a time),
+// then the full photos one at a time with a short gap between them. It steps aside while a photo
+// you're looking at is loading, and if Google refuses or stalls it backs off for a while instead of
+// pushing on, so it never triggers the rate limit that made photos drop out. Each request has a
+// time limit, so a hung one can't jam the queue.
+window.__photoVisibleLoading = window.__photoVisibleLoading || 0;
 let photoPreloadQueue = [];
 let photoPreloadActive = 0;
 let photoPreloadLast = [];
-const PHOTO_PRELOAD_CONCURRENCY = 2;
+let photoPreloadPauseUntil = 0;
+let photoPreloadTimer = null;
+const PHOTO_PRELOAD_THUMBS_AT_ONCE = 2;
+const PHOTO_PRELOAD_FULL_GAP = 400; // ms between full photos
+const PHOTO_PRELOAD_BACKOFF = 15000; // ms to wait after Google refuses or stalls
 function preloadClimbPhotos(problems) {
   photoPreloadLast = problems;
   const state = window.__climbPhotoCache = window.__climbPhotoCache || {};
@@ -5062,22 +5078,32 @@ function preloadClimbPhotos(problems) {
     if (!id || window.__drivePhotoBlobs[id] || window.__driveLocalPreviews && window.__driveLocalPreviews[id]) return;
     ids.push(id);
   });
-  // Only the small thumbnails: warming up every full-size photo too doubled the requests and made
-  // Google refuse some of them. A full photo loads when you open the climb.
-  ["thumb"].forEach(size => ids.forEach(id => {
+  ["thumb", "full"].forEach(size => ids.forEach(id => {
     const k = id + "|" + size;
     if (state[k]) return;
     state[k] = "queued";
     photoPreloadQueue.push({
       id,
       size,
-      k
+      k,
+      tries: 0
     });
   }));
   pumpPhotoPreload();
 }
+function schedulePhotoPump(ms) {
+  clearTimeout(photoPreloadTimer);
+  photoPreloadTimer = setTimeout(pumpPhotoPreload, ms);
+}
 function pumpPhotoPreload() {
-  while (photoPreloadActive < PHOTO_PRELOAD_CONCURRENCY && photoPreloadQueue.length) {
+  while (photoPreloadQueue.length) {
+    const wait = photoPreloadPauseUntil - Date.now();
+    if (wait > 0) return schedulePhotoPump(wait);
+    // A photo on screen is loading: let it have the connection.
+    if (window.__photoVisibleLoading > 0) return schedulePhotoPump(500);
+    const next = photoPreloadQueue[0];
+    const limitNow = next.size === "thumb" ? PHOTO_PRELOAD_THUMBS_AT_ONCE : 1;
+    if (photoPreloadActive >= limitNow) return;
     const job = photoPreloadQueue.shift();
     photoPreloadActive++;
     const urls = photoCandidates({
@@ -5086,15 +5112,26 @@ function pumpPhotoPreload() {
     let finished = false;
     let img = null;
     let limit = null;
+    let refused = false;
     const done = ok => {
       if (finished) return;
       finished = true;
       clearTimeout(limit);
-      // Keep the small thumbnails in memory; full photos just stay in the browser's cache.
-      window.__climbPhotoCache[job.k] = ok ? job.size === "thumb" ? img : "done" : undefined;
-      if (!ok) delete window.__climbPhotoCache[job.k];
       photoPreloadActive--;
-      setTimeout(pumpPhotoPreload, 150);
+      if (ok) {
+        // Held in memory so opening the climb shows it straight away.
+        window.__climbPhotoCache[job.k] = img;
+      } else if (job.tries < 1) {
+        // Back off, then give it one more go at the end of the queue.
+        photoPreloadQueue.push({
+          ...job,
+          tries: job.tries + 1
+        });
+      } else {
+        delete window.__climbPhotoCache[job.k];
+      }
+      if (refused || !ok) photoPreloadPauseUntil = Date.now() + PHOTO_PRELOAD_BACKOFF;
+      schedulePhotoPump(job.size === "full" ? PHOTO_PRELOAD_FULL_GAP : 150);
     };
     const attempt = i => {
       if (finished) return;
@@ -5110,11 +5147,15 @@ function pumpPhotoPreload() {
         window.__photoGood[job.id] = urls[i].includes("lh3.") ? 0 : 1;
         done(true);
       };
-      img.onerror = () => attempt(i + 1);
+      img.onerror = () => {
+        refused = true;
+        attempt(i + 1);
+      };
       limit = setTimeout(() => {
         const stuck = img;
         stuck.onload = stuck.onerror = null;
         stuck.src = "";
+        refused = true;
         attempt(i + 1);
       }, PHOTO_TIMEOUT[job.size] + 2000);
       img.src = urls[i];
@@ -5124,6 +5165,7 @@ function pumpPhotoPreload() {
 }
 // Anything that failed or got stuck gets another go when you come back to the app.
 window.addEventListener(PHOTO_WAKE_EVENT, () => {
+  photoPreloadPauseUntil = 0;
   if (photoPreloadLast.length) preloadClimbPhotos(photoPreloadLast);
 });
 
