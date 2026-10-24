@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "24 Oct 2026, build 33";
+<script>const APP_VERSION = "24 Oct 2026, build 34";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -4628,7 +4628,9 @@ function VideoEmbed({
 // - Every attempt has a time limit. A request Google leaves hanging used to sit on "Loading…"
 //   forever (only reopening the app cleared it); now it moves on to the next source.
 // - Coming back to the app, or getting signal back, retries anything still loading or failed.
-// - Background warm-up does thumbnails first, then full photos, and can't get stuck.
+// - Background warm-up does only the small thumbnails, two at a time, and can't get stuck.
+// Build 34: full photos get longer to arrive, a photo that gives up quietly tries again after 30s
+//   and 90s, and the "didn't send" box says what each source did.
 // ═══════════════════════════════════════════════════
 window.__photoGood = window.__photoGood || {}; // fileId -> which source worked (0 = image server, 1 = Drive thumbnail)
 window.__drivePhotoBlobs = window.__drivePhotoBlobs || {}; // fileId -> local copy downloaded via the Drive API
@@ -4639,9 +4641,11 @@ const PHOTO_WIDTH = {
   full: 1000
 };
 const PHOTO_TIMEOUT = {
-  thumb: 8000,
-  full: 15000
+  thumb: 10000,
+  full: 25000
 };
+const PHOTO_AUTO_RETRY = [30000, 90000]; // a failed photo quietly tries again after these waits
+
 function photoFileId(p) {
   return p && p.photoLink ? extractDriveFileId(p.photoLink) : null;
 }
@@ -4716,11 +4720,32 @@ const freshPhotoState = () => ({
   loaded: false,
   apiUrl: null,
   apiTried: false,
-  nonce: 0
+  nonce: 0,
+  heals: 0,
+  why: {}
 });
+// What went wrong with each source, shown small under a photo that couldn't load.
+const PHOTO_SOURCE_NAMES = {
+  server: "Image server",
+  thumb: "Drive preview",
+  drive: "Drive download"
+};
+function photoSourceOf(url) {
+  if (/lh3\.googleusercontent/.test(url || "")) return "server";
+  if (/drive\.google\.com\/thumbnail/.test(url || "")) return "thumb";
+  return null;
+}
+function apiFailureText(e) {
+  const m = String(e && e.message || "");
+  if (e && e.name === "AbortError") return "no reply";
+  if (m === "signed-out") return "not signed in";
+  if (m === "drive-401") return "sign-in expired";
+  const code = m.match(/drive-(\d+)/);
+  return code ? `refused (${code[1]})` : "no connection";
+}
 
 // Works through the sources for one photo. Returns what the <img> should show and its handlers.
-function usePhotoSource(p, size = "full") {
+function usePhotoSource(p, size = "full", lazy = false) {
   const id = photoFileId(p);
   const local = !!(id && window.__driveLocalPreviews && window.__driveLocalPreviews[id]);
   const key = `${id || ""}|${local ? 1 : 0}|${p && p.photo ? p.photo.length : 0}|${size}`;
@@ -4759,8 +4784,28 @@ function usePhotoSource(p, size = "full") {
       apiUrl: url,
       failed: false,
       loaded: false
-    }))).catch(onFail);
+    }))).catch(e => {
+      setSt(s => ({
+        ...s,
+        why: {
+          ...s.why,
+          drive: apiFailureText(e)
+        }
+      }));
+      onFail();
+    });
   };
+  // A photo that gave up tries again by itself a couple of times, in case Google was only busy.
+  useEffect(() => {
+    if (!st.failed || st.heals >= PHOTO_AUTO_RETRY.length) return;
+    const t = setTimeout(() => setSt(s => s.failed ? {
+      ...freshPhotoState(),
+      nonce: s.nonce + 1,
+      heals: s.heals + 1,
+      why: s.why
+    } : s), PHOTO_AUTO_RETRY[st.heals]);
+    return () => clearTimeout(t);
+  }, [st.failed, st.heals]);
   // When you sign in to Google from one failed photo, the others try again too.
   useEffect(() => {
     if (!st.failed) return;
@@ -4775,14 +4820,26 @@ function usePhotoSource(p, size = "full") {
       clearTimeout(timer.current);
       setSt(s => s.loaded ? s : {
         ...freshPhotoState(),
-        nonce: s.nonce + 1
+        nonce: s.nonce + 1,
+        why: s.why
       });
     };
     window.addEventListener(PHOTO_WAKE_EVENT, h);
     return () => window.removeEventListener(PHOTO_WAKE_EVENT, h);
   }, [st.loaded, candidates.length]);
-  const onError = () => {
+  const onError = kind => {
     clearTimeout(stall.current);
+    const which = photoSourceOf(candidates[st.idx]);
+    if (which && !st.apiUrl) {
+      const what = kind === "timeout" ? "no reply" : "refused";
+      setSt(s => ({
+        ...s,
+        why: {
+          ...s.why,
+          [which]: what
+        }
+      }));
+    }
     if (st.apiUrl) return setSt(s => ({
       ...s,
       failed: true
@@ -4812,9 +4869,10 @@ function usePhotoSource(p, size = "full") {
   onErrorRef.current = onError;
   useEffect(() => {
     clearTimeout(stall.current);
-    if (!src || st.loaded || st.failed || !/^https:/.test(src)) return;
+    // Off-screen lazy photos haven't been asked for yet, so there's nothing to time.
+    if (lazy || !src || st.loaded || st.failed || !/^https:/.test(src)) return;
     const limit = (PHOTO_TIMEOUT[size] || PHOTO_TIMEOUT.full) * (1 + st.round * 0.5);
-    stall.current = setTimeout(() => onErrorRef.current(), limit);
+    stall.current = setTimeout(() => onErrorRef.current("timeout"), limit);
     return () => clearTimeout(stall.current);
   }, [src, st.loaded, st.failed]);
   const onLoad = () => {
@@ -4823,7 +4881,8 @@ function usePhotoSource(p, size = "full") {
     if (id && !st.apiUrl && /^https:/.test(u)) window.__photoGood[id] = u.includes("lh3.") ? 0 : 1;
     setSt(s => ({
       ...s,
-      loaded: true
+      loaded: true,
+      why: {}
     }));
   };
   const loadFromDrive = () => {
@@ -4837,21 +4896,25 @@ function usePhotoSource(p, size = "full") {
       window.dispatchEvent(new Event(PHOTO_RETRY_EVENT));
     }).catch(() => {});
   };
+  const whyText = Object.keys(PHOTO_SOURCE_NAMES).filter(k => st.why[k]).map(k => `${PHOTO_SOURCE_NAMES[k]}: ${st.why[k]}`).join(" · ");
+  const retrying = st.failed && st.heals < PHOTO_AUTO_RETRY.length;
   return {
     src,
     failed: st.failed,
     loaded: st.loaded,
-    onError,
+    onError: () => onError("error"),
     onLoad,
     loadFromDrive,
-    hasPhoto: candidates.length > 0
+    hasPhoto: candidates.length > 0,
+    whyText,
+    retrying
   };
 }
 function ClimbPhotoThumb({
   p,
   lazy
 }) {
-  const ph = usePhotoSource(p, "thumb");
+  const ph = usePhotoSource(p, "thumb", lazy);
   if (!ph.hasPhoto || ph.failed) return null;
   return /*#__PURE__*/React.createElement("span", {
     style: {
@@ -4885,7 +4948,7 @@ function ClimbPhotoFull({
   p,
   lazy
 }) {
-  const ph = usePhotoSource(p, "full");
+  const ph = usePhotoSource(p, "full", lazy);
   if (!ph.hasPhoto) return null;
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4940,9 +5003,17 @@ function ClimbPhotoFull({
       fontFamily: F.b,
       fontSize: 11,
       color: "#999",
-      margin: "0 0 10px"
+      margin: "0 0 4px"
     }
-  }, "Google didn't send the preview."), p.photoLink && /*#__PURE__*/React.createElement("button", {
+  }, "Google didn't send the preview.", ph.retrying ? " Trying again shortly…" : ""), ph.whyText && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      color: "#AAA",
+      margin: "0 0 10px",
+      lineHeight: 1.5
+    }
+  }, ph.whyText), p.photoLink && /*#__PURE__*/React.createElement("button", {
     onClick: ph.loadFromDrive,
     style: {
       padding: "8px 14px",
@@ -4981,7 +5052,7 @@ function ClimbPhotoFull({
 let photoPreloadQueue = [];
 let photoPreloadActive = 0;
 let photoPreloadLast = [];
-const PHOTO_PRELOAD_CONCURRENCY = 3;
+const PHOTO_PRELOAD_CONCURRENCY = 2;
 function preloadClimbPhotos(problems) {
   photoPreloadLast = problems;
   const state = window.__climbPhotoCache = window.__climbPhotoCache || {};
@@ -4991,7 +5062,9 @@ function preloadClimbPhotos(problems) {
     if (!id || window.__drivePhotoBlobs[id] || window.__driveLocalPreviews && window.__driveLocalPreviews[id]) return;
     ids.push(id);
   });
-  ["thumb", "full"].forEach(size => ids.forEach(id => {
+  // Only the small thumbnails: warming up every full-size photo too doubled the requests and made
+  // Google refuse some of them. A full photo loads when you open the climb.
+  ["thumb"].forEach(size => ids.forEach(id => {
     const k = id + "|" + size;
     if (state[k]) return;
     state[k] = "queued";
