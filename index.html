@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "22 Oct 2026, build 29";
+<script>const APP_VERSION = "24 Oct 2026, build 31";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -5595,6 +5595,13 @@ function ClimbApp() {
   const [analyticsRange, setAnalyticsRange] = useState("90");
   const [analyticsColor, setAnalyticsColor] = useState(null);
   const [emptyCharts, setEmptyChartsRaw] = useState(readEmptyChartsMode);
+  const [gradeRange, setGradeRangeRaw] = useState(readGradeRange);
+  const setGradeRange = v => {
+    setGradeRangeRaw(v);
+    try {
+      localStorage.setItem(GRADE_RANGE_KEY, JSON.stringify(v));
+    } catch (e) {}
+  };
   const setEmptyCharts = v => {
     setEmptyChartsRaw(v);
     try {
@@ -6923,37 +6930,12 @@ function ClimbApp() {
           marginTop: 3,
           letterSpacing: 0.3
         }
-      }, resetOverdue ? "OVERDUE — " : "", resetCountdown), completedBadges.length > 0 && /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 4,
-          marginTop: 5,
-          flexWrap: "wrap",
-          alignItems: "center"
-        }
-      }, completedBadges.map(g => gradeMode ? /*#__PURE__*/React.createElement("span", {
-        key: g,
-        style: {
-          fontFamily: F.m,
-          fontSize: 9,
-          fontWeight: 700,
-          padding: "2px 6px",
-          borderRadius: 4,
-          background: "rgba(58,138,122,0.12)",
-          color: "#3A8A7A"
-        }
-      }, g) : /*#__PURE__*/React.createElement("span", {
-        key: g,
-        title: `${g} complete`,
-        style: {
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          background: (HOLD_COLORS.find(c => c.name === g) || {}).hex,
-          border: "1.5px solid rgba(0,0,0,0.08)",
-          flexShrink: 0
-        }
-      })))), /*#__PURE__*/React.createElement("div", {
+      }, resetOverdue ? "OVERDUE — " : "", resetCountdown), /*#__PURE__*/React.createElement(SectorBubbles, {
+        gradeMode: gradeMode,
+        completed: completedBadges,
+        range: gradeRange,
+        loggedGrades: gradeMode ? allGroupKeys : []
+      })), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           alignItems: "center",
@@ -7570,7 +7552,10 @@ function ClimbApp() {
         border: "1.5px solid #E8E4DE",
         color: "#2A2520"
       }
-    }, data.gymMap ? "MANAGE MAP & SECTORS" : "ADD GYM MAP"), /*#__PURE__*/React.createElement(EmptyChartsSetting, {
+    }, data.gymMap ? "MANAGE MAP & SECTORS" : "ADD GYM MAP"), /*#__PURE__*/React.createElement(GradeRangeSetting, {
+      value: gradeRange,
+      onChange: setGradeRange
+    }), /*#__PURE__*/React.createElement(EmptyChartsSetting, {
       value: emptyCharts,
       onChange: setEmptyCharts
     }), /*#__PURE__*/React.createElement("p", {
@@ -8593,6 +8578,76 @@ async function driveFetch(token, url, opts = {}) {
   return res.json();
 }
 
+// ─── One "Send Log" folder in Drive ──────────────────
+// Photos and backups each live in their own folder, and both of those sit inside a single
+// "Send Log" folder in My Drive. Folders the app made before this (sitting loose in My Drive) are
+// moved in the first time the app talks to Drive. Moving keeps every file's ID, so existing photo
+// links and backups keep working. Any hiccup here never stops a photo or backup from saving.
+const SENDLOG_ROOT_NAME = "Send Log";
+const SENDLOG_ROOT_KEY = "send-log-root-folder";
+const SENDLOG_NESTED_KEY = "send-log-nested-folders";
+let sendLogRootPromise = null;
+async function rootDriveCall(token, url, opts = {}) {
+  const res = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  if (!res.ok) throw new Error(`drive-${res.status}`);
+  return res.json();
+}
+// The "Send Log" folder's ID, making it if needed. null if Drive couldn't be reached.
+function sendLogRootId(token) {
+  if (window.__sendLogRootOk) return Promise.resolve(window.__sendLogRootOk);
+  if (!sendLogRootPromise) {
+    sendLogRootPromise = (async () => {
+      let id = null;
+      try { id = localStorage.getItem(SENDLOG_ROOT_KEY); } catch (e) {}
+      if (id) {
+        try {
+          const f = await rootDriveCall(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
+          if (!f || f.trashed) id = null;
+        } catch (e) { id = null; }
+      }
+      if (!id) {
+        const q = encodeURIComponent(`name='${SENDLOG_ROOT_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+        const found = await rootDriveCall(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+        if (found.files && found.files.length) id = found.files[0].id;
+        else {
+          const made = await rootDriveCall(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: SENDLOG_ROOT_NAME, mimeType: "application/vnd.google-apps.folder" })
+          });
+          id = made.id;
+        }
+        try { localStorage.setItem(SENDLOG_ROOT_KEY, id); } catch (e) {}
+      }
+      window.__sendLogRootOk = id;
+      return id;
+    })().catch(() => null).finally(() => { sendLogRootPromise = null; });
+  }
+  return sendLogRootPromise;
+}
+// Makes sure one of the app's folders sits inside "Send Log", moving it there if it doesn't.
+async function nestInSendLog(token, folderId) {
+  try {
+    const root = await sendLogRootId(token);
+    if (!root || !folderId) return;
+    let done = {};
+    try { done = JSON.parse(localStorage.getItem(SENDLOG_NESTED_KEY) || "{}") || {}; } catch (e) {}
+    if (done[folderId] === root) return;
+    const f = await rootDriveCall(token, `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,parents`);
+    const parents = (f && f.parents) || [];
+    if (!parents.includes(root)) {
+      const remove = parents.length ? `&removeParents=${encodeURIComponent(parents.join(","))}` : "";
+      await rootDriveCall(token, `https://www.googleapis.com/drive/v3/files/${folderId}?addParents=${encodeURIComponent(root)}${remove}&fields=id,parents`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+    }
+    done[folderId] = root;
+    try { localStorage.setItem(SENDLOG_NESTED_KEY, JSON.stringify(done)); } catch (e) {}
+  } catch (e) {}
+}
+
 async function ensureDriveFolder(token) {
   let id = null;
   try { id = localStorage.getItem(DRIVE_FOLDER_KEY); } catch (e) {}
@@ -8600,11 +8655,15 @@ async function ensureDriveFolder(token) {
     // Make sure the remembered folder still exists and isn't in the bin.
     try {
       const f = await driveFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
-      if (f && !f.trashed) return id;
+      if (f && !f.trashed) {
+        await nestInSendLog(token, id);
+        return id;
+      }
     } catch (e) {
       if (/expired/.test(e.message)) throw e;
     }
   }
+  const rootId = await sendLogRootId(token);
   const q = encodeURIComponent(`name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const found = await driveFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
   if (found.files && found.files.length) {
@@ -8613,11 +8672,12 @@ async function ensureDriveFolder(token) {
     const made = await driveFetch(token, "https://www.googleapis.com/drive/v3/files?fields=id", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
+      body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder", ...(rootId ? { parents: [rootId] } : {}) })
     });
     id = made.id;
   }
   try { localStorage.setItem(DRIVE_FOLDER_KEY, id); } catch (e) {}
+  await nestInSendLog(token, id);
   return id;
 }
 
@@ -11347,6 +11407,188 @@ function ClimbAnalyticsView({
       opacity: 0.35
     }
   }), "Took tries / open"))))));
+}
+
+// ─── Sector completion bubbles ───────────────────────
+// Every sector row shows the whole ladder: all 8 colours (or your number-grade range), empty until
+// you mark that colour/grade complete, then filled in — so what's left in each sector is obvious.
+const GRADE_RANGE_KEY = "send-log-grade-range";
+const GRADE_RANGE_MAX = 17;
+function readGradeRange() {
+  try {
+    const v = JSON.parse(localStorage.getItem(GRADE_RANGE_KEY) || "null");
+    if (v && Number.isInteger(v.from) && Number.isInteger(v.to) && v.from >= 0 && v.to <= GRADE_RANGE_MAX && v.from <= v.to) return v;
+  } catch (e) {}
+  return {
+    from: 0,
+    to: 8
+  };
+}
+const normGrade = g => String(g || "").trim().toUpperCase();
+// The chips for a number-grade sector: your chosen V range, plus anything logged in that sector
+// that falls outside it (or isn't a V grade), so a completed grade is never hidden.
+function sectorGradeLadder(range, loggedGrades) {
+  const ladder = [];
+  for (let n = range.from; n <= range.to; n++) ladder.push("V" + n);
+  const extra = sortGrades([...new Set((loggedGrades || []).map(normGrade))].filter(g => g && !ladder.includes(g)));
+  return sortGrades([...ladder, ...extra]);
+}
+function SectorBubbles({
+  gradeMode,
+  completed,
+  range,
+  loggedGrades
+}) {
+  const done = new Set((completed || []).map(normGrade));
+  if (gradeMode) {
+    const ladder = sectorGradeLadder(range, loggedGrades);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 4,
+        marginTop: 6,
+        flexWrap: "wrap",
+        alignItems: "center"
+      },
+      "aria-label": "Grades complete"
+    }, ladder.map(g => {
+      const on = done.has(g);
+      return /*#__PURE__*/React.createElement("span", {
+        key: g,
+        title: on ? `${g} complete` : `${g} not complete`,
+        style: {
+          fontFamily: F.m,
+          fontSize: 9,
+          fontWeight: 700,
+          padding: "2px 5px",
+          borderRadius: 4,
+          lineHeight: 1.2,
+          background: on ? "#3A8A7A" : "transparent",
+          color: on ? "#FFF" : "#B5AFA6",
+          border: `1px solid ${on ? "#3A8A7A" : "#DDD7CE"}`
+        }
+      }, g);
+    }));
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 5,
+      marginTop: 6,
+      alignItems: "center"
+    },
+    "aria-label": "Colours complete"
+  }, HOLD_COLORS.map(c => {
+    const on = done.has(normGrade(c.name));
+    return /*#__PURE__*/React.createElement("span", {
+      key: c.name,
+      title: on ? `${c.name} complete` : `${c.name} not complete`,
+      style: {
+        width: 11,
+        height: 11,
+        borderRadius: "50%",
+        boxSizing: "border-box",
+        flexShrink: 0,
+        background: on ? c.hex : "transparent",
+        border: on ? "1.5px solid rgba(0,0,0,0.08)" : `1.5px solid ${c.name === "Yellow" ? "#CDA634" : c.hex}`
+      }
+    });
+  }));
+}
+function GradeRangeSetting({
+  value,
+  onChange
+}) {
+  const set = (k, n) => {
+    const next = {
+      ...value,
+      [k]: Math.max(0, Math.min(GRADE_RANGE_MAX, n))
+    };
+    if (next.from > next.to) {
+      if (k === "from") next.to = next.from;else next.from = next.to;
+    }
+    onChange(next);
+  };
+  const stepper = (k, label) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      letterSpacing: 1,
+      color: "#999"
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      borderRadius: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    "aria-label": `Lower ${label.toLowerCase()} grade`,
+    onClick: () => set(k, value[k] - 1),
+    disabled: value[k] <= 0,
+    style: {
+      width: 40,
+      height: 40,
+      border: "none",
+      background: "transparent",
+      fontSize: 18,
+      color: value[k] <= 0 ? "#CCC" : "#2A2520",
+      cursor: "pointer"
+    }
+  }, "\u2212"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 14,
+      fontWeight: 700,
+      color: "#2A2520"
+    }
+  }, "V", value[k]), /*#__PURE__*/React.createElement("button", {
+    "aria-label": `Raise ${label.toLowerCase()} grade`,
+    onClick: () => set(k, value[k] + 1),
+    disabled: value[k] >= GRADE_RANGE_MAX,
+    style: {
+      width: 40,
+      height: 40,
+      border: "none",
+      background: "transparent",
+      fontSize: 18,
+      color: value[k] >= GRADE_RANGE_MAX ? "#CCC" : "#2A2520",
+      cursor: "pointer"
+    }
+  }, "+")));
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Divider, {
+    text: "SECTOR GRADES"
+  }), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 12,
+      color: "#2A2520",
+      margin: "0 0 4px"
+    }
+  }, "Number grade range"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#999",
+      margin: "0 0 10px",
+      lineHeight: 1.4
+    }
+  }, "For sectors logged by number grade. Each sector shows V", value.from, "\u2013V", value.to, ", filled in as you mark them complete."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, stepper("from", "FROM"), stepper("to", "TO")));
 }
 
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
@@ -14257,11 +14499,15 @@ async function ensureBackupFolder(token) {
   if (id) {
     try {
       const f = await backupFetch(token, `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`);
-      if (f && !f.trashed) return id;
+      if (f && !f.trashed) {
+        await nestInSendLog(token, id);
+        return id;
+      }
     } catch (e) {
       if (e.expired) throw e;
     }
   }
+  const rootId = await sendLogRootId(token);
   const q = encodeURIComponent(`name='${BACKUP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const found = await backupFetch(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
   if (found.files && found.files.length) {
@@ -14274,7 +14520,10 @@ async function ensureBackupFolder(token) {
       },
       body: JSON.stringify({
         name: BACKUP_FOLDER_NAME,
-        mimeType: "application/vnd.google-apps.folder"
+        mimeType: "application/vnd.google-apps.folder",
+        ...(rootId ? {
+          parents: [rootId]
+        } : {})
       })
     });
     id = made.id;
@@ -14282,6 +14531,7 @@ async function ensureBackupFolder(token) {
   try {
     localStorage.setItem(BACKUP_FOLDER_KEY, id);
   } catch (e) {}
+  await nestInSendLog(token, id);
   return id;
 }
 function backupFileName(d) {
