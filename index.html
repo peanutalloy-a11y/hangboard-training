@@ -393,7 +393,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "24 Oct 2026, build 31";
+<script>const APP_VERSION = "24 Oct 2026, build 32";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -2721,7 +2721,7 @@ function FingerApp() {
           letterSpacing: 1
         }
       }, "DELETE"))))));
-    }))))), /*#__PURE__*/React.createElement("div", {
+    }))))), /*#__PURE__*/React.createElement(GoogleConnections, null), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
@@ -7430,12 +7430,12 @@ function ClimbApp() {
         color: "#2A2520",
         margin: "0 0 20px"
       }
-    }, "Settings"), /*#__PURE__*/React.createElement("div", {
+    }, "Settings"), /*#__PURE__*/React.createElement(GoogleConnections, { first: true }), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "0 0 16px"
+        margin: "28px 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -11591,6 +11591,234 @@ function GradeRangeSetting({
   }, stepper("from", "FROM"), stepper("to", "TO")));
 }
 
+// ─── Google connections (settings) ───────────────────
+// Google only lets a web app hold a sign-in for about an hour. Connecting here before a session
+// means saving photos, backing up and uploading videos won't stop to ask mid-climb.
+function readTokenExpiry(key) {
+  try {
+    const t = JSON.parse(localStorage.getItem(key) || "null");
+    return t && t.token && t.exp ? t.exp : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+function GoogleConnections({
+  first
+}) {
+  const [, setTick] = useState(0);
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState(null); // { key, text, tone }
+  const refresh = () => setTick(x => x + 1);
+  useEffect(() => {
+    const t = setInterval(refresh, 30000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener(BACKUP_EVENT, refresh);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener(BACKUP_EVENT, refresh);
+    };
+  }, []);
+  const services = [{
+    key: "drive",
+    name: "Google Drive",
+    what: "Photos and backups",
+    tokenKey: DRIVE_TOKEN_KEY,
+    connect: getDriveToken
+  }, {
+    key: "yt",
+    name: "YouTube",
+    what: "Climb videos",
+    tokenKey: YT_TOKEN_KEY,
+    connect: getYouTubeToken
+  }];
+  const connect = s => {
+    // Clearing first means a tap always gets a fresh hour. Nothing async happens before the
+    // sign-in request, so the browser lets Google's window open.
+    try {
+      localStorage.removeItem(s.tokenKey);
+    } catch (e) {}
+    setBusy(s.key);
+    setMsg(null);
+    s.connect().then(() => {
+      setBusy(null);
+      setMsg({
+        key: s.key,
+        text: `${s.name} connected ✓`,
+        tone: "ok"
+      });
+      setTimeout(() => setMsg(m => m && m.tone === "ok" && m.key === s.key ? null : m), 3000);
+      if (s.key === "drive") {
+        window.dispatchEvent(new Event(PHOTO_RETRY_EVENT));
+        try {
+          scheduleAutoBackup(1500);
+        } catch (e) {}
+      }
+    }).catch(e => {
+      setBusy(null);
+      setMsg({
+        key: s.key,
+        text: e.message || "Google sign-in didn't finish. Try again.",
+        tone: "bad"
+      });
+    });
+  };
+  const signOut = s => {
+    try {
+      localStorage.removeItem(s.tokenKey);
+    } catch (e) {}
+    setMsg({
+      key: s.key,
+      text: `Signed out of ${s.name} on this phone.`,
+      tone: "info"
+    });
+    refresh();
+    window.dispatchEvent(new Event(BACKUP_EVENT));
+  };
+  const btn = on => ({
+    padding: "9px 14px",
+    borderRadius: 8,
+    fontSize: 10,
+    fontWeight: 700,
+    fontFamily: F.m,
+    cursor: "pointer",
+    letterSpacing: 1,
+    flexShrink: 0,
+    background: on ? "#2A2520" : "#FFF",
+    border: `1.5px solid ${on ? "#2A2520" : "#E8E4DE"}`,
+    color: on ? "#F5F2ED" : "#2A2520"
+  });
+  const now = Date.now();
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      margin: first ? "0 0 16px" : "28px 0 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 1,
+      background: "#DDD8D0"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      color: "#AAA",
+      letterSpacing: 3
+    }
+  }, "GOOGLE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 1,
+      background: "#DDD8D0"
+    }
+  })), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: F.b,
+      fontSize: 11,
+      color: "#999",
+      margin: "0 0 10px",
+      lineHeight: 1.4
+    }
+  }, "Google signs the app out after an hour. Connect before a session so photos, backups and videos save without stopping to ask."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FFF",
+      border: "1.5px solid #E8E4DE",
+      borderRadius: 8,
+      overflow: "hidden",
+      marginBottom: 18
+    }
+  }, services.map((s, i) => {
+    const exp = readTokenExpiry(s.tokenKey);
+    const left = exp - 60000 - now;
+    const on = left > 0;
+    const mins = Math.max(1, Math.round(left / 60000));
+    const m = msg && msg.key === s.key ? msg : null;
+    return /*#__PURE__*/React.createElement("div", {
+      key: s.key,
+      style: {
+        padding: "12px",
+        borderTop: i ? "1px solid #F0ECE6" : "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: on ? "#3A8A7A" : "#D5CFC6"
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "block",
+        fontFamily: F.b,
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#2A2520"
+      }
+    }, s.name), /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "block",
+        fontFamily: F.b,
+        fontSize: 11,
+        color: on ? "#3A8A7A" : "#999",
+        marginTop: 1
+      }
+    }, on ? `Connected · ${mins} min left` : "Not connected", " ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#BBB"
+      }
+    }, "\xB7 ", s.what))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => connect(s),
+      disabled: !!busy,
+      style: btn(!on)
+    }, busy === s.key ? "…" : on ? "RENEW" : "CONNECT")), (on || m) && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginTop: 6,
+        paddingLeft: 18
+      }
+    }, m && /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        fontFamily: F.b,
+        fontSize: 11,
+        color: m.tone === "ok" ? "#3A8A7A" : m.tone === "bad" ? "#C45A5A" : "#999"
+      }
+    }, m.text), on && /*#__PURE__*/React.createElement("button", {
+      onClick: () => signOut(s),
+      style: {
+        marginLeft: "auto",
+        border: "none",
+        background: "transparent",
+        padding: "2px 0",
+        fontFamily: F.m,
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: 1,
+        color: "#AAA",
+        cursor: "pointer"
+      }
+    }, "SIGN OUT")));
+  })));
+}
+
 // The grade other climbers reckon a problem is. Purely a note: shown with the climb's notes,
 // never used as its grade or in analytics.
 function OthersGradeLine({
@@ -13679,12 +13907,12 @@ function StretchApp() {
         color: "#2A2520",
         margin: "0 0 20px"
       }
-    }, "Settings"), /*#__PURE__*/React.createElement("div", {
+    }, "Settings"), /*#__PURE__*/React.createElement(GoogleConnections, { first: true }), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        margin: "0 0 16px"
+        margin: "28px 0 16px"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
