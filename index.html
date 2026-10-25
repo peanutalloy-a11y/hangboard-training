@@ -6,6 +6,27 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Send Log"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#F5F2ED"/>
+<link rel="manifest" href="icons/send-log/manifest.webmanifest"/>
+<link rel="apple-touch-icon" href="icons/send-log/apple-touch-icon-180.png"/>
+<link rel="apple-touch-icon" sizes="152x152" href="icons/send-log/apple-touch-icon-152.png"/>
+<link rel="apple-touch-icon" sizes="167x167" href="icons/send-log/apple-touch-icon-167.png"/>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/send-log/favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="icons/send-log/favicon-16.png"/>
+<!-- iPhone launch screens -->
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1320x2868.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1206x2622.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1260x2736.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1290x2796.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1179x2556.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1284x2778.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1170x2532.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1125x2436.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1242x2688.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/send-log/splash/splash-1080x2340.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/send-log/splash/splash-828x1792.png"/>
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/send-log/splash/splash-750x1334.png"/>
 <title>Send Log — Training Tracker</title>
 <style>
   html,body{margin:0;padding:0;background:#F5F2ED;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
@@ -393,7 +414,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "24 Oct 2026, build 35";
+<script>const APP_VERSION = "26 Oct 2026, build 37";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -11998,13 +12019,13 @@ function GoogleConnections({
 // ═══════════════════════════════════════════════════
 const STYLE_TAG_GROUPS = [{
   name: "Holds",
-  tags: ["Crimps", "Slopers", "Pinches", "Pockets", "Jugs"]
+  tags: ["Crimps", "Slopers", "Pinches", "Pockets", "Jugs", "Underclings", "Volumes"]
 }, {
   name: "Wall",
   tags: ["Slab", "Vertical", "Overhang", "Roof"]
 }, {
   name: "Moves",
-  tags: ["Dyno", "Coordination", "Balance", "Compression", "Heel hooks", "Toe hooks", "Mantle"]
+  tags: ["Dyno", "Coordination", "Balance", "Compression", "Heel hooks", "Toe hooks", "Mantle", "Drop knee", "Deadpoint", "Smearing"]
 }];
 const ALL_STYLE_TAGS = STYLE_TAG_GROUPS.flatMap(g => g.tags);
 function cleanTags(tags) {
