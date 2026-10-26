@@ -291,6 +291,13 @@
   .cover-fig-label { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
   .cover-fig-note { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
   .cover-fig.wide { margin-top: 10px; }
+  .cover-fig-tap { border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; display: block; }
+  .cover-fig-tap:active { background: var(--brass-soft); }
+  .cover-fig-tap .bill-group-chevron { display: inline-flex; vertical-align: middle; margin-left: 2px; transform: rotate(90deg); }
+  .cover-fig-tap .bill-group-chevron.open { transform: rotate(-90deg); }
+  .cover-fig-tap .bill-group-chevron svg { width: 13px; height: 13px; }
+  .hold-detail { overflow: hidden; max-height: 0; transition: max-height .32s cubic-bezier(.22,.61,.36,1); }
+  .hold-detail.open { max-height: none; }
   .cover-fig.wide.ahead { background: var(--green-soft); }
   .cover-fig.wide.ahead .cover-fig-value { color: var(--green); }
   .cover-fig.wide.short { background: var(--rust-soft); }
@@ -1238,8 +1245,14 @@
     for(var k = 0; k <= chartDays && k < startOf.length; k++) series.push({ day: k, balance: buffer + startOf[k] });
     var cats = Object.keys(byCat).map(function(c){ return { name: c, weekly: byCat[c] }; })
       .sort(function(a, b){ return b.weekly - a.weekly; });
+    // Target at 12:01 am of day j from today: before that day's bills and before any top-up that day.
+    function targetAt(j){
+      if(j < k0){ var s = 0; for(var x = j; x < k0; x++) s += dayOut[x]; return buffer + s; }
+      return buffer + startOf[j - k0];
+    }
     return { weekly: weekly, buffer: buffer, series: series, byCat: cats,
-             holdDate: addDays(today, k0), billsBefore: billsBefore };
+             holdDate: addDays(today, k0), billsBefore: billsBefore,
+             today: targetAt(0), tomorrow: targetAt(1), billsToday: dayOut[0], topUpToday: k0 === 0 };
   }
 
   function drawCoverChart(canvas, series, actual, startDate){
@@ -1291,6 +1304,27 @@
       '<div class="cover-fig-note">' + note + '</div></div>';
   }
 
+  var holdOpen = false;
+  function dayLabel(n){ var d = addDays(startOfDay(new Date()), n); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + formatShortDate(d); }
+  function toggleHold(){
+    var body = document.getElementById('hold-detail'), btn = document.getElementById('hold-toggle');
+    if(!body || !btn) return;
+    holdOpen = !holdOpen;
+    if(holdOpen){
+      body.classList.add('open');
+      body.style.maxHeight = body.scrollHeight + 'px';
+      setTimeout(function(){ if(holdOpen) body.style.maxHeight = 'none'; }, 340);
+    } else {
+      body.style.maxHeight = body.scrollHeight + 'px';
+      void body.offsetWidth;
+      body.style.maxHeight = '0px';
+      body.classList.remove('open');
+    }
+    btn.setAttribute('aria-expanded', String(holdOpen));
+    var ch = btn.querySelector('.bill-group-chevron');
+    if(ch) ch.classList.toggle('open', holdOpen);
+  }
+
   function renderCover(){
     var el = document.getElementById('cover-block');
     if(!el) return;
@@ -1325,7 +1359,18 @@
         '<div class="cover-title">Expenses cover</div>' +
         '<div class="cover-figures">' +
           '<div class="cover-fig"><div class="cover-fig-label">Set aside each week</div><div class="cover-fig-value num">' + formatCurrency(c.weekly) + '</div><div class="cover-fig-note">Weekly average of all bills</div></div>' +
-          '<div class="cover-fig"><div class="cover-fig-label">Should hold as of ' + holdLabel + '</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div><div class="cover-fig-note">Before that week\'s set-aside goes in</div></div>' +
+          '<button type="button" class="cover-fig cover-fig-tap" id="hold-toggle" aria-expanded="' + holdOpen + '" aria-controls="hold-detail">' +
+            '<div class="cover-fig-label">Should hold as of ' + holdLabel + '</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div>' +
+            '<div class="cover-fig-note">Before that week\'s set-aside goes in <span class="bill-group-chevron' + (holdOpen ? ' open' : '') + '">' + iconChevron() + '</span></div>' +
+          '</button>' +
+        '</div>' +
+        '<div class="hold-detail' + (holdOpen ? ' open' : '') + '" id="hold-detail"' + (holdOpen ? ' style="max-height:none;"' : '') + '>' +
+          '<div class="cover-figures" style="margin-top:10px;">' +
+            '<div class="cover-fig"><div class="cover-fig-label">12:01 am today, ' + dayLabel(0) + '</div><div class="cover-fig-value num">' + formatCurrency(c.today) + '</div>' +
+              '<div class="cover-fig-note">' + (c.billsToday > 0 ? 'Covers today\'s ' + formatCurrency(c.billsToday) + ' of bills' : 'No bills due today') + (c.topUpToday ? ', before today\'s top-up' : '') + '</div></div>' +
+            '<div class="cover-fig"><div class="cover-fig-label">12:01 am tomorrow, ' + dayLabel(1) + '</div><div class="cover-fig-value num">' + formatCurrency(c.tomorrow) + '</div>' +
+              '<div class="cover-fig-note">' + (c.topUpToday ? 'After today\'s top-up and bills' : (c.billsToday > 0 ? 'After today\'s bills' : 'Same as today, nothing goes in or out')) + '</div></div>' +
+          '</div>' +
         '</div>' +
         disposableBox() +
         status +
@@ -2156,6 +2201,7 @@
   document.addEventListener('click', function(e){
     var t = e.target.closest('button');
     if(!t) return;
+    if(t.id === 'hold-toggle'){ toggleHold(); return; }
     var groupKey = t.getAttribute('data-toggle-group');
     if(groupKey !== null){ toggleBillGroup(t, groupKey); return; }
     var id;
