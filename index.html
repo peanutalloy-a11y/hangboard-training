@@ -33,6 +33,13 @@
   * { box-sizing: border-box; -webkit-user-select:none; user-select:none; }
   input, textarea { -webkit-user-select:text; user-select:text; }
   #root{min-height:100vh;}
+  /* Launch splash: the same layout as the iPhone launch images, so the hand-over is seamless. */
+  #splash{position:fixed;inset:0;z-index:2147483000;background:#F5F2ED;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:5vh;transition:opacity .35s ease;pointer-events:none;}
+  #splash svg{width:30vw;height:26.4vw;display:block}
+  #splash .sl-word{margin-top:6vw;font-family:-apple-system,"SF Pro Display","Inter Display",system-ui,sans-serif;font-weight:800;font-size:10vw;letter-spacing:-0.12vw;line-height:1;color:#2A2520}
+  #splash .sl-word span{color:#D4663A}
+  #splash .sl-sub{margin-top:2.8vw;font-family:ui-monospace,"SF Mono",Menlo,"DejaVu Sans Mono",monospace;font-size:2.6vw;letter-spacing:1vw;color:#9A9085}
+  @media (min-width:600px){#splash svg{width:180px;height:158px}#splash .sl-word{margin-top:36px;font-size:60px;letter-spacing:-0.7px}#splash .sl-sub{margin-top:17px;font-size:15px;letter-spacing:6px}}
   #boot-loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#F5F2ED;font-family:-apple-system,sans-serif;}
   @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
   @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -43,6 +50,7 @@
   @keyframes expandSet{from{opacity:0;max-height:0;margin-top:0;padding:0}to{opacity:1;max-height:60px;margin-top:6px}}
   @keyframes checkDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
   @keyframes circleDraw{from{stroke-dashoffset:190}to{stroke-dashoffset:0}}
+  @keyframes countBump{0%{transform:scale(1)}40%{transform:scale(1.3)}100%{transform:scale(1)}}
   @keyframes bounceIn{0%{opacity:0;transform:scale(0.3)}50%{opacity:1;transform:scale(1.08)}70%{transform:scale(0.95)}100%{transform:scale(1)}}
   @keyframes chalkFloat{0%{opacity:0.8;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-80px) scale(0.3)}}
   @keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
@@ -53,6 +61,18 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<div id="splash" aria-hidden="true">
+<svg viewBox="78 76.7 370 325.6"><path d="M330 200 L440 392 L220 392 Z" fill="#8F7E70" stroke="#8F7E70" stroke-width="16" stroke-linejoin="round"/><path d="M226 150 L366 392 L86 392 Z" fill="#D4663A" stroke="#D4663A" stroke-width="16" stroke-linejoin="round"/><line x1="226" y1="150" x2="226" y2="84" stroke="#2A2520" stroke-width="10" stroke-linecap="round"/><path d="M231 86 L284 104 L231 122 Z" fill="#2A2520" stroke="#2A2520" stroke-width="6" stroke-linejoin="round"/></svg>
+<div class="sl-word">SEND<span>.</span>LOG</div>
+<div class="sl-sub">TRAINING TRACKER</div>
+</div>
+<script>
+// Fades the splash once the app has loaded: never before 1 second from opening, and always a
+// short beat after the app is ready, so it's seen rather than flashed past.
+(function(){var s=document.getElementById("splash"),done=false;
+function hide(){if(done)return;done=true;var wait=Math.max(1000-performance.now(),300);setTimeout(function(){s.style.opacity="0";setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},400);},wait);}
+window.addEventListener("load",hide);setTimeout(hide,5000);})();
+</script>
 <div id="root"><div id="boot-loading"><div style="width:28px;height:28px;border:2.5px solid #E8E4DE;border-top-color:#D4663A;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div></div>
 <script>/**
  * @license React
@@ -414,7 +434,7 @@ mediabunny/dist/modules/src/index.js:
    *)
 */
 </script>
-<script>const APP_VERSION = "26 Oct 2026, build 37";
+<script>const APP_VERSION = "27 Oct 2026, build 39";
 // Each toLocaleDateString call normally builds a fresh Intl formatter, which is slow on phones
 // when a list renders dozens of dates. Reuse one formatter per locale + options instead.
 (function () {
@@ -5315,7 +5335,7 @@ function parseFingerCSV(text, existingLogs) {
 }
 
 // ─── Climb Log CSV backup/restore helpers ────────────
-const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "OthersGrade", "Tags", "ProblemId", "Backfilled"];
+const CSV_HEADER = ["Type", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "Notes", "Date", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "OthersGrade", "Tags", "ProblemId", "Backfilled", "HighPoint"];
 function csvEscape(val) {
   if (val === null || val === undefined) return "";
   const s = String(val);
@@ -5352,7 +5372,7 @@ function buildClimbCSV(data) {
   });
   // The activity log: Status = flash/send/try, Attempts = tries in that line, Date = when.
   (data.activity || []).forEach(e => {
-    rows.push(["activity", e.id, e.sector || "", e.color || "", e.grade || "", e.kind, e.n, "", e.t, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", e.pid, e.backfilled ? "1" : ""]);
+    rows.push(["activity", e.id, e.sector || "", e.color || "", e.grade || "", e.kind, e.n, "", e.t, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", e.pid, e.backfilled ? "1" : "", e.high != null ? e.high : ""]);
   });
   return rows.map(r => r.map(csvEscape).join(",")).join("\r\n");
 }
@@ -5423,7 +5443,8 @@ function parseClimbCSV(text, existingData) {
     iOthersGrade = idx("OthersGrade"),
     iTags = idx("Tags"),
     iProblemId = idx("ProblemId"),
-    iBackfilled = idx("Backfilled");
+    iBackfilled = idx("Backfilled"),
+    iHigh = idx("HighPoint");
   if (iType === -1 || iSector === -1) throw new Error("Missing required columns");
   const activity = [...(existingData.activity || [])];
   const activityIds = new Set(activity.map(e => e.id));
@@ -5476,6 +5497,9 @@ function parseClimbCSV(text, existingData) {
           n: Number(row[iAttempts]) || 0,
           ...(iBackfilled !== -1 && row[iBackfilled] ? {
             backfilled: true
+          } : {}),
+          ...(iHigh !== -1 && validHigh(row[iHigh]) != null ? {
+            high: validHigh(row[iHigh])
           } : {})
         });
       }
@@ -6044,7 +6068,11 @@ function ClimbApp() {
     setEditingProblem(null);
     setView("add");
   };
-  const saveProblem = problem => {
+  const saveProblem = incoming => {
+    const {
+      __high,
+      ...problem
+    } = incoming;
     const cur = dataRef.current;
     const destSector = problem.sector;
     const isEdit = !!problem.id;
@@ -6099,15 +6127,32 @@ function ClimbApp() {
     const before = isEdit ? allLoggedProblems(cur).find(p => p.id === problem.id) : null;
     const newEvents = isEdit ? eventsForEdit(before, {
       ...problem,
-      sector: destSector
+      sector: destSector,
+      __high
     }) : eventsForNewClimb({
       ...newProblem,
-      sector: destSector
+      sector: destSector,
+      __high
     });
+    let activity = [...(cur.activity || []), ...newEvents];
+    // No new tries, but the "How far" changed: that's a correction to the most recent try.
+    if (isEdit && !newEvents.length && problem.status === "project") {
+      const pr = climbProgress(cur.activity, problem);
+      if (pr.latestTryId && (pr.latestHigh ?? null) !== (__high ?? null)) {
+        activity = activity.map(e => {
+          if (e.id !== pr.latestTryId) return e;
+          const {
+            high: _old,
+            ...rest
+          } = e;
+          return __high == null ? rest : withHigh(rest, __high);
+        });
+      }
+    }
     persist({
       ...cur,
       sectorLogs,
-      activity: [...(cur.activity || []), ...newEvents]
+      activity
     });
     setView("home");
     setEditingProblem(null);
@@ -6151,26 +6196,77 @@ function ClimbApp() {
       }
     });
   };
+  const [bumpId, setBumpId] = useState(null); // the climb whose try count just went up, for a little bump
+  // Logs one try. Returns what the confirmation, "How far?" row and Undo need.
   const quickAddAttempt = (sectorName, id) => {
     const cur = dataRef.current;
     const log = cur.sectorLogs[sectorName];
-    if (!log) return;
+    if (!log) return null;
+    const target = log.currentProblems.find(p => p.id === id);
+    if (!target) return null;
+    const attempts = (target.attempts || 0) + 1;
+    const ev = activityEvent({
+      ...target,
+      sector: sectorName
+    }, "try", 1);
     const updated = {
       ...log,
       currentProblems: log.currentProblems.map(p => p.id === id ? {
         ...p,
-        attempts: (p.attempts || 0) + 1,
-        date: new Date().toISOString()
+        attempts,
+        date: ev.t
       } : p)
     };
-    const target = log.currentProblems.find(p => p.id === id);
     persist({
       ...cur,
       sectorLogs: {
         ...cur.sectorLogs,
         [sectorName]: updated
       },
-      activity: target ? [...(cur.activity || []), activityEvent({ ...target, sector: sectorName }, "try", 1)] : cur.activity || []
+      activity: [...(cur.activity || []), ev]
+    });
+    setBumpId(id + ":" + attempts);
+    return {
+      eventId: ev.id,
+      attempts,
+      prevDate: target.date,
+      prevAttempts: target.attempts || 0
+    };
+  };
+  // Attaches (or clears) a high point on one logged try.
+  const setTryHigh = (eventId, high) => {
+    const cur = dataRef.current;
+    persist({
+      ...cur,
+      activity: (cur.activity || []).map(e => {
+        if (e.id !== eventId) return e;
+        const {
+          high: _old,
+          ...rest
+        } = e;
+        return high == null ? rest : withHigh(rest, high);
+      })
+    });
+  };
+  // Takes back a try logged by mistake: the line goes, and the climb's count and date go back.
+  const undoTry = (sectorName, id, eventId, prevDate, prevAttempts) => {
+    const cur = dataRef.current;
+    const log = cur.sectorLogs[sectorName];
+    if (!log) return;
+    persist({
+      ...cur,
+      sectorLogs: {
+        ...cur.sectorLogs,
+        [sectorName]: {
+          ...log,
+          currentProblems: log.currentProblems.map(p => p.id === id ? {
+            ...p,
+            attempts: prevAttempts,
+            date: prevDate || p.date
+          } : p)
+        }
+      },
+      activity: (cur.activity || []).filter(e => e.id !== eventId)
     });
   };
   const quickMarkSent = (sectorName, id) => {
@@ -6193,7 +6289,10 @@ function ClimbApp() {
         ...cur.sectorLogs,
         [sectorName]: updated
       },
-      activity: target ? [...(cur.activity || []), activityEvent({ ...target, sector: sectorName }, "send", 1)] : cur.activity || []
+      activity: target ? [...(cur.activity || []), withHigh(activityEvent({
+        ...target,
+        sector: sectorName
+      }, "send", 1), 100)] : cur.activity || []
     });
   };
   const resetSector = sectorName => {
@@ -6903,7 +7002,10 @@ function ClimbApp() {
           color: "#BBB",
           marginTop: 1
         }
-      }, colorMeta.name, " · ", formatDate(p.date))), /*#__PURE__*/React.createElement("span", {
+      }, colorMeta.name, " · ", formatDate(p.date)), /*#__PURE__*/React.createElement(ProjectBar, {
+        activity: data.activity,
+        p: p
+      })), /*#__PURE__*/React.createElement("span", {
         style: {
           fontFamily: F.m,
           fontSize: 9,
@@ -6913,8 +7015,11 @@ function ClimbApp() {
           background: `${statusMeta.color}18`,
           color: statusMeta.color,
           letterSpacing: 1,
-          flexShrink: 0
-        }
+          flexShrink: 0,
+          display: "inline-block",
+          animation: bumpId === p.id + ":" + p.attempts ? "countBump 0.45s ease" : "none"
+        },
+        key: "n" + p.attempts
       }, statusMeta.label, p.attempts ? ` ×${p.attempts}` : "")), expandedProblem === p.id && /*#__PURE__*/React.createElement("div", {
         style: {
           padding: "0 12px 12px",
@@ -6928,6 +7033,9 @@ function ClimbApp() {
         value: p.othersGrade
       }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
         tags: p.tags
+      }), /*#__PURE__*/React.createElement(ClimbProgress, {
+        activity: data.activity,
+        p: p
       }), p.notes && /*#__PURE__*/React.createElement("p", {
         style: {
           fontSize: 12,
@@ -6935,43 +7043,13 @@ function ClimbApp() {
           margin: "0 0 8px",
           fontStyle: "italic"
         }
-      }, "\"", p.notes, "\""), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8,
-          marginBottom: 8
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => quickAddAttempt(p.sector, p.id),
-        style: {
-          flex: 1,
-          padding: "8px 0",
-          fontSize: 11,
-          fontFamily: F.m,
-          fontWeight: 700,
-          borderRadius: 6,
-          background: "#FFF",
-          border: "1.5px solid #E8E4DE",
-          color: "#2A2520",
-          cursor: "pointer",
-          letterSpacing: 1
-        }
-      }, "+1 ATTEMPT"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => quickMarkSent(p.sector, p.id),
-        style: {
-          flex: 1,
-          padding: "8px 0",
-          fontSize: 11,
-          fontFamily: F.m,
-          fontWeight: 700,
-          borderRadius: 6,
-          background: "#3A8A7A",
-          border: "1.5px solid #3A8A7A",
-          color: "#FFF",
-          cursor: "pointer",
-          letterSpacing: 1
-        }
-      }, "✓ MARK SENT")), /*#__PURE__*/React.createElement("div", {
+      }, "\"", p.notes, "\""), /*#__PURE__*/React.createElement(QuickTryControls, {
+        p: p,
+        onAttempt: () => quickAddAttempt(p.sector, p.id),
+        onSent: () => quickMarkSent(p.sector, p.id),
+        onHigh: setTryHigh,
+        onUndo: (eventId, prevDate, prevAttempts) => undoTry(p.sector, p.id, eventId, prevDate, prevAttempts)
+      }), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           gap: 8,
@@ -7359,7 +7437,10 @@ function ClimbApp() {
                 color: "#BBB",
                 marginTop: 1
               }
-            }, formatDate(p.date))), /*#__PURE__*/React.createElement("span", {
+            }, formatDate(p.date)), /*#__PURE__*/React.createElement(ProjectBar, {
+              activity: data.activity,
+              p: p
+            })), /*#__PURE__*/React.createElement("span", {
               style: {
                 fontFamily: F.m,
                 fontSize: 9,
@@ -7368,8 +7449,11 @@ function ClimbApp() {
                 borderRadius: 5,
                 background: `${statusMeta.color}18`,
                 color: statusMeta.color,
-                letterSpacing: 1
-              }
+                letterSpacing: 1,
+                display: "inline-block",
+                animation: bumpId === p.id + ":" + p.attempts ? "countBump 0.45s ease" : "none"
+              },
+              key: "n" + p.attempts
             }, statusMeta.label, p.status !== "flash" && p.attempts ? ` ×${p.attempts}` : "")), expandedProblem === p.id && /*#__PURE__*/React.createElement("div", {
               style: {
                 marginTop: 8,
@@ -7384,6 +7468,9 @@ function ClimbApp() {
               value: p.othersGrade
             }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
         tags: p.tags
+      }), /*#__PURE__*/React.createElement(ClimbProgress, {
+        activity: data.activity,
+        p: p
       }), p.notes && /*#__PURE__*/React.createElement("p", {
               style: {
                 fontSize: 12,
@@ -7391,43 +7478,13 @@ function ClimbApp() {
                 margin: "0 0 8px",
                 fontStyle: "italic"
               }
-            }, "\"", p.notes, "\""), p.status === "project" && /*#__PURE__*/React.createElement("div", {
-              style: {
-                display: "flex",
-                gap: 8,
-                marginBottom: 8
-              }
-            }, /*#__PURE__*/React.createElement("button", {
-              onClick: () => quickAddAttempt(name, p.id),
-              style: {
-                flex: 1,
-                padding: "8px 0",
-                fontSize: 11,
-                fontFamily: F.m,
-                fontWeight: 700,
-                borderRadius: 6,
-                background: "#F5F2ED",
-                border: "1.5px solid #E8E4DE",
-                color: "#2A2520",
-                cursor: "pointer",
-                letterSpacing: 1
-              }
-            }, "+1 ATTEMPT"), /*#__PURE__*/React.createElement("button", {
-              onClick: () => quickMarkSent(name, p.id),
-              style: {
-                flex: 1,
-                padding: "8px 0",
-                fontSize: 11,
-                fontFamily: F.m,
-                fontWeight: 700,
-                borderRadius: 6,
-                background: "#3A8A7A",
-                border: "1.5px solid #3A8A7A",
-                color: "#FFF",
-                cursor: "pointer",
-                letterSpacing: 1
-              }
-            }, "✓ MARK SENT")), /*#__PURE__*/React.createElement("div", {
+            }, "\"", p.notes, "\""), p.status === "project" && /*#__PURE__*/React.createElement(QuickTryControls, {
+        p: p,
+        onAttempt: () => quickAddAttempt(name, p.id),
+        onSent: () => quickMarkSent(name, p.id),
+        onHigh: setTryHigh,
+        onUndo: (eventId, prevDate, prevAttempts) => undoTry(name, p.id, eventId, prevDate, prevAttempts)
+      }), /*#__PURE__*/React.createElement("div", {
               style: {
                 display: "flex",
                 gap: 8,
@@ -7761,6 +7818,7 @@ function ClimbApp() {
   if (view === "add") {
     return /*#__PURE__*/React.createElement(ProblemForm, {
       initial: editingProblem,
+      latestHigh: editingProblem ? climbProgress(data.activity, editingProblem).latestHigh : null,
       initialSector: prefillSector,
       sectors: sectorOptions,
       onSave: saveProblem,
@@ -8064,6 +8122,9 @@ function ClimbApp() {
           value: p.othersGrade
         }), p.tags && p.tags.length > 0 && /*#__PURE__*/React.createElement(ClimbTagsLine, {
         tags: p.tags
+      }), /*#__PURE__*/React.createElement(ClimbProgress, {
+        activity: data.activity,
+        p: p
       }), p.notes && /*#__PURE__*/React.createElement("p", {
           style: {
             fontSize: 12,
@@ -12141,10 +12202,25 @@ function activityEvent(p, kind, n, t) {
     n: Math.max(0, Math.round(Number(n) || 0))
   };
 }
+// How far up a climb a try got, in 10% steps. A send or flash is 100%.
+const HIGH_STEPS = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+const validHigh = h => HIGH_STEPS.includes(Number(h)) || Number(h) === 100 ? Number(h) : null;
+function withHigh(e, h) {
+  const v = validHigh(h);
+  return v == null ? e : {
+    ...e,
+    high: v
+  };
+}
+function eventHigh(e) {
+  if (e && e.high != null && validHigh(e.high) != null) return Number(e.high);
+  if (e && (e.kind === "send" || e.kind === "flash")) return 100;
+  return null;
+}
 function eventsForNewClimb(p) {
-  if (p.status === "flash") return [activityEvent(p, "flash", 1, p.date)];
-  if (p.status === "sent") return [activityEvent(p, "send", Math.max(1, Number(p.attempts) || 1), p.date)];
-  return [activityEvent(p, "try", Math.max(1, Number(p.attempts) || 1), p.date)];
+  if (p.status === "flash") return [withHigh(activityEvent(p, "flash", 1, p.date), 100)];
+  if (p.status === "sent") return [withHigh(activityEvent(p, "send", Math.max(1, Number(p.attempts) || 1), p.date), 100)];
+  return [withHigh(activityEvent(p, "try", Math.max(1, Number(p.attempts) || 1), p.date), p.__high)];
 }
 // What an edit adds to the log. Lowering the tries or un-sending is treated as a correction, not climbing.
 function eventsForEdit(before, after) {
@@ -12152,8 +12228,8 @@ function eventsForEdit(before, after) {
   const oa = Number(before.attempts) || (before.status === "flash" ? 1 : 0);
   const na = Number(after.attempts) || (after.status === "flash" ? 1 : 0);
   const d = na - oa;
-  if (before.status !== "sent" && before.status !== "flash" && after.status === "sent") return [activityEvent(after, "send", Math.max(1, d))];
-  if (before.status === after.status && d > 0 && after.status !== "flash") return [activityEvent(after, "try", d)];
+  if (before.status !== "sent" && before.status !== "flash" && after.status === "sent") return [withHigh(activityEvent(after, "send", Math.max(1, d)), 100)];
+  if (before.status === after.status && d > 0 && after.status !== "flash") return [withHigh(activityEvent(after, "try", d), after.status === "sent" ? 100 : after.__high)];
   return [];
 }
 // Gives every climb that has no log lines one line at its saved date, so history from before the
@@ -12188,6 +12264,303 @@ function ensureActivity(data) {
     ...data,
     activity: kept
   } : data;
+}
+
+// Best high point overall, the best per session (day), and the most recent try's high point.
+function climbProgress(activity, p) {
+  const lines = (activity || []).filter(e => p && String(e.pid) === String(p.id) && e.t).sort((a, b) => new Date(a.t) - new Date(b.t));
+  const byDay = [];
+  let best = null,
+    latestHigh = null,
+    latestTryId = null;
+  lines.forEach(e => {
+    const h = eventHigh(e);
+    const day = isoDayLocal(new Date(e.t));
+    let row = byDay[byDay.length - 1];
+    if (!row || row.day !== day) byDay.push(row = {
+      day,
+      best: null,
+      tries: 0
+    });
+    row.tries += Number(e.n) || 0;
+    if (h != null) {
+      row.best = row.best == null ? h : Math.max(row.best, h);
+      best = best == null ? h : Math.max(best, h);
+    }
+    if (e.kind === "try") {
+      latestTryId = e.id;
+      latestHigh = e.high != null ? Number(e.high) : null;
+    }
+  });
+  if (p && (p.status === "sent" || p.status === "flash")) best = 100;
+  return {
+    best,
+    sessions: byDay,
+    latestHigh,
+    latestTryId
+  };
+}
+const shortDay = day => {
+  const d = new Date(day + "T00:00:00");
+  return `${d.getDate()} ${d.toLocaleDateString("en-AU", {
+    month: "short"
+  })}`;
+};
+function HighPointChips({
+  value,
+  onChange,
+  compact
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(9, minmax(0, 1fr))",
+      gap: compact ? 4 : 5
+    }
+  }, HIGH_STEPS.map(v => {
+    const on = Number(value) === v;
+    return /*#__PURE__*/React.createElement("button", {
+      key: v,
+      type: "button",
+      "aria-pressed": on,
+      "aria-label": `${v}% of the climb`,
+      onClick: () => onChange(on ? null : v),
+      style: {
+        minHeight: compact ? 38 : 40,
+        padding: 0,
+        borderRadius: 8,
+        fontFamily: F.m,
+        fontSize: compact ? 11 : 12,
+        fontWeight: 700,
+        cursor: "pointer",
+        background: on ? "#2A2520" : "#FFF",
+        border: `1.5px solid ${on ? "#2A2520" : "#E8E4DE"}`,
+        color: on ? "#F5F2ED" : "#2A2520"
+      }
+    }, v);
+  }));
+}
+
+// The best-so-far bar on an opened climb, with the best for each session underneath.
+function ClimbProgress({
+  activity,
+  p
+}) {
+  const pr = climbProgress(activity, p);
+  if (p.status !== "project" && pr.best == null) return null;
+  const withData = pr.sessions.filter(s => s.best != null);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      margin: "0 0 10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 8,
+      borderRadius: 4,
+      background: "#E8E4DE",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${pr.best || 0}%`,
+      height: "100%",
+      borderRadius: 4,
+      background: pr.best === 100 ? "#3A8A7A" : "#D4663A",
+      transition: "width 0.3s ease"
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#2A2520",
+      whiteSpace: "nowrap"
+    }
+  }, pr.best == null ? "No high point yet" : pr.best === 100 ? "Topped" : `Best ${pr.best}%`)), withData.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 9,
+      color: "#999",
+      marginTop: 5,
+      lineHeight: 1.5
+    }
+  }, withData.slice(-5).map(s => `${shortDay(s.day)} ${s.best}%`).join("  ·  ")));
+}
+
+// A thin best-so-far bar under a project's name in the climb lists.
+function ProjectBar({
+  activity,
+  p
+}) {
+  if (!p || p.status !== "project") return null;
+  const best = climbProgress(activity, p).best;
+  if (!best) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 4
+    },
+    "aria-label": `Best so far ${best}%`
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 64,
+      height: 4,
+      borderRadius: 2,
+      background: "#E8E4DE",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${best}%`,
+      height: "100%",
+      background: "#D4663A"
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 8,
+      color: "#AAA"
+    }
+  }, best, "%"));
+}
+
+// Big +1 Attempt / Mark Sent buttons. A try shows a green confirmation, an Undo for a few seconds,
+// and an optional "How far?" row that attaches a high point to that try.
+function QuickTryControls({
+  p,
+  onAttempt,
+  onSent,
+  onHigh,
+  onUndo,
+  showSent = true
+}) {
+  const [last, setLast] = useState(null); // { eventId, attempts, prevDate, prevAttempts, high }
+  const [flash, setFlash] = useState(false);
+  const [undoable, setUndoable] = useState(false);
+  const [saved, setSaved] = useState(null);
+  const t1 = useRef(null),
+    t2 = useRef(null),
+    t3 = useRef(null);
+  useEffect(() => () => [t1, t2, t3].forEach(t => clearTimeout(t.current)), []);
+  const attempt = () => {
+    const r = onAttempt();
+    if (!r) return;
+    setLast({
+      ...r,
+      high: null
+    });
+    setSaved(null);
+    setFlash(true);
+    setUndoable(true);
+    clearTimeout(t1.current);
+    clearTimeout(t2.current);
+    t1.current = setTimeout(() => setFlash(false), 1600);
+    t2.current = setTimeout(() => setUndoable(false), 5000);
+  };
+  const pick = v => {
+    if (!last) return;
+    onHigh(last.eventId, v);
+    setLast(l => ({
+      ...l,
+      high: v
+    }));
+    if (v != null) {
+      setSaved(v);
+      clearTimeout(t3.current);
+      t3.current = setTimeout(() => {
+        setLast(null);
+        setSaved(null);
+      }, 900);
+    }
+  };
+  const undo = () => {
+    if (!last) return;
+    onUndo(last.eventId, last.prevDate, last.prevAttempts);
+    setLast(null);
+    setFlash(false);
+    setUndoable(false);
+    setSaved(null);
+  };
+  const big = (bg, border, color) => ({
+    minHeight: 48,
+    padding: "0 8px",
+    fontSize: 12,
+    fontFamily: F.m,
+    fontWeight: 700,
+    borderRadius: 10,
+    background: bg,
+    border: `1.5px solid ${border}`,
+    color,
+    cursor: "pointer",
+    letterSpacing: 1,
+    transition: "background 0.2s, border-color 0.2s, color 0.2s"
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: showSent ? "repeat(2, minmax(0, 1fr))" : "1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: attempt,
+    style: flash ? big("#E3F1ED", "#3A8A7A", "#2F7466") : big("#FFF", "#E8E4DE", "#2A2520")
+  }, flash && last ? `✓ TRY ${last.attempts} LOGGED` : "+1 ATTEMPT"), showSent && /*#__PURE__*/React.createElement("button", {
+    onClick: onSent,
+    style: big("#3A8A7A", "#3A8A7A", "#FFF")
+  }, "\u2713 MARK SENT")), last && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      padding: 10,
+      background: "#FFF",
+      border: "1px solid #E8E4DE",
+      borderRadius: 10,
+      animation: "fadeUp 0.2s ease"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      letterSpacing: 1,
+      color: saved ? "#3A8A7A" : "#999"
+    }
+  }, saved ? `✓ ${saved}% SAVED` : "HOW FAR? (OPTIONAL)"), undoable && /*#__PURE__*/React.createElement("button", {
+    onClick: undo,
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: "6px 0 6px 12px",
+      fontFamily: F.m,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: 1,
+      color: "#C45A5A",
+      cursor: "pointer"
+    }
+  }, "UNDO")), /*#__PURE__*/React.createElement(HighPointChips, {
+    value: last.high,
+    onChange: pick,
+    compact: true
+  })));
 }
 
 // ─── Analysis export ───
@@ -12270,11 +12643,17 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
       sector: p && p.sector || e.sector,
       color: p && p.color || e.color,
       grade: p && p.grade || e.grade,
-      tags: cleanTags(p && p.tags)
+      tags: cleanTags(p && p.tags),
+      high: eventHigh(e)
     };
   }).filter(e => e.t && !isNaN(new Date(e.t))).sort((a, b) => new Date(a.t) - new Date(b.t));
   const firstAt = {};
   const sentAt = {};
+  const bestOf = (k, p) => {
+    if (p && (p.status === "sent" || p.status === "flash")) return "100%";
+    const v = events.filter(e => String(e.pid) === k && e.high != null).map(e => e.high);
+    return v.length ? `${Math.max(...v)}%` : "";
+  };
   events.forEach(e => {
     const k = String(e.pid);
     if (!firstAt[k]) firstAt[k] = new Date(e.t);
@@ -12318,7 +12697,14 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
       open: worked.length - convertedBy.length,
       level: hardestConsistentColor(freshClimbs),
       hardest,
-      hardShare: hardTries != null && tries ? hardTries / tries : null
+      hardShare: hardTries != null && tries ? hardTries / tries : null,
+      higher: pids.filter(k => {
+        if (sentAt[k] && sentAt[k] < P.from) return false;
+        const mine = events.filter(e => String(e.pid) === k && e.high != null);
+        const b = mine.filter(e => new Date(e.t) < P.from).map(e => e.high);
+        const d = mine.filter(e => inPeriod(e, P)).map(e => e.high);
+        return d.length > 0 && b.length > 0 && Math.max(...d) > Math.max(...b);
+      }).length
     };
   };
   const out = [];
@@ -12333,7 +12719,7 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
   const S = periods.map(P => stats(P));
   const row = (name, pick, fmt, meaning) => ["Summary", name, ...S.map(s => fmt(pick(s))), meaning];
   const n = x => x == null ? "–" : String(x);
-  section(["Metric", ...periods.map(P => P.label), "Meaning"], [row("Climbing days", s => s.days, n, "Days with at least one logged try"), row("Climbs tried", s => s.climbs, n, "Different climbs with any tries"), row("New climbs", s => s.fresh, n, "Climbs tried for the first time"), row("Total tries", s => s.tries, n, "Every try, including sends and flashes"), row("Tries per climbing day", s => s.triesPerDay, fmt1, "Volume per session"), row("Flashes", s => s.flashes, n, "First-try sends"), row("Sends after more than one try", s => s.sends, n, "Includes finished projects"), row("Flash rate", s => s.flashRate, fmtPct, "Share of new climbs flashed"), row("Tries per send", s => s.triesToSend, fmt1, "Average total tries on climbs sent (not flashed)"), row("Project conversion", s => s.conversion, fmtPct, "Climbs worked (not flashed) that were sent by the end of the period"), row("Still open", s => s.open, n, "Climbs worked but not sent by the end of the period"), row("Level", s => s.level || "–", x => x, "Level rule applied to this period's new climbs"), row("Hardest colour sent", s => s.hardest || "–", x => x, "Including flashes"), row(`Share of tries at ${allTimeLevel || "level"} or harder`, s => s.hardShare, fmtPct, "Against the all-time level")]);
+  section(["Metric", ...periods.map(P => P.label), "Meaning"], [row("Climbing days", s => s.days, n, "Days with at least one logged try"), row("Climbs tried", s => s.climbs, n, "Different climbs with any tries"), row("New climbs", s => s.fresh, n, "Climbs tried for the first time"), row("Total tries", s => s.tries, n, "Every try, including sends and flashes"), row("Tries per climbing day", s => s.triesPerDay, fmt1, "Volume per session"), row("Flashes", s => s.flashes, n, "First-try sends"), row("Sends after more than one try", s => s.sends, n, "Includes finished projects"), row("Flash rate", s => s.flashRate, fmtPct, "Share of new climbs flashed"), row("Tries per send", s => s.triesToSend, fmt1, "Average total tries on climbs sent (not flashed)"), row("Project conversion", s => s.conversion, fmtPct, "Climbs worked (not flashed) that were sent by the end of the period"), row("Still open", s => s.open, n, "Climbs worked but not sent by the end of the period"), row("Level", s => s.level || "–", x => x, "Level rule applied to this period's new climbs"), row("Hardest colour sent", s => s.hardest || "–", x => x, "Including flashes"), row(`Share of tries at ${allTimeLevel || "level"} or harder`, s => s.hardShare, fmtPct, "Against the all-time level"), row("Projects that got higher", s => s.higher, n, "Climbs not yet sent before the period whose high point beat their previous best (needs high points)")]);
   const colourNames = HOLD_COLORS.map(c => c.name).filter(c => events.some(e => e.color === c));
   const breakdown = (label, key, list, match) => {
     const rows = [];
@@ -12397,10 +12783,10 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
       const d = new Date(e.t);
       return [P.label, dayStr(d), d.toLocaleDateString("en-AU", {
         weekday: "short"
-      }), e.sector, e.color, e.grade || "", e.tags.join("; "), e.kind === "try" ? "Tries" : e.kind === "send" ? "Sent" : "Flashed", String(e.n), String(e.pid), e.backfilled ? "yes" : ""];
+      }), e.sector, e.color, e.grade || "", e.tags.join("; "), e.kind === "try" ? "Tries" : e.kind === "send" ? "Sent" : "Flashed", String(e.n), e.high != null ? `${e.high}%` : "", String(e.pid), e.backfilled ? "yes" : ""];
     });
     if (!rows.length) rows.push([P.label, "No climbing logged"]);
-    section(["Date", "Day", "Sector", "Colour", "Grade", "Style", "What happened", "Tries", "Climb ID", "From before the log"], rows);
+    section(["Date", "Day", "Sector", "Colour", "Grade", "Style", "What happened", "Tries", "How far", "Climb ID", "From before the log"], rows);
   });
 
   // Active sectors and the climbs on them.
@@ -12410,15 +12796,52 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
     const resetTxt = until == null ? "no schedule" : until < 0 ? `overdue by ${-until} days` : `${until} days`;
     const done = (log.completedGroups || []).join("; ");
     const ps = (log.currentProblems || []).slice().sort((a, b) => colourRank(a.color) - colourRank(b.color));
-    if (!ps.length) activeRows.push(["Active sectors", name, resetTxt, done, "", "", "", "", "", "", "", ""]);
+    if (!ps.length) activeRows.push(["Active sectors", name, resetTxt, done, "", "", "", "", "", "", "", "", ""]);
     ps.forEach(p => {
       const k = String(p.id);
       const lines = events.filter(e => String(e.pid) === k);
       const status = p.status === "flash" ? "Flashed" : p.status === "sent" ? "Sent" : "Project";
-      activeRows.push(["Active sectors", name, resetTxt, done, p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), lines.length ? dayStr(new Date(lines[0].t)) : "", lines.length ? dayStr(new Date(lines[lines.length - 1].t)) : "", k]);
+      activeRows.push(["Active sectors", name, resetTxt, done, p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), bestOf(k, p), lines.length ? dayStr(new Date(lines[0].t)) : "", lines.length ? dayStr(new Date(lines[lines.length - 1].t)) : "", k]);
     });
   });
-  section(["Sector", "Resets in", "Colours marked complete", "Colour", "Grade", "Style", "Status", "Tries", "First tried", "Last tried", "Climb ID"], activeRows);
+  section(["Sector", "Resets in", "Colours marked complete", "Colour", "Grade", "Style", "Status", "Tries", "Best so far", "First tried", "Last tried", "Climb ID"], activeRows);
+
+  // Every open project: how high it has got, whether this week moved it up, and how many
+  // sessions it's been since the best last improved.
+  const thisWeek = periods[0];
+  const projRows = [];
+  Object.entries(data.sectorLogs || {}).filter(([, log]) => log && !log.archived).forEach(([name, log]) => (log.currentProblems || []).filter(p => p.status === "project").forEach(p => {
+    const k = String(p.id);
+    const lines = events.filter(e => String(e.pid) === k);
+    const hi = xs => {
+      const v = xs.map(e => e.high).filter(h => h != null);
+      return v.length ? Math.max(...v) : null;
+    };
+    const before = hi(lines.filter(e => new Date(e.t) < thisWeek.from));
+    const during = hi(lines.filter(e => inPeriod(e, thisWeek)));
+    const days = [];
+    lines.forEach(e => {
+      const d = dayStr(new Date(e.t));
+      let r = days[days.length - 1];
+      if (!r || r.d !== d) days.push(r = {
+        d,
+        best: null
+      });
+      if (e.high != null) r.best = r.best == null ? e.high : Math.max(r.best, e.high);
+    });
+    const best = hi(lines);
+    let since = "–";
+    if (best != null) {
+      const at = days.findIndex(r => r.best === best);
+      since = String(days.length - 1 - at);
+    }
+    const pct = v => v == null ? "–" : `${v}%`;
+    const triesWeek = lines.filter(e => inPeriod(e, thisWeek)).reduce((a, e) => a + (Number(e.n) || 0), 0);
+    const trend = during == null ? triesWeek ? "tried, no high point" : "not tried this week" : before == null ? "first high point" : during > before ? "higher" : during === before ? "same" : "lower";
+    projRows.push(["Project progress", name, p.color || "", p.grade || "", cleanTags(p.tags).join("; "), String(p.attempts || ""), pct(best), pct(before), pct(during), trend, String(triesWeek), String(days.length), since, lines.length ? dayStr(new Date(lines[lines.length - 1].t)) : "", k]);
+  }));
+  if (!projRows.length) projRows.push(["Project progress", "No open projects"]);
+  section(["Sector", "Colour", "Grade", "Style", "Tries", "Best so far", "Best before this week", "Best this week", "This week", "Tries this week", "Sessions", "Sessions since best improved", "Last tried", "Climb ID"], projRows);
 
   // Hangboard sessions, every one.
   section(["Date", "Session", "Exercises", "Sets", "Hangs", "Time on the board (s)", "Loads used", "Effort (RPE)"], sessions.map(s => ["Hangboard sessions", dayStr(s.d), s.name, s.exercises.join("; "), String(s.sets), String(s.hangs), String(s.secs), s.loads.join("; "), s.rpe ? String(s.rpe) : ""]));
@@ -12427,9 +12850,9 @@ function buildAnalysisCSV(climbData, fingerLogs, now = new Date(), sessionsConfi
   const historyRows = climbs.slice().sort((a, b) => (firstAt[String(a.id)] || 0) - (firstAt[String(b.id)] || 0)).map(p => {
     const k = String(p.id);
     const status = p.status === "flash" ? "Flashed" : p.status === "sent" ? "Sent" : "Project";
-    return ["History", p.sector || "", setOf[k] || "", p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), firstAt[k] ? dayStr(firstAt[k]) : "", sentAt[k] ? dayStr(sentAt[k]) : "", k];
+    return ["History", p.sector || "", setOf[k] || "", p.color || "", p.grade || "", cleanTags(p.tags).join("; "), status, String(p.attempts || (p.status === "flash" ? 1 : "")), bestOf(k, p), firstAt[k] ? dayStr(firstAt[k]) : "", sentAt[k] ? dayStr(sentAt[k]) : "", k];
   });
-  section(["Sector", "Set", "Colour", "Grade", "Style", "Status", "Tries", "First tried", "Sent", "Climb ID"], historyRows);
+  section(["Sector", "Set", "Colour", "Grade", "Style", "Status", "Tries", "Best so far", "First tried", "Sent", "Climb ID"], historyRows);
   return out.map(r => r.map(csvEscape).join(",")).join("\r\n");
 }
 function buildAnalysisCSVFromStorage(now = new Date()) {
@@ -12594,6 +13017,7 @@ function OthersGradeLine({
   }, value));
 }
 function ProblemForm({
+  latestHigh,
   initial,
   initialSector,
   sectors,
@@ -12609,6 +13033,7 @@ function ProblemForm({
   const [attempts, setAttempts] = useState(initial?.attempts || (initial?.status === "sent" ? 2 : 1));
   const [notes, setNotes] = useState(initial?.notes || "");
   const [tags, setTags] = useState(cleanTags(initial?.tags));
+  const [high, setHigh] = useState(initial ? latestHigh ?? null : null);
   const [photoLink, setPhotoLink] = useState(initial?.photoLink || "");
   const [capturedPhoto, setCapturedPhoto] = useState(null); // { file, url } once the camera/picker hands back a photo
   const [photoShareState, setPhotoShareState] = useState(null);
@@ -12815,6 +13240,7 @@ function ProblemForm({
       } : {}),
       status,
       attempts: status === "flash" ? 1 : Number(attempts) || 1,
+      __high: status === "project" ? high : null,
       notes: notes.trim(),
       ...(tags.length ? {
         tags
@@ -13077,7 +13503,21 @@ function ProblemForm({
       outline: "none",
       boxSizing: "border-box"
     }
-  }))), /*#__PURE__*/React.createElement(StyleTagPicker, {
+  }), status === "project" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: F.m,
+      fontSize: 10,
+      color: "#BBB",
+      marginBottom: 6
+    }
+  }, initial ? "How far did you get? (latest try)" : "How far did you get?"), /*#__PURE__*/React.createElement(HighPointChips, {
+    value: high,
+    onChange: setHigh
+  })))), /*#__PURE__*/React.createElement(StyleTagPicker, {
     value: tags,
     onChange: setTags
   }), /*#__PURE__*/React.createElement("div", {
@@ -13737,7 +14177,7 @@ function getMigratedStretchData() {
 // remapping their columns into one shared table on export, and extracting each section's own
 // rows back out on restore. A few column names collide across sections with different meanings
 // (Notes, Date), so those get a section-specific prefix in the unified file only.
-const UNIFIED_CSV_HEADER = ["Section", "Type", "SessionId", "FDate", "SessionType", "ExerciseId", "SetIndex", "RepIndex", "BW", "BWPercent", "AddedWeight", "Duration", "FNotes", "RPE", "ConfigId", "ConfigDay", "ConfigName", "ConfigExerciseId", "ConfigProtocol", "ConfigSets", "ConfigReps", "ConfigHangSec", "ConfigRepRestSec", "ConfigSetRestSec", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "CNotes", "CDate", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "Day", "RoutineId", "RoutineName", "RoutineOrder", "StretchId", "StretchName", "Reps", "HoldSec", "RestSec", "NextRestSec", "StretchOrder", "OthersGrade", "Tags", "ProblemId", "Backfilled"];
+const UNIFIED_CSV_HEADER = ["Section", "Type", "SessionId", "FDate", "SessionType", "ExerciseId", "SetIndex", "RepIndex", "BW", "BWPercent", "AddedWeight", "Duration", "FNotes", "RPE", "ConfigId", "ConfigDay", "ConfigName", "ConfigExerciseId", "ConfigProtocol", "ConfigSets", "ConfigReps", "ConfigHangSec", "ConfigRepRestSec", "ConfigSetRestSec", "Id", "Sector", "Color", "Grade", "Status", "Attempts", "CNotes", "CDate", "Cycle", "ArchiveId", "ArchiveStart", "ArchiveEnd", "X", "Y", "ImageData", "ProblemPhoto", "VideoLink", "ResetDate", "ResetIntervalDays", "LastConfirmedDate", "PhotoLink", "CompletedGroups", "Archived", "Day", "RoutineId", "RoutineName", "RoutineOrder", "StretchId", "StretchName", "Reps", "HoldSec", "RestSec", "NextRestSec", "StretchOrder", "OthersGrade", "Tags", "ProblemId", "Backfilled", "HighPoint"];
 const FINGER_LOG_RENAME = {
   "Date": "FDate",
   "Notes": "FNotes"
