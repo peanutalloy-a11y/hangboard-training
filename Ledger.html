@@ -361,6 +361,26 @@
   .disc-period-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 13px; margin-bottom: 8px; }
   .disc-period-head .link-btn { background: none; border: none; color: var(--rust); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
 
+  /* Warranties */
+  .warranty-alert { display: flex; align-items: center; gap: 10px; background: var(--rust-soft); color: var(--rust); border-radius: 14px; padding: 10px 12px; font-size: 13px; font-weight: 700; margin: 0 0 10px; }
+  .warranty-alert button.go { flex: 1; text-align: left; background: none; border: none; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+  .warranty-alert button.x { background: none; border: none; color: inherit; font-size: 15px; cursor: pointer; padding: 2px 4px; }
+  .w-expiry { font-weight: 700; }
+  .w-expiry.soon { color: var(--rust); }
+  .w-expiry.gone { color: var(--ink-soft); }
+  .w-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .w-photo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; text-decoration: none; color: var(--ink-soft); font-size: 11px; font-weight: 700; }
+  .w-photo .thumb { width: 56px; height: 56px; border-radius: 10px; background: var(--paper) center/cover no-repeat; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
+  .w-photo .thumb svg { width: 22px; height: 22px; color: var(--ink-soft); }
+  .w-photo .remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--rust); color: #fff; font-size: 11px; line-height: 20px; cursor: pointer; padding: 0; }
+  .w-photo .state { font-size: 10.5px; }
+  .w-photo .state.bad { color: var(--rust); }
+  .w-photo .upload-btn { border: none; background: var(--brass-soft); color: var(--ink); font: inherit; font-size: 10.5px; font-weight: 800; border-radius: 10px; padding: 3px 7px; cursor: pointer; }
+  .w-quick { display: flex; gap: 6px; margin-top: 6px; }
+  .w-quick button { flex: 1; border: none; background: var(--paper-raised); color: var(--ink); font: inherit; font-size: 12px; font-weight: 700; border-radius: 12px; padding: 6px 0; cursor: pointer; }
+  .w-add-photos { display: flex; gap: 8px; margin-bottom: 6px; }
+  .w-add-photos .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
+
   /* ---- Dark mode crossfade ---- */
   body, .balance-card, .row, .icon-btn, .btn, .chip, .empty-state,
   .field input, .field select, .modal, nav.tabbar, header.topbar,
@@ -443,6 +463,7 @@
         </button>
       </div>
     </div>
+    <div id="warranty-alert"></div>
     <div class="backup-reminder" id="backup-reminder" hidden>
       <span id="backup-reminder-text"></span>
       <button type="button" id="backup-reminder-btn">Back up</button>
@@ -492,6 +513,9 @@
 
       <div class="section-title">Bills<button class="link-btn" id="add-bill">+ Add bill</button></div>
       <div id="bills-list"></div>
+
+      <div class="section-title">Warranties<button class="link-btn" id="add-warranty">+ Add warranty</button></div>
+      <div id="warranty-list"></div>
     </section>
 
     <!-- BUDGETS -->
@@ -572,7 +596,7 @@
       <div class="section-title">Backup</div>
       <div class="drive-panel">
         <div class="row-name" id="drive-status">Not backed up to Drive yet</div>
-        <div class="row-sub" style="margin:4px 0 12px;">Backs up to a private Jarful Backups folder in your Google Drive by itself while you're signed in, keeping the last 10. Signing in here or in the Send Log covers both apps.</div>
+        <div class="row-sub" style="margin:4px 0 12px;">Backs up to a private Jarful/Backups folder in your Google Drive by itself while you're signed in, keeping the last 10. Warranty photos go in Jarful/Warranties. Signing in here or in the Send Log covers both apps.</div>
         <div class="field-row" style="gap:8px;">
           <button type="button" class="btn btn-primary" style="flex:1;" id="drive-backup-btn">Back up now</button>
           <button type="button" class="btn" style="flex:1;" id="drive-restore-btn">Restore from Drive</button>
@@ -725,6 +749,7 @@
       ],
       goals: [],
       discretionary: [],
+      warranties: [],
       transactions: []
     };
   }
@@ -751,6 +776,7 @@
   state.goals = state.goals || [];
   state.transactions = state.transactions || [];
   state.discretionary = state.discretionary || [];
+  state.warranties = state.warranties || [];
   normaliseGoals(state.goals);
 
   /* ---------- Theme ---------- */
@@ -780,6 +806,10 @@
     state.categories.forEach(function(c){ rows.push(row({RecordType:'CATEGORY', ID:c.id, Name:c.name, Amount:c.budget})); });
     state.goals.forEach(function(g){ rows.push(row({RecordType:'GOAL', ID:g.id, Name:g.name, TargetAmount:g.targetAmount, TargetDate:g.targetDate, CurrentSaved:g.currentSaved, AnchorDate:g.startDate||'', Frequency:g.auto ? 'auto' : 'manual', Date:g.autoThrough||''})); });
     state.transactions.forEach(function(t){ rows.push(row({RecordType:'TRANSACTION', ID:t.id, Name:t.name, Amount:t.amount, Category:t.category||'', Date:t.date})); });
+    (state.warranties || []).forEach(function(w){
+      rows.push(row({RecordType:'WARRANTY', ID:w.id, Name:w.name, Category:w.store||'', Amount:w.price === '' || w.price == null ? '' : w.price, AnchorDate:w.purchaseDate||'', TargetDate:w.expiryDate||'', Notes:w.notes||'', Frequency:w.noticeDismissed||''}));
+      (w.photos || []).forEach(function(p){ rows.push(row({RecordType:'WARRANTY_PHOTO', ID:p.fileId, Category:w.id, Name:p.kind, Date:p.date||''})); });
+    });
     (state.discretionary || []).forEach(function(i){
       rows.push(row({RecordType:'DISC', ID:i.id, Name:i.name, Amount:i.saved||0, Frequency:i.included ? 'included' : 'excluded', AnchorDate:i.includedSince||'', Date:i.autoThrough||''}));
       (i.periods || []).forEach(function(p){ rows.push(row({RecordType:'DISC_PERIOD', ID:p.id, Category:i.id, Amount:p.cost, AnchorDate:p.start, Date:p.end||''})); });
@@ -828,7 +858,8 @@
     var header = rows[0];
     var dataRows = rows.slice(1);
     var next = defaultState();
-    next.incomes = []; next.bills = []; next.categories = []; next.goals = []; next.transactions = []; next.discretionary = [];
+    next.incomes = []; next.bills = []; next.categories = []; next.goals = []; next.transactions = []; next.discretionary = []; next.warranties = [];
+    var warrantyPhotos = [];
     var discPeriods = [];
     dataRows.forEach(function(r){
       var o = objFromRow(header, r);
@@ -856,10 +887,26 @@
         case 'DISC':
           next.discretionary.push({ id:o.ID||uid(), name:o.Name, saved:parseFloat(o.Amount)||0, included:o.Frequency === 'included', includedSince:o.AnchorDate||'', autoThrough:o.Date||'', periods:[] });
           break;
+        case 'WARRANTY':
+          next.warranties.push({ id:o.ID||uid(), name:o.Name, store:o.Category||'', price:o.Amount === '' ? '' : (parseFloat(o.Amount)||0), purchaseDate:o.AnchorDate||'', expiryDate:o.TargetDate||'', notes:o.Notes||'', noticeDismissed:o.Frequency||'', photos:[] });
+          break;
+        case 'WARRANTY_PHOTO':
+          warrantyPhotos.push({ parent:o.Category, p:{ fileId:o.ID, kind:o.Name||'receipt', date:o.Date||'' } });
+          break;
         case 'DISC_PERIOD':
           discPeriods.push({ parent:o.Category, p:{ id:o.ID||uid(), start:o.AnchorDate, cost:parseFloat(o.Amount)||0, end:o.Date||'' } });
           break;
       }
+    });
+    warrantyPhotos.forEach(function(x){
+      var w = next.warranties.find(function(i){ return i.id === x.parent; });
+      if(w && x.p.fileId) w.photos.push(x.p);
+    });
+    // keep any photo thumbnails this phone already has
+    (state.warranties || []).forEach(function(old){
+      (old.photos || []).forEach(function(op){
+        next.warranties.forEach(function(w){ (w.photos || []).forEach(function(p){ if(p.fileId === op.fileId && op.thumb) p.thumb = op.thumb; }); });
+      });
     });
     discPeriods.forEach(function(x){
       var item = next.discretionary.find(function(i){ return i.id === x.parent; });
@@ -1220,25 +1267,26 @@
         if(idx >= 0 && idx <= H) dayOut[idx] += Math.abs(Number(b.amount) || 0);
       });
     });
-    // one-off planned expenses dated after today also need covering
+    // one-off planned expenses from today onwards also need covering
     state.transactions.forEach(function(t){
       var amt = Number(t.amount) || 0;
       if(amt >= 0) return;
       var idx = Math.round((parseISODate(t.date) - today) / 86400000);
-      if(idx >= 1 && idx <= H) dayOut[idx] += -amt;
+      if(idx >= 0 && idx <= H) dayOut[idx] += -amt;
     });
-    // Anchor on the next top-up day (today counts if it is that day). The
-    // figure is what the account should hold that morning, before that
-    // week's set-aside goes in. Bills before then come out of today's balance.
+    // Anchor on the next top-up day (today counts if it is that day). Every
+    // figure is the balance at 12:01 am, before that day's bills and before
+    // that day's transfer. To be safe, a day's bills are assumed to come out
+    // before the transfer lands, so the 12:01 am balance covers them alone.
     var k0 = (topUpDay() - today.getDay() + 7) % 7;
     var billsBefore = 0;
     for(var b0 = 0; b0 < k0; b0++) billsBefore += dayOut[b0];
     var bal = 0, min = 0, startOf = [];
     for(var j = k0; j <= H; j++){
       startOf.push(bal);
-      if((j - k0) % 7 === 0) bal += weekly;
       bal -= dayOut[j];
       if(bal < min) min = bal;
+      if((j - k0) % 7 === 0) bal += weekly;
     }
     var buffer = -min;
     var series = [];
@@ -1361,13 +1409,13 @@
           '<div class="cover-fig"><div class="cover-fig-label">Set aside each week</div><div class="cover-fig-value num">' + formatCurrency(c.weekly) + '</div><div class="cover-fig-note">Weekly average of all bills</div></div>' +
           '<button type="button" class="cover-fig cover-fig-tap" id="hold-toggle" aria-expanded="' + holdOpen + '" aria-controls="hold-detail">' +
             '<div class="cover-fig-label">Should hold as of ' + holdLabel + '</div><div class="cover-fig-value num">' + formatCurrency(c.buffer) + '</div>' +
-            '<div class="cover-fig-note">Before that week\'s set-aside goes in <span class="bill-group-chevron' + (holdOpen ? ' open' : '') + '">' + iconChevron() + '</span></div>' +
+            '<div class="cover-fig-note">Before that day\'s bills and set-aside <span class="bill-group-chevron' + (holdOpen ? ' open' : '') + '">' + iconChevron() + '</span></div>' +
           '</button>' +
         '</div>' +
         '<div class="hold-detail' + (holdOpen ? ' open' : '') + '" id="hold-detail"' + (holdOpen ? ' style="max-height:none;"' : '') + '>' +
           '<div class="cover-figures" style="margin-top:10px;">' +
             '<div class="cover-fig"><div class="cover-fig-label">12:01 am today, ' + dayLabel(0) + '</div><div class="cover-fig-value num">' + formatCurrency(c.today) + '</div>' +
-              '<div class="cover-fig-note">' + (c.billsToday > 0 ? 'Covers today\'s ' + formatCurrency(c.billsToday) + ' of bills' : 'No bills due today') + (c.topUpToday ? ', before today\'s top-up' : '') + '</div></div>' +
+              '<div class="cover-fig-note">' + (c.billsToday > 0 ? 'Covers today\'s ' + formatCurrency(c.billsToday) + ' of bills on its own' : 'No bills due today') + (c.topUpToday ? ', before today\'s top-up' : '') + '</div></div>' +
             '<div class="cover-fig"><div class="cover-fig-label">12:01 am tomorrow, ' + dayLabel(1) + '</div><div class="cover-fig-value num">' + formatCurrency(c.tomorrow) + '</div>' +
               '<div class="cover-fig-note">' + (c.topUpToday ? 'After today\'s top-up and bills' : (c.billsToday > 0 ? 'After today\'s bills' : 'Same as today, nothing goes in or out')) + '</div></div>' +
           '</div>' +
@@ -1479,6 +1527,7 @@
 
   function renderDashboard(){
     renderAutoNote();
+    if(typeof renderWarrantyAlert === 'function') renderWarrantyAlert();
     renderCover();
     renderGoalsCover();
     var bal = state.settings.startingBalance;
@@ -1614,6 +1663,7 @@
   var expandedBillGroups = {};
 
   function renderPlan(){
+    if(typeof renderWarranties === 'function') renderWarranties();
     var incomeList = document.getElementById('income-list');
     if(!state.incomes.length){
       incomeList.innerHTML = '<div class="empty-state">No income sources yet.</div>';
@@ -2229,6 +2279,17 @@
         });
       }
     }
+    else if((id = t.getAttribute('data-edit-warranty'))) openWarrantyForm(state.warranties.find(function(x){ return x.id === id; }), t);
+    else if((id = t.getAttribute('data-del-warranty'))){
+      var wDel = state.warranties.find(function(x){ return x.id === id; });
+      var hasPhotos = wDel && wDel.photos && wDel.photos.length;
+      if(confirm('Delete this warranty' + (hasPhotos ? ' and move its photos to the Google Drive bin' : '') + '?')){
+        playRowExit(t.closest('.row'), function(){
+          if(hasPhotos) wDel.photos.forEach(function(p){ trashDriveFile(p.fileId); });
+          state.warranties = state.warranties.filter(function(x){ return x.id !== id; }); saveState(); renderWarranties();
+        });
+      }
+    }
     else if((id = t.getAttribute('data-edit-disc'))) openDiscForm(state.discretionary.find(function(x){ return x.id === id; }), t);
     else if((id = t.getAttribute('data-del-disc'))){
       if(confirm('Delete this item and all its periods?')){
@@ -2405,8 +2466,14 @@
   var GOOGLE_CLIENT_ID = '865694161905-a6f6kdtp9g41r3muq9r020nihpgci0gd.apps.googleusercontent.com';
   var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
   var DRIVE_TOKEN_KEY = 'send-log-drive-token';
-  var BACKUP_FOLDER_NAME = 'Jarful Backups';
-  var BACKUP_FOLDER_KEY = 'jarful-backup-folder';
+  var OLD_BACKUP_FOLDER_NAME = 'Jarful Backups';      // where backups went before the Jarful folder existed
+  var OLD_BACKUP_FOLDER_KEY = 'jarful-backup-folder';
+  var ROOT_FOLDER_NAME = 'Jarful';
+  var ROOT_FOLDER_KEY = 'jarful-root-folder';
+  var BACKUP_SUBFOLDER_NAME = 'Backups';
+  var BACKUP_SUBFOLDER_KEY = 'jarful-backups-subfolder';
+  var WARRANTY_SUBFOLDER_NAME = 'Warranties';
+  var WARRANTY_SUBFOLDER_KEY = 'jarful-warranties-subfolder';
   var BACKUP_META_KEY = 'jarful-backup-meta';
   var BACKUP_KEEP = 10;
   var BACKUP_REMIND_DAYS = 3;
@@ -2441,6 +2508,7 @@
           }
           lsSet(DRIVE_TOKEN_KEY, JSON.stringify({ token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000 }));
           resolve(resp.access_token);
+          setTimeout(function(){ if(typeof processPendingTrash === 'function') processPendingTrash(); }, 0);
         },
         error_callback: function(err){
           var type = err && err.type;
@@ -2478,36 +2546,63 @@
       return asText ? res.text() : res.json();
     });
   }
-  function ensureBackupFolder(token){
-    var id = lsGet(BACKUP_FOLDER_KEY);
+  // Finds (or makes) a folder by name, optionally inside a parent folder, and
+  // remembers its id. The app can only see folders it made itself.
+  function ensureFolder(token, name, parentId, key, create){
+    var id = lsGet(key);
     var check = id
       ? backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + id + '?fields=id,trashed')
           .then(function(f){ return (f && !f.trashed) ? id : null; }, function(e){ if(e.expired) throw e; return null; })
       : Promise.resolve(null);
     return check.then(function(ok){
       if(ok) return ok;
-      var q = encodeURIComponent("name='" + BACKUP_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&spaces=drive').then(function(found){
+      var q = "name='" + name + "' and mimeType='application/vnd.google-apps.folder' and trashed=false" + (parentId ? " and '" + parentId + "' in parents" : '');
+      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)&spaces=drive').then(function(found){
         if(found.files && found.files.length) return found.files[0].id;
+        if(create === false) return null;
+        var meta = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+        if(parentId) meta.parents = [parentId];
         return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?fields=id', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: BACKUP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta)
         }).then(function(made){ return made.id; });
-      }).then(function(fid){ lsSet(BACKUP_FOLDER_KEY, fid); return fid; });
+      }).then(function(fid){ if(fid) lsSet(key, fid); return fid; });
     });
+  }
+  function ensureRootFolder(token){ return ensureFolder(token, ROOT_FOLDER_NAME, null, ROOT_FOLDER_KEY); }
+  function ensureBackupFolder(token){
+    return ensureRootFolder(token).then(function(root){ return ensureFolder(token, BACKUP_SUBFOLDER_NAME, root, BACKUP_SUBFOLDER_KEY); });
+  }
+  function ensureWarrantyFolder(token){
+    return ensureRootFolder(token).then(function(root){ return ensureFolder(token, WARRANTY_SUBFOLDER_NAME, root, WARRANTY_SUBFOLDER_KEY); });
+  }
+  // The old "Jarful Backups" folder, if there is one. Never created.
+  function findOldBackupFolder(token){
+    return ensureFolder(token, OLD_BACKUP_FOLDER_NAME, null, OLD_BACKUP_FOLDER_KEY, false).catch(function(e){ if(e.expired) throw e; return null; });
   }
   function backupFileName(d){
     function p(n){ return String(n).padStart(2, '0'); }
     return 'Jarful backup ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + '.csv';
   }
-  function listBackups(token, folderId){
-    return (folderId ? Promise.resolve(folderId) : ensureBackupFolder(token)).then(function(fid){
-      var q = encodeURIComponent("'" + fid + "' in parents and trashed=false");
-      return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,modifiedTime,size)');
-    }).then(function(res){ return res.files || []; });
+  function listFolder(token, fid){
+    var q = encodeURIComponent("'" + fid + "' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'");
+    return backupFetch(token, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,modifiedTime,size)')
+      .then(function(res){ return res.files || []; });
+  }
+  // Backups to restore from: the Jarful/Backups folder plus any left in the old folder.
+  function listBackups(token){
+    var newer;
+    return ensureBackupFolder(token).then(function(fid){ return listFolder(token, fid); }).then(function(files){
+      newer = files;
+      return findOldBackupFolder(token);
+    }).then(function(oldId){
+      if(!oldId) return [];
+      return listFolder(token, oldId).then(function(files){ files.forEach(function(f){ f.oldFolder = true; }); return files; });
+    }).then(function(older){
+      return newer.concat(older).sort(function(a, b){ return a.modifiedTime < b.modifiedTime ? 1 : -1; });
+    });
   }
   function pruneBackups(token, folderId){
-    return listBackups(token, folderId).then(function(files){
+    return listFolder(token, folderId).then(function(files){
       return files.slice(BACKUP_KEEP).reduce(function(p, f){
         return p.then(function(){
           return backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + f.id + '?fields=id', {
@@ -2536,7 +2631,7 @@
       }
       return ensureBackupFolder(token).then(function(fid){
         folderId = fid;
-        if(!force && meta.fileId && meta.day === localDay(now)){
+        if(!force && meta.fileId && meta.day === localDay(now) && meta.folder === fid){
           return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files/' + meta.fileId + '?uploadType=multipart&fields=id,name,trashed', {
             method: 'PATCH', body: body({ name: backupFileName(now) })
           }).then(function(up){ return (up && !up.trashed) ? up : null; }, function(e){ if(e.expired) throw e; return null; });
@@ -2548,7 +2643,7 @@
           method: 'POST', body: body({ name: backupFileName(now), mimeType: 'text/csv', parents: [folderId] })
         });
       }).then(function(up){
-        writeBackupMeta({ at: now.getTime(), sig: sig, name: up.name, fileId: up.id, day: localDay(now) });
+        writeBackupMeta({ at: now.getTime(), sig: sig, name: up.name, fileId: up.id, day: localDay(now), folder: folderId });
         return pruneBackups(token, folderId).catch(function(){}).then(function(){ return up; });
       });
     })();
@@ -2567,6 +2662,7 @@
       backupTimer = null;
       renderBackupUI();
       var token = storedDriveToken();
+      if(token && typeof processPendingTrash === 'function') processPendingTrash();
       if(token && backupDirty()) runBackup(token, false).catch(function(){ renderBackupUI(); });
     }, delay);
   }
@@ -2633,7 +2729,7 @@
       var size = Math.max(1, Math.round(Number(f.size || 0) / 1024)) + ' KB';
       var confirming = driveConfirm === f.id;
       return '<div class="drive-file"><div class="drive-file-row"><span>' + escapeHTML(when) +
-        ' <small>' + (i === 0 ? '· latest · ' : '· ') + size + '</small></span>' +
+        ' <small>' + (i === 0 ? '· latest · ' : '· ') + size + (f.oldFolder ? ' · old folder' : '') + '</small></span>' +
         (confirming ? '' : '<button type="button" class="btn" data-drive-pick="' + escapeHTML(f.id) + '">Restore</button>') + '</div>' +
         (confirming ? '<div class="drive-confirm">This replaces everything in Jarful on this phone with this backup.' +
           '<div class="field-row"><button type="button" class="btn btn-danger" style="flex:1;" data-drive-restore="' + escapeHTML(f.id) + '">Restore this</button>' +
@@ -2672,12 +2768,313 @@
 
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState !== 'visible') return;
-    if(processAutoGoals() > 0){ renderGoals(); renderDashboard(); }
+    processAutoGoals();
+    renderGoals(); renderDashboard();
     scheduleAutoBackup(2000);
   });
   window.addEventListener('storage', function(e){
     // A Google sign-in from the Send Log in another tab is a chance to back up now.
     if(e.key === DRIVE_TOKEN_KEY) scheduleAutoBackup(1500);
+  });
+
+
+  /* ---------- Warranties ----------
+     Each warranty has details, an optional expiry date and photos of the
+     receipt and warranty. Photos are made smaller on the phone, then uploaded
+     to a private Jarful/Warranties folder in Google Drive (never shared). The
+     item keeps the Drive file id and a tiny thumbnail on this phone. A notice
+     shows under the header for warranties expiring within 60 days. */
+  var WARRANTY_NOTICE_DAYS = 60;
+  var WARRANTY_RENOTICE_DAYS = 14;   // a dismissed notice comes back at this point
+  function warrantyDaysLeft(w){
+    if(!w.expiryDate) return null;
+    return Math.round((parseISODate(w.expiryDate) - startOfDay(new Date())) / 86400000);
+  }
+  function warrantyNoticeDue(w){
+    var d = warrantyDaysLeft(w);
+    if(d === null || d < 0 || d > WARRANTY_NOTICE_DAYS) return false;
+    if(w.noticeDismissed === 'late') return false;
+    if(w.noticeDismissed === 'early' && d > WARRANTY_RENOTICE_DAYS) return false;
+    return true;
+  }
+  function describeLeft(d){
+    if(d === 0) return 'expires today';
+    if(d === 1) return 'expires tomorrow';
+    if(d < 0) return 'expired';
+    if(d <= 60) return d + ' days left';
+    var months = Math.round(d / 30.44);
+    if(months < 24) return months + ' months left';
+    return (Math.round(d / 36.5) / 10) + ' years left';
+  }
+  function driveViewUrl(fileId){ return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view'; }
+  function iconCamera(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-2.5h6L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg>'; }
+
+  function sortedWarranties(){
+    return state.warranties.slice().sort(function(a, b){
+      var da = warrantyDaysLeft(a), db = warrantyDaysLeft(b);
+      function rank(d){ return d === null ? 1 : d < 0 ? 2 : 0; }
+      if(rank(da) !== rank(db)) return rank(da) - rank(db);
+      if(rank(da) === 0) return da - db;
+      if(rank(da) === 2) return db - da;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }
+
+  function renderWarrantyAlert(){
+    var el = document.getElementById('warranty-alert');
+    if(!el) return;
+    var due = sortedWarranties().filter(warrantyNoticeDue);
+    if(!due.length){ el.innerHTML = ''; return; }
+    var first = due[0], d = warrantyDaysLeft(first);
+    var text = due.length === 1
+      ? 'Warranty for ' + escapeHTML(first.name) + ' ' + (d === 0 ? 'expires today' : d === 1 ? 'expires tomorrow' : 'expires in ' + d + ' days') + ' (' + formatShortDate(parseISODate(first.expiryDate)) + ')'
+      : due.length + ' warranties expire within ' + WARRANTY_NOTICE_DAYS + ' days. First: ' + escapeHTML(first.name) + ', ' + formatShortDate(parseISODate(first.expiryDate));
+    el.innerHTML = '<div class="warranty-alert"><button type="button" class="go" id="warranty-alert-go">' + text + '</button>' +
+      '<button type="button" class="x" id="warranty-alert-x" aria-label="Dismiss">✕</button></div>';
+  }
+
+  function warrantyRow(w){
+    var d = warrantyDaysLeft(w);
+    var expiry = w.expiryDate
+      ? '<span class="w-expiry' + (d < 0 ? ' gone' : d <= WARRANTY_NOTICE_DAYS ? ' soon' : '') + '">' +
+          (d < 0 ? 'Expired ' : 'Expires ') + formatFullDate(parseISODate(w.expiryDate)) + (d >= 0 ? ' · ' + describeLeft(d) : '') + '</span>'
+      : '<span class="w-expiry gone">No expiry date set</span>';
+    var bits = [];
+    if(w.store) bits.push(escapeHTML(w.store));
+    if(w.purchaseDate) bits.push('Bought ' + formatShortDate(parseISODate(w.purchaseDate)) + ' ' + parseISODate(w.purchaseDate).getFullYear());
+    if(w.price !== '' && w.price != null) bits.push(formatCurrency(w.price));
+    var photos = (w.photos || []).map(function(p){
+      return '<a class="w-photo" href="' + driveViewUrl(p.fileId) + '" target="_blank" rel="noopener">' +
+        '<span class="thumb"' + (p.thumb ? ' style="background-image:url(' + p.thumb + ')"' : '') + '>' + (p.thumb ? '' : iconCamera()) + '</span>' +
+        (p.kind === 'warranty' ? 'Warranty' : 'Receipt') + '</a>';
+    }).join('');
+    return '<div class="row" data-id="' + w.id + '" style="display:block;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<div class="row-main"><div class="row-name">' + escapeHTML(w.name) + '</div>' +
+        '<div class="row-sub">' + expiry + '</div>' +
+        (bits.length ? '<div class="row-sub">' + bits.join(' · ') + '</div>' : '') + '</div>' +
+        '<div class="row-actions"><button data-edit-warranty="' + w.id + '">' + iconEdit() + '</button><button data-del-warranty="' + w.id + '">' + iconTrash() + '</button></div>' +
+      '</div>' +
+      (w.notes ? '<div class="row-sub" style="margin-top:6px;white-space:pre-wrap;">' + escapeHTML(w.notes) + '</div>' : '') +
+      (photos ? '<div class="w-photos">' + photos + '</div>' : '') +
+    '</div>';
+  }
+
+  function renderWarranties(){
+    renderWarrantyAlert();
+    var el = document.getElementById('warranty-list');
+    if(!el) return;
+    if(!state.warranties.length){
+      el.innerHTML = '<div class="empty-state">No warranties yet. Add one to keep the receipt and warranty photos together.</div>';
+      return;
+    }
+    var list = sortedWarranties();
+    var soon = list.filter(function(w){ var d = warrantyDaysLeft(w); return d !== null && d >= 0 && d <= WARRANTY_NOTICE_DAYS; }).length;
+    var isOpen = !!expandedBillGroups['__warranties__'];
+    el.innerHTML = '<div class="bill-group">' +
+      '<button type="button" class="bill-group-head" data-toggle-group="__warranties__" aria-expanded="' + isOpen + '">' +
+        '<span class="bill-group-chevron' + (isOpen ? ' open' : '') + '">' + iconChevron() + '</span>' +
+        '<span class="bill-group-name">' + (soon ? soon + ' expiring soon' : 'All warranties') + '</span>' +
+        '<span class="bill-group-count">' + list.length + '</span>' +
+      '</button>' +
+      '<div class="bill-group-body' + (isOpen ? ' open' : '') + '"' + (isOpen ? ' style="max-height:none;"' : '') + '>' + list.map(warrantyRow).join('') + '</div>' +
+    '</div>';
+    applyPendingEnter();
+  }
+
+  // Makes a photo smaller before upload (receipts stay readable at 2000px).
+  function shrinkImage(file, maxEdge, quality){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){
+        try {
+          var s = Math.min(1, maxEdge / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+          var cw = Math.max(1, Math.round((img.naturalWidth || img.width) * s)), ch = Math.max(1, Math.round((img.naturalHeight || img.height) * s));
+          var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+          var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch); ctx.drawImage(img, 0, 0, cw, ch);
+          URL.revokeObjectURL(url);
+          resolve({ canvas: c });
+        } catch(e){ URL.revokeObjectURL(url); reject(e); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("That photo couldn't be read. Try taking it again.")); };
+      img.src = url;
+    });
+  }
+  function preparePhoto(file){
+    return shrinkImage(file, 2000, 0.85).then(function(big){
+      return new Promise(function(resolve){
+        big.canvas.toBlob(function(blob){
+          shrinkImage(file, 160, 0.6).then(function(small){
+            resolve({ blob: blob || file, thumb: small.canvas.toDataURL('image/jpeg', 0.6) });
+          }, function(){ resolve({ blob: blob || file, thumb: '' }); });
+        }, 'image/jpeg', 0.85);
+      });
+    }, function(){ return { blob: file, thumb: '' }; });
+  }
+  function uploadWarrantyPhoto(token, blob, fileName){
+    return ensureWarrantyFolder(token).then(function(fid){
+      var fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'image/jpeg', parents: [fid] })], { type: 'application/json' }));
+      fd.append('file', blob);
+      return backupFetch(token, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', { method: 'POST', body: fd });
+    });
+  }
+  // Moves a photo to the Drive bin. If not signed in (or it fails), it's
+  // remembered and done the next time a Google sign-in is available.
+  function trashDriveFile(fileId){
+    if(!fileId) return;
+    state.pendingTrash = state.pendingTrash || [];
+    if(state.pendingTrash.indexOf(fileId) === -1) state.pendingTrash.push(fileId);
+    saveState();
+    processPendingTrash();
+  }
+  var trashing = false;
+  function processPendingTrash(){
+    var token = storedDriveToken();
+    if(trashing || !token || !state.pendingTrash || !state.pendingTrash.length) return;
+    trashing = true;
+    var ids = state.pendingTrash.slice();
+    ids.reduce(function(p, id){
+      return p.then(function(){
+        return backupFetch(token, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true })
+        }).then(function(){ done(id); }, function(e){ if(e.expired) throw e; if(/\(404\)/.test(e.message)) done(id); });
+      });
+    }, Promise.resolve()).catch(function(){}).then(function(){ trashing = false; saveState(); });
+    function done(id){ state.pendingTrash = state.pendingTrash.filter(function(x){ return x !== id; }); }
+  }
+  function safeFileName(s){ return String(s || 'Item').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || 'Item'; }
+
+  function openWarrantyForm(existing, triggerEl){
+    var isEdit = !!existing;
+    // Working copy of the photos; uploaded ones have a fileId.
+    var photos = existing ? (existing.photos || []).map(function(p){ return { fileId: p.fileId, kind: p.kind, date: p.date, thumb: p.thumb || '', status: 'done' }; }) : [];
+    var removed = [];
+    var html =
+      '<form id="warranty-form">' +
+      '<div class="field"><label for="w-name">Item</label><input type="text" id="w-name" required placeholder="e.g. Dyson vacuum" value="' + (existing ? escapeHTML(existing.name) : '') + '"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label for="w-store">Bought from</label><input type="text" id="w-store" placeholder="e.g. JB Hi-Fi" value="' + (existing ? escapeHTML(existing.store || '') : '') + '"></div>' +
+        '<div class="field"><label for="w-price">Price</label><input type="number" id="w-price" inputmode="decimal" step="0.01" min="0" value="' + (existing && existing.price !== '' && existing.price != null ? existing.price : '') + '"></div>' +
+      '</div>' +
+      '<div class="field"><label for="w-purchase">Purchase date</label><input type="date" id="w-purchase" value="' + (existing ? (existing.purchaseDate || '') : '') + '"></div>' +
+      '<div class="field"><label for="w-expiry">Warranty expiry date</label><input type="date" id="w-expiry" value="' + (existing ? (existing.expiryDate || '') : '') + '">' +
+        '<div class="w-quick"><button type="button" data-years="1">+1 yr</button><button type="button" data-years="2">+2 yrs</button><button type="button" data-years="3">+3 yrs</button><button type="button" data-years="5">+5 yrs</button></div>' +
+        '<div class="row-sub" style="margin-top:6px;">The buttons count from the purchase date. A notice shows at the top of the app when it\'s within 60 days.</div></div>' +
+      '<div class="field"><label for="w-notes">Notes</label><input type="text" id="w-notes" placeholder="Serial number, claim phone number…" value="' + (existing ? escapeHTML(existing.notes || '') : '') + '"></div>' +
+      '<div class="field"><label>Photos</label>' +
+        '<div class="w-add-photos"><button type="button" class="btn" data-add-photo="receipt">Receipt photo</button><button type="button" class="btn" data-add-photo="warranty">Warranty photo</button></div>' +
+        '<input type="file" id="w-file" accept="image/*" style="display:none;">' +
+        '<div class="w-photos" id="w-photo-list"></div>' +
+        '<div class="row-sub" id="w-photo-msg" style="margin-top:6px;">Photos go to a private Jarful/Warranties folder in your Google Drive.</div></div>' +
+      '<button type="submit" class="btn btn-primary btn-block">' + (isEdit ? 'Save changes' : 'Add warranty') + '</button>' +
+      '</form>';
+    openModal(isEdit ? 'Edit warranty' : 'Add warranty', html, triggerEl);
+
+    var fileInput = document.getElementById('w-file'), pendingKind = 'receipt';
+    function drawPhotos(){
+      document.getElementById('w-photo-list').innerHTML = photos.map(function(p, i){
+        var state = p.status === 'uploading' ? '<span class="state">Uploading…</span>'
+          : p.status === 'needs-sign-in' ? '<button type="button" class="upload-btn" data-upload-photo="' + i + '">Upload</button>'
+          : p.status === 'error' ? '<button type="button" class="upload-btn" data-upload-photo="' + i + '">Try again</button>'
+          : '<span class="state">' + (p.kind === 'warranty' ? 'Warranty' : 'Receipt') + '</span>';
+        return '<div class="w-photo"><span class="thumb"' + (p.thumb ? ' style="background-image:url(' + p.thumb + ')"' : '') + '>' + (p.thumb ? '' : iconCamera()) + '</span>' +
+          state + '<button type="button" class="remove" data-remove-photo="' + i + '" aria-label="Remove photo">✕</button></div>';
+      }).join('');
+    }
+    function setMsg(text, bad){ var m = document.getElementById('w-photo-msg'); m.textContent = text; m.style.color = bad ? 'var(--rust)' : ''; }
+    function upload(p, token){
+      p.status = 'uploading'; drawPhotos();
+      var name = 'Warranty - ' + safeFileName(document.getElementById('w-name').value) + ' - ' + p.kind + ' ' + toISODate(new Date()) + '.jpg';
+      return uploadWarrantyPhoto(token, p.blob, name).then(function(up){
+        p.fileId = up.id; p.status = 'done'; p.date = toISODate(new Date()); p.blob = null;
+        drawPhotos(); setMsg('Saved to Jarful/Warranties in your Google Drive.');
+      }, function(e){
+        p.status = e.expired ? 'needs-sign-in' : 'error'; drawPhotos(); setMsg(e.message, true);
+      });
+    }
+    drawPhotos();
+
+    document.getElementById('warranty-form').addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      if(b.hasAttribute('data-years')){
+        var base = document.getElementById('w-purchase').value ? parseISODate(document.getElementById('w-purchase').value) : startOfDay(new Date());
+        var d = new Date(base); d.setFullYear(d.getFullYear() + parseInt(b.getAttribute('data-years'), 10));
+        document.getElementById('w-expiry').value = toISODate(d);
+        return;
+      }
+      if(b.hasAttribute('data-add-photo')){ pendingKind = b.getAttribute('data-add-photo'); fileInput.value = ''; fileInput.click(); return; }
+      if(b.hasAttribute('data-remove-photo')){
+        var p = photos[parseInt(b.getAttribute('data-remove-photo'), 10)];
+        if(p && p.fileId) removed.push(p.fileId);
+        photos.splice(parseInt(b.getAttribute('data-remove-photo'), 10), 1); drawPhotos(); return;
+      }
+      if(b.hasAttribute('data-upload-photo')){
+        // Straight from a tap, so Google's sign-in window can open if needed.
+        var q = photos[parseInt(b.getAttribute('data-upload-photo'), 10)];
+        if(!q) return;
+        getDriveToken().then(function(t){ return upload(q, t); }, function(err){ q.status = 'needs-sign-in'; drawPhotos(); setMsg(err.message, true); });
+      }
+    });
+    fileInput.addEventListener('change', function(){
+      var file = fileInput.files && fileInput.files[0];
+      if(!file) return;
+      var p = { kind: pendingKind, status: 'uploading', thumb: '' };
+      photos.push(p); drawPhotos(); setMsg('Getting the photo ready…');
+      preparePhoto(file).then(function(ready){
+        p.blob = ready.blob; p.thumb = ready.thumb;
+        var token = storedDriveToken();
+        if(token) return upload(p, token);
+        p.status = 'needs-sign-in'; drawPhotos();
+        setMsg('Tap Upload to sign in to Google and save the photo to Drive.');
+      });
+    });
+
+    document.getElementById('warranty-form').addEventListener('submit', function(e){
+      e.preventDefault();
+      var waiting = photos.filter(function(p){ return p.status !== 'done'; }).length;
+      if(waiting){ alert(waiting === 1 ? "One photo hasn't been saved to Drive yet. Tap Upload on it, or remove it." : waiting + " photos haven't been saved to Drive yet. Tap Upload on them, or remove them."); return; }
+      var purchase = document.getElementById('w-purchase').value, expiry = document.getElementById('w-expiry').value;
+      if(purchase && expiry && expiry < purchase){ alert('The expiry date needs to be after the purchase date.'); return; }
+      var priceRaw = document.getElementById('w-price').value;
+      var data = {
+        id: existing ? existing.id : uid(),
+        name: document.getElementById('w-name').value.trim() || 'Item',
+        store: document.getElementById('w-store').value.trim(),
+        price: priceRaw === '' ? '' : roundCents(parseFloat(priceRaw) || 0),
+        purchaseDate: purchase,
+        expiryDate: expiry,
+        notes: document.getElementById('w-notes').value.trim(),
+        noticeDismissed: existing && existing.expiryDate === expiry ? (existing.noticeDismissed || '') : '',
+        photos: photos.map(function(p){ return { fileId: p.fileId, kind: p.kind, date: p.date || toISODate(new Date()), thumb: p.thumb || '' }; })
+      };
+      removed.forEach(trashDriveFile);
+      if(existing){
+        var idx = state.warranties.findIndex(function(x){ return x.id === existing.id; });
+        state.warranties[idx] = data;
+      } else {
+        state.warranties.push(data);
+        pendingEnterId = data.id;
+      }
+      expandedBillGroups['__warranties__'] = true;
+      saveState(); closeModal(); renderWarranties();
+    });
+  }
+
+  document.getElementById('add-warranty').addEventListener('click', function(e){ openWarrantyForm(null, e.currentTarget); });
+  document.getElementById('warranty-alert').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var due = sortedWarranties().filter(warrantyNoticeDue);
+    if(b.id === 'warranty-alert-x'){
+      due.forEach(function(w){ w.noticeDismissed = warrantyDaysLeft(w) > WARRANTY_RENOTICE_DAYS ? 'early' : 'late'; });
+      saveState(); renderWarrantyAlert(); return;
+    }
+    if(b.id === 'warranty-alert-go'){
+      expandedBillGroups['__warranties__'] = true;
+      showView('plan'); renderWarranties();
+      var row = due[0] && document.querySelector('#warranty-list [data-id="' + due[0].id + '"]');
+      if(row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   });
 
   /* ---------- Init ---------- */
