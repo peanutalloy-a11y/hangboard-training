@@ -1,0 +1,24 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Jacob and Sejin//Wedding//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:ceremony-20270227@jacob-and-sejin
+DTSTAMP:20261020T000000Z
+DTSTART:20270227T000000Z
+DTEND:20270227T010000Z
+SUMMARY:Jacob & Sejin's wedding ceremony
+LOCATION:St Andrew's Cathedral\, Sydney Square\, Sydney NSW 2000
+DESCRIPTION:Ceremony at 11:00 am. Reception follows at 6:00 pm at Pier One Sydney Harbour.
+END:VEVENT
+BEGIN:VEVENT
+UID:reception-20270227@jacob-and-sejin
+DTSTAMP:20261020T000000Z
+DTSTART:20270227T070000Z
+DTEND:20270227T120000Z
+SUMMARY:Jacob & Sejin's wedding reception
+LOCATION:Pier One Sydney Harbour\, 11 Hickson Road\, Dawes Point NSW 2000
+DESCRIPTION:Dinner\, drinks and celebrating by the water.
+END:VEVENT
+END:VCALENDAR
